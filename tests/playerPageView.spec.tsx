@@ -8,6 +8,7 @@ import { PlayerPageView } from '../src/renderer/pages/PlayerPageView';
 describe('PlayerPageView', () => {
   it('offers a retry action when initial hydration fails before an init is available', () => {
     const retryCurrent = vi.fn();
+    const retryAlternativeSearch = vi.fn(async () => true);
     const session: PlayerPageSession = {
       init: null,
       epIndex: 0,
@@ -23,9 +24,10 @@ describe('PlayerPageView', () => {
       selectEpisode: vi.fn(),
       retryCurrent,
       autoChangeParse: vi.fn(),
+      retryAlternativeSearch,
       selectAlternative: vi.fn(() => false),
       confirmPlaybackStarted: vi.fn(),
-      sourceFallback: { kind: 'idle' },
+      sourceFallback: { kind: 'unavailable', message: '还没有找到备用来源' },
       dismissDriveBinding: vi.fn(),
       onDriveBound: vi.fn(),
     };
@@ -45,5 +47,7 @@ describe('PlayerPageView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(retryCurrent).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: '重新搜索备用源' }));
+    expect(retryAlternativeSearch).toHaveBeenCalledOnce();
   });
 });

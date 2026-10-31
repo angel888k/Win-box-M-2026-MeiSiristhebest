@@ -27,6 +27,7 @@ export interface PlayerPageSessionWorkflow {
   selectEpisode(index: number): void;
   retryCurrent(resolutionKind: PlayerPageResolutionState['kind']): void;
   autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause): Promise<boolean>;
+  retryAlternativeSearch(currentPosition?: number): Promise<boolean>;
   selectAlternative(id: string): boolean;
   confirmPlaybackStarted(): void;
   dismissDriveBinding(): void;
@@ -49,6 +50,7 @@ export function createPlayerPageSessionWorkflow(
   let fallbackSearchAttempted = false;
   let fallbackSearchPromise: Promise<boolean> | null = null;
   let fallbackSearchController: AbortController | null = null;
+  let lastFallbackPosition = 0;
   const attemptedSourceIds = new Set<string>();
   const candidateById = new Map<string, { data: PlayerInitData; sourceName: string }>();
 
@@ -97,7 +99,7 @@ export function createPlayerPageSessionWorkflow(
     }
   }
 
-  async function searchAlternativeSources(position: number): Promise<boolean> {
+  async function searchAlternativeSources(position: number, refresh = false): Promise<boolean> {
     if (fallbackSearchPromise) return fallbackSearchPromise;
     if (fallbackSearchAttempted) {
       return candidateById.size > 0 || Boolean(currentInit?.deferHistoryUntilPlayback);
@@ -106,6 +108,7 @@ export function createPlayerPageSessionWorkflow(
     if (!current || !session.discover) return false;
 
     fallbackSearchAttempted = true;
+    lastFallbackPosition = Math.max(0, position);
     const searchGeneration = generation.next();
     const controller = new AbortController();
     fallbackSearchController = controller;
@@ -118,6 +121,7 @@ export function createPlayerPageSessionWorkflow(
           episodeIndex: currentEpisodeIndex,
           position: Math.max(0, position),
           excludedSourceIds: new Set(attemptedSourceIds),
+          refresh,
         }, controller.signal);
         if (!generation.isCurrent(searchGeneration) || controller.signal.aborted) return true;
 
@@ -127,26 +131,17 @@ export function createPlayerPageSessionWorkflow(
           candidateById.set(candidate.id, { data: candidate.data, sourceName: candidate.sourceName });
         }
         const candidates = result.candidates.filter(candidate => candidateById.has(candidate.id));
-        const searchComplete = result.incompleteSources === 0 && !result.truncated;
-
-        if (candidates.length === 1 && searchComplete) {
+        // A candidate has already passed exact title/year/episode verification.
+        // Unsearched sources cannot invalidate that evidence; requiring a complete
+        // scan made failover impossible for large profiles with bounded search time.
+        if (candidates.length > 0) {
           await startAlternative(candidates[0].id, position);
           return true;
         }
 
-        if (candidates.length > 0) {
-          publish({
-            type: 'source-fallback-choices',
-            candidates: candidates.map(({ id, sourceName, profileName }) => ({ id, sourceName, profileName })),
-            incompleteSources: result.incompleteSources,
-            truncated: result.truncated,
-          });
-          return true;
-        }
-
         const message = result.incompleteSources > 0 || result.truncated
-          ? '备用源搜索尚未完整，无法确认唯一的同剧同集来源；请手动切换来源。'
-          : '已搜索全部配置源，未找到能确认是同一影片同一集的备用源。';
+          ? `目前没有找到已核验的同剧同集备用来源；${result.incompleteSources > 0 ? `还有 ${result.incompleteSources} 个来源或影片详情未完成` : '候选较多，尚有结果未核验'}。这不代表没有可播源，可以刷新备用源搜索。`
+          : '已检查全部可搜索来源，仍没有找到已核验的同剧同集备用来源；可以手动切换来源或检查该集的源站权限。';
         publish({ type: 'source-fallback-unavailable', message });
         return true;
       } catch (error) {
@@ -221,6 +216,14 @@ export function createPlayerPageSessionWorkflow(
     }
 
     return searchAlternativeSources(currentPosition);
+  }
+
+  async function retryAlternativeSearch(currentPosition = lastFallbackPosition): Promise<boolean> {
+    if (!currentInit || !session.discover || fallbackSearchPromise) return false;
+    fallbackSearchAttempted = false;
+    candidateById.clear();
+    publish({ type: 'source-fallback-cleared' });
+    return searchAlternativeSources(Math.max(0, currentPosition), true);
   }
 
   const applyInit = async (incoming: PlayerInitData) => {
@@ -326,6 +329,7 @@ export function createPlayerPageSessionWorkflow(
     selectEpisode,
     retryCurrent,
     autoChangeParse,
+    retryAlternativeSearch,
     selectAlternative,
     confirmPlaybackStarted,
     dismissDriveBinding: () => publish({ type: 'drive-bind-dismissed' }),

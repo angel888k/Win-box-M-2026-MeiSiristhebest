@@ -163,6 +163,7 @@
 .sp-row { display: flex; gap: 8px; }
 /* ★ 2026-09-29（用户要求「搜索框做大一点」）：加高加大输入框 */
 .sp-input { flex: 1; min-width: 0; height: 38px; font-size: 14px; padding: 0 12px; }
+.sp-scope-note { margin-top: 7px; font-size: 11px; line-height: 1.45; }
 .sp-list { margin-top: 8px; max-height: 300px; overflow: auto; }
 .sp-item { display: flex; justify-content: space-between; gap: 10px; padding: 7px 8px; border-radius: 6px; font-size: 13px; cursor: default; }
 .sp-item:hover { background: var(--accent-soft, rgba(120,170,255,.12)); }
@@ -172,6 +173,7 @@
 .sp-cols { display: flex; gap: 14px; margin-top: 10px; align-items: flex-start; }
 .sp-hist { flex: 1 1 54%; min-width: 0; }
 .sp-rank { flex: 1 1 46%; min-width: 0; border-left: 1px solid var(--border-soft); padding-left: 14px; }
+.sp-cols-no-history .sp-rank { flex: 1 1 100%; border-left: 0; padding-left: 0; }
 .sp-hist-list, .sp-rank-list { max-height: 268px; overflow: auto; }
 .sp-hist-item { align-items: center; font-size: 12.5px; padding: 5px 6px; gap: 4px; }
 .sp-hist-txt, .sp-rank-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

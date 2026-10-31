@@ -16,7 +16,7 @@ export interface PlaybackAlternativeSearchResult {
 }
 
 export interface PlaybackAlternativeSearchPort {
-  search(query: string, signal: AbortSignal): Promise<SearchAllReport>;
+  search(query: string, signal: AbortSignal, refresh?: boolean): Promise<SearchAllReport>;
   loadDetail(input: { key: string; id: string; profileId: string }): Promise<VodDetail | null>;
 }
 
@@ -25,9 +25,11 @@ export interface DiscoverPlaybackAlternativesInput {
   episodeIndex: number;
   position: number;
   excludedSourceIds: ReadonlySet<string>;
+  refresh?: boolean;
 }
 
-const MAX_DETAIL_LOOKUPS = 3;
+const MAX_DETAIL_LOOKUPS = 24;
+const DETAIL_LOOKUP_CONCURRENCY = 4;
 const SEARCH_DEADLINE_MS = 30_000;
 const DETAIL_DEADLINE_MS = 10_000;
 
@@ -61,7 +63,7 @@ export async function discoverPlaybackAlternatives(
   signal.addEventListener('abort', abortSearch, { once: true });
   let report: SearchAllReport;
   try {
-    report = await withDeadline(port.search(title, controller.signal), SEARCH_DEADLINE_MS, signal);
+    report = await withDeadline(port.search(title, controller.signal, input.refresh === true), SEARCH_DEADLINE_MS, signal);
   } catch (error) {
     controller.abort();
     throw error;
@@ -90,7 +92,7 @@ export async function discoverPlaybackAlternatives(
   const truncated = entries.length > MAX_DETAIL_LOOKUPS;
   const exactItems = entries.slice(0, MAX_DETAIL_LOOKUPS);
   let failedDetailLookups = 0;
-  const candidates = (await Promise.all(exactItems.map(async ([id, item]) => {
+  const candidates = (await mapConcurrent(exactItems, DETAIL_LOOKUP_CONCURRENCY, async ([id, item]) => {
     const profileId = item.sourceRef!.profileId;
     const sourceKey = item.sourceRef!.key || item.sourceKey;
     let detail: VodDetail | null;
@@ -109,7 +111,7 @@ export async function discoverPlaybackAlternatives(
 
     const targetYear = expectedYear;
     const candidateYear = parseYear(detail.year) ?? parseYear(item.year) ?? playbackTitleYear(detail.name);
-    if (targetYear != null && candidateYear !== targetYear) return null;
+    if (targetYear != null && candidateYear != null && candidateYear !== targetYear) return null;
 
     const episodeMatch = matchPlaybackEpisode(selectedEpisode.name, detail.episodes || {});
     if (episodeMatch.kind !== 'unique') return null;
@@ -146,7 +148,7 @@ export async function discoverPlaybackAlternatives(
       profileName: item.sourceProfileName || '',
       data,
     } satisfies PlaybackAlternativeCandidate;
-  }))).filter((candidate): candidate is PlaybackAlternativeCandidate => candidate != null);
+  })).filter((candidate): candidate is PlaybackAlternativeCandidate => candidate != null);
 
   return {
     candidates,
@@ -155,6 +157,20 @@ export async function discoverPlaybackAlternatives(
     incompleteSources: Math.max(0, (report.pendingSources || 0) + (report.failedSources || 0) + failedDetailLookups),
     truncated,
   };
+}
+
+async function mapConcurrent<T, R>(items: T[], concurrency: number, map: (item: T) => Promise<R>): Promise<R[]> {
+  const results = Array.from<R>({ length: items.length });
+  let nextIndex = 0;
+  const workerCount = Math.min(items.length, Math.max(1, concurrency));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await map(items[index]);
+    }
+  }));
+  return results;
 }
 
 export function sourceIdentity(profileId: string, sourceKey: string, vodId: string): string {

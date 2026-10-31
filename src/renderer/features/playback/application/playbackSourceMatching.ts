@@ -30,7 +30,10 @@ const punctuation = /[^\p{L}\p{N}]+/gu;
 export function samePlaybackTitle(left: string, right: string): boolean {
   const a = titleIdentity(left);
   const b = titleIdentity(right);
-  return Boolean(a.key && a.key.length >= 2 && a.key === b.key && a.season === b.season && a.year === b.year);
+  if (!a.key || a.key.length < 2 || a.key !== b.key || a.season !== b.season) return false;
+  // Some sources omit release year in search/detail metadata. Missing metadata
+  // is not evidence of a different title; a known year conflict still is.
+  return a.year == null || b.year == null || a.year === b.year;
 }
 
 export function playbackTitleYear(value: string): number | null {

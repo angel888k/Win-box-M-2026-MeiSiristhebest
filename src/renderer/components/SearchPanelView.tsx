@@ -61,6 +61,7 @@ export function SearchPanelView(props: SearchPanelViewProps) {
               }}
             />
           </div>
+          <div className="sp-scope-note muted">搜索结果范围由搜索页选项决定（默认跨子仓全源）。侧栏子仓和站点只切换当前浏览内容；搜索后仍可按来源筛选。</div>
           {props.query.trim() ? (
             <div className="sp-list">
               {props.suggestionsLoading && <div className="sp-item muted">联想中…</div>}
@@ -76,12 +77,10 @@ export function SearchPanelView(props: SearchPanelViewProps) {
               ))}
             </div>
           ) : (
-            <div className="sp-cols">
-              <div className="sp-hist">
-                <div className="sp-hot-tip muted">搜索历史{props.history.length ? `（${props.history.length}/10）` : ''}</div>
-                {props.history.length === 0 ? (
-                  <div className="sp-item muted">暂无搜索记录</div>
-                ) : (
+            <div className={`sp-cols${props.history.length === 0 ? ' sp-cols-no-history' : ''}`}>
+              {props.history.length > 0 && (
+                <div className="sp-hist">
+                  <div className="sp-hot-tip muted">搜索历史（{props.history.length}/10）</div>
                   <div className="sp-hist-list">
                     {props.history.map((term) => (
                       <div key={term} className="sp-item sp-hist-item">
@@ -96,13 +95,11 @@ export function SearchPanelView(props: SearchPanelViewProps) {
                       </div>
                     ))}
                   </div>
-                )}
-                {props.history.length > 0 && (
                   <button type="button" className="sp-clear" onClick={props.onClearHistory}>清空搜索记录</button>
-                )}
-              </div>
+                </div>
+              )}
               <div className="sp-rank">
-                <div className="sp-hot-tip muted">百度电影热搜榜{props.hotList?.stale && props.hotList.items.length ? ' · 上次缓存' : ''}</div>
+                <div className="sp-hot-tip muted">电影热搜推荐 · 百度{props.hotList?.stale && props.hotList.items.length ? ' · 上次缓存' : ''}</div>
                 {props.hotList?.fetchedAt ? <div className="muted">获取于 {new Date(props.hotList.fetchedAt).toLocaleString('zh-CN')}</div> : null}
                 {!props.hotList?.items.length ? (
                   <div className="sp-item muted">

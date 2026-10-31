@@ -17,6 +17,7 @@ export interface PlayerPageSession extends PlayerPageSessionPresentation {
   selectEpisode(index: number): void;
   retryCurrent(): void;
   autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause): Promise<boolean>;
+  retryAlternativeSearch(currentPosition?: number): Promise<boolean>;
   selectAlternative(id: string): boolean;
   confirmPlaybackStarted(): void;
   dismissDriveBinding(): void;
@@ -81,6 +82,7 @@ export function usePlayerPageSession(
     selectEpisode: workflow.selectEpisode,
     retryCurrent,
     autoChangeParse: workflow.autoChangeParse,
+    retryAlternativeSearch: workflow.retryAlternativeSearch,
     selectAlternative: workflow.selectAlternative,
     confirmPlaybackStarted: workflow.confirmPlaybackStarted,
     dismissDriveBinding: workflow.dismissDriveBinding,

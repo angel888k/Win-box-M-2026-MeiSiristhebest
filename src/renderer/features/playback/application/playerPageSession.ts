@@ -26,6 +26,7 @@ export interface PlaybackAlternativeDiscoveryPort {
     episodeIndex: number;
     position: number;
     excludedSourceIds: ReadonlySet<string>;
+    refresh?: boolean;
   }, signal: AbortSignal): Promise<PlaybackAlternativeSearchResult>;
 }
 

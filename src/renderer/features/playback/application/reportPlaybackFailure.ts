@@ -13,20 +13,20 @@ export function reportPlaybackFailure(
   let autoChange: Promise<boolean> | undefined;
 
   if (effects.autoChangeParse) {
-    effects.notify(`流异常（${reason}），正在自动为您切换解析线路…`);
+    effects.notify(`当前媒体流播放失败（${reason}），正在查找已核验的同集备用来源…`);
     try {
       autoChange = Promise.resolve(effects.autoChangeParse(currentTime, reason, 'media-failure'));
     } catch (error) {
-      effects.notify(`自动切换解析线路失败：${errorMessage(error)}`);
+      effects.notify(`备用来源检索失败：${errorMessage(error)}`);
     }
   }
 
   effects.onPlaybackFailure?.(currentTime, reason);
 
   return autoChange?.then((started) => {
-    if (!started) effects.notify('没有可用的备用解析线路，请切换播放源或重新解析当前集');
+    if (!started) effects.notify('暂未找到已核验的备用来源；可重新搜索，或切换到其他播放源。');
   }).catch((error: unknown) => {
-    effects.notify(`自动切换解析线路失败：${errorMessage(error)}`);
+    effects.notify(`备用来源检索失败：${errorMessage(error)}`);
   }) ?? Promise.resolve();
 }
 

@@ -77,7 +77,7 @@ describe('discoverPlaybackAlternatives', () => {
       excludedSourceIds: new Set([sourceIdentity('profile-current', 'current-source', 'current-id')]),
     }, port, new AbortController().signal);
 
-    expect(port.search).toHaveBeenCalledWith('海风', expect.any(AbortSignal));
+    expect(port.search).toHaveBeenCalledWith('海风', expect.any(AbortSignal), false);
     expect(result).toMatchObject({ incompleteSources: 0, truncated: false, candidates: [{ sourceName: '备用源' }] });
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0].data).toMatchObject({
@@ -117,17 +117,40 @@ describe('discoverPlaybackAlternatives', () => {
     expect(result.incompleteSources).toBe(5);
   });
 
-  it('marks the result truncated when more exact source details exist than the verification budget', async () => {
-    const items = Array.from({ length: 4 }, (_, index) => searchItem({
+  it('accepts an otherwise exact candidate when its source omits the year metadata', async () => {
+    const item = searchItem({ year: undefined });
+    const port = makePort([item], detail({ year: '' }));
+
+    const result = await discoverPlaybackAlternatives({ current, episodeIndex: 1, position: 0, excludedSourceIds: new Set() }, port, new AbortController().signal);
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.incompleteSources).toBe(0);
+  });
+
+  it('verifies up to 24 exact source details with bounded concurrency and marks the result truncated beyond that budget', async () => {
+    const items = Array.from({ length: 25 }, (_, index) => searchItem({
       id: `alternate-${index}`,
       sourceKey: `source-${index}`,
       sourceRef: { profileId: `profile-${index}`, key: `source-${index}` },
     }));
-    const port = makePort(items, detail());
+    let activeLookups = 0;
+    let maxConcurrentLookups = 0;
+    const port = {
+      search: vi.fn(async () => report(items)),
+      loadDetail: vi.fn(async ({ id }: { id: string }) => {
+        if (id === 'current-id') return detail({ id: 'current-id' });
+        activeLookups += 1;
+        maxConcurrentLookups = Math.max(maxConcurrentLookups, activeLookups);
+        await new Promise(resolve => setTimeout(resolve, 1));
+        activeLookups -= 1;
+        return detail({ id });
+      }),
+    };
 
     const result = await discoverPlaybackAlternatives({ current, episodeIndex: 1, position: 0, excludedSourceIds: new Set() }, port, new AbortController().signal);
 
-    expect(result.candidates).toHaveLength(3);
+    expect(result.candidates).toHaveLength(24);
     expect(result.truncated).toBe(true);
+    expect(maxConcurrentLookups).toBe(4);
   });
 });

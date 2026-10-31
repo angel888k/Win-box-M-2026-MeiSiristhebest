@@ -15,7 +15,7 @@ type PlayerPageViewProps = {
 export function PlayerPageView({ session, windowState, title, onResolutionChange }: PlayerPageViewProps) {
   const {
     init, epIndex, activeUrl, curName, playName, resolving, driveBind, parseMsg, parseName,
-    sourceFallback, episodes, canPrev, canNext, selectEpisode, retryCurrent, autoChangeParse,
+    sourceFallback, episodes, canPrev, canNext, selectEpisode, retryCurrent, autoChangeParse, retryAlternativeSearch,
     selectAlternative, confirmPlaybackStarted, dismissDriveBinding, onDriveBound,
   } = session;
   const { appIcon, maximized, mini, pinTop, minimize, toggleMaximize, setMini, togglePinTop, close } = windowState;
@@ -98,9 +98,14 @@ export function PlayerPageView({ session, windowState, title, onResolutionChange
         )}
         {sourceFallback.kind !== 'idle' && (
           <output className="player-source-fallback" aria-live="polite">
-            {sourceFallback.kind === 'searching' && <span>当前线路播放失败，正在搜索并核验同剧同集的备用源…</span>}
+            {sourceFallback.kind === 'searching' && <span>当前媒体流播放失败，正在搜索并核验同剧同集的备用来源…</span>}
             {sourceFallback.kind === 'switching' && <span>正在切换到已核验的备用源：{sourceFallback.sourceName}</span>}
-            {sourceFallback.kind === 'unavailable' && <span>{sourceFallback.message}</span>}
+            {sourceFallback.kind === 'unavailable' && <>
+              <span>{sourceFallback.message}</span>
+              <div className="player-source-fallback__actions">
+                <button type="button" className="player-source-fallback-choice" onClick={() => void retryAlternativeSearch()}>重新搜索备用源</button>
+              </div>
+            </>}
             {sourceFallback.kind === 'choices' && (
               <>
                 <span>

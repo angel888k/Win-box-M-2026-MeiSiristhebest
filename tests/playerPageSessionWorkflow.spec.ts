@@ -159,7 +159,34 @@ describe('player page session workflow', () => {
     expect(history.recordHistory).toHaveBeenCalledTimes(2);
   });
 
-  it('does not auto-switch when the aggregate search is incomplete, but lets the user choose a verified candidate', async () => {
+  it('lets the user force-refresh the backup-source search when the first scan is incomplete', async () => {
+    const session: PlayerPagePlaybackWorkflowPort = {
+      play: vi.fn(async () => ({ parse: 0, url: 'https://media.invalid/current.mp4', playUrl: '', flag: 'line-a' })),
+      resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+      loadDetail: vi.fn(async () => null),
+      discover: vi.fn(async () => ({ candidates: [], incompleteSources: 2, truncated: false })),
+      cleanupTemporaryFiles: vi.fn(async () => undefined),
+    };
+    const history: PlayerPageWorkflowHistoryPort = {
+      beginPlayerHistorySession: vi.fn(),
+      recordHistory: vi.fn(),
+      persist: vi.fn(),
+    };
+    const sourceMemory: PlayerSourceMemoryPort = { rememberSource: vi.fn() };
+    const actions: PlayerPageSessionAction[] = [];
+    const workflow = createPlayerPageSessionWorkflow({ session, history, sourceMemory, publish: action => actions.push(action) });
+
+    await workflow.applyInit(playbackInit());
+    await workflow.autoChangeParse(125, 'HTTP 403', 'media-failure');
+
+    expect(actions).toContainEqual(expect.objectContaining({ type: 'source-fallback-unavailable', message: expect.stringContaining('2 个来源或影片详情未完成') }));
+    await workflow.retryAlternativeSearch();
+
+    expect(session.discover).toHaveBeenNthCalledWith(1, expect.objectContaining({ refresh: false, position: 125 }), expect.any(AbortSignal));
+    expect(session.discover).toHaveBeenNthCalledWith(2, expect.objectContaining({ refresh: true, position: 125 }), expect.any(AbortSignal));
+  });
+
+  it('auto-switches to an exact verified candidate even when the aggregate search is incomplete', async () => {
     const candidate = alternateCandidate();
     const session: PlayerPagePlaybackWorkflowPort = {
       play: vi.fn(async (input) => input.key === 'source-b'
@@ -180,13 +207,10 @@ describe('player page session workflow', () => {
     const workflow = createPlayerPageSessionWorkflow({ session, history, sourceMemory, publish: action => actions.push(action) });
 
     await workflow.applyInit(playbackInit());
-    await vi.waitFor(() => expect(actions).toContainEqual(expect.objectContaining({ type: 'source-fallback-choices', incompleteSources: 1 })));
-    expect(session.play).toHaveBeenCalledTimes(4);
-    expect(history.recordHistory).not.toHaveBeenCalled();
-
-    expect(workflow.selectAlternative(candidate.id)).toBe(true);
+    await vi.waitFor(() => expect(actions).toContainEqual({ type: 'source-fallback-switching', sourceName: 'Source B' }));
     await vi.waitFor(() => expect(session.play).toHaveBeenCalledTimes(5));
     expect(history.recordHistory).not.toHaveBeenCalled();
+
     workflow.confirmPlaybackStarted();
     expect(history.recordHistory).toHaveBeenCalledOnce();
   });

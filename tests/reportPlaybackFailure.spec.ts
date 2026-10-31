@@ -14,7 +14,7 @@ describe('reportPlaybackFailure', () => {
     await reportPlaybackFailure(42, 'decode failed', { autoChangeParse, onPlaybackFailure, notify });
 
     expect(order).toEqual([
-      '流异常（decode failed），正在自动为您切换解析线路…',
+      '当前媒体流播放失败（decode failed），正在查找已核验的同集备用来源…',
       'auto-change',
       'page-failure',
     ]);
@@ -33,7 +33,7 @@ describe('reportPlaybackFailure', () => {
     })).resolves.toBeUndefined();
 
     expect(onPlaybackFailure).toHaveBeenCalledWith(12, 'network error');
-    expect(notify).toHaveBeenLastCalledWith('自动切换解析线路失败：no more parses');
+    expect(notify).toHaveBeenLastCalledWith('备用来源检索失败：no more parses');
   });
 
   it('explains when the automatic parse-switch budget is exhausted', async () => {
@@ -43,8 +43,8 @@ describe('reportPlaybackFailure', () => {
       notify,
     });
 
-    expect(notify).toHaveBeenNthCalledWith(1, '流异常（network error），正在自动为您切换解析线路…');
-    expect(notify).toHaveBeenLastCalledWith('没有可用的备用解析线路，请切换播放源或重新解析当前集');
+    expect(notify).toHaveBeenNthCalledWith(1, '当前媒体流播放失败（network error），正在查找已核验的同集备用来源…');
+    expect(notify).toHaveBeenLastCalledWith('暂未找到已核验的备用来源；可重新搜索，或切换到其他播放源。');
   });
 
   it('still reports playback failure when parse failover throws synchronously', async () => {
@@ -58,7 +58,7 @@ describe('reportPlaybackFailure', () => {
     });
 
     expect(onPlaybackFailure).toHaveBeenCalledWith(0, 'engine exited');
-    expect(notify).toHaveBeenLastCalledWith('自动切换解析线路失败：session unavailable');
+    expect(notify).toHaveBeenLastCalledWith('备用来源检索失败：session unavailable');
   });
 
   it('reports delegated playback failures when automatic parse switching is absent', async () => {

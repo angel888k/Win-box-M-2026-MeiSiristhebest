@@ -88,7 +88,7 @@ export interface VideoPlayerProps {
   playTitle?: string;
   episodes?: { name: string; url: string }[];
   onPickEpisode?: (index: number) => void;
-  /** ★ 2026-10-25（自动切源容错机制 AutoChangeParse）：流异常/超时时自动切换下一解析线路 */
+  /** Media failures search verified same-episode sources; resolution failures rotate parser strategies. */
   onAutoChangeParse?: (currentTime: number, reason: string, cause: 'media-failure') => Promise<boolean> | boolean;
   /** Confirms that an alternate source actually began playing before history is committed. */
   onPlaybackStarted?: () => void;
@@ -744,7 +744,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     if (onRetryPlayback) onRetryPlayback();
     else dependencies.playerWindowReload.reload();
   }, [dependencies.playerWindowReload, onRetryPlayback]);
-  const retryLabel = props.onRetryPlayback ? '重新解析当前集' : '刷新重试';
+  const retryLabel = props.onRetryPlayback ? '重试当前播放' : '刷新重试';
   return {
     identity: { url, resourceName, danmakuTitle, playTitle, mini },
     media: {

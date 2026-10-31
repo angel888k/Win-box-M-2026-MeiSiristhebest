@@ -31,6 +31,7 @@
   line-height: 1.45;
 }
 .player-source-fallback__choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.player-source-fallback__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .player-source-fallback-choice {
   min-height: 32px;
   padding: 5px 10px;
