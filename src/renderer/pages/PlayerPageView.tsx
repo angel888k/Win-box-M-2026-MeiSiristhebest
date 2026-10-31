@@ -91,45 +91,49 @@ export function PlayerPageView({ session, windowState, title, onResolutionChange
             onSaved={onDriveBound}
           />
         )}
-        {parseMsg && (
-          <div className="err" style={{ margin: '8px 12px 0', fontSize: 12 }} title={parseMsg}>
-            {parseMsg}
-          </div>
-        )}
-        {sourceFallback.kind !== 'idle' && (
-          <output className="player-source-fallback" aria-live="polite">
-            {sourceFallback.kind === 'searching' && <span>当前媒体流播放失败，正在搜索并核验同剧同集的备用来源…</span>}
-            {sourceFallback.kind === 'switching' && <span>正在切换到已核验的备用源：{sourceFallback.sourceName}</span>}
-            {sourceFallback.kind === 'unavailable' && <>
-              <span>{sourceFallback.message}</span>
-              <div className="player-source-fallback__actions">
-                <button type="button" className="player-source-fallback-choice" onClick={() => void retryAlternativeSearch()}>重新搜索备用源</button>
-              </div>
-            </>}
-            {sourceFallback.kind === 'choices' && (
-              <>
-                <span>
-                  已核验到 {sourceFallback.candidates.length} 个同剧同集来源，请选择。
-                  {sourceFallback.incompleteSources > 0 && ` 另有 ${sourceFallback.incompleteSources} 个来源未完成，暂不自动切换。`}
-                  {sourceFallback.truncated && ' 候选较多，仅核验了前几项。'}
-                </span>
-                <div className="player-source-fallback__choices">
-                  {sourceFallback.candidates.map(candidate => (
-                    <button
-                      key={candidate.id}
-                      type="button"
-                      className="player-source-fallback-choice"
-                      onClick={() => selectAlternative(candidate.id)}
-                    >
-                      {candidate.sourceName}{candidate.profileName ? ` · ${candidate.profileName}` : ''}
-                    </button>
-                  ))}
+        <div className={`pwin-stage${mini ? ' pwin-stage--mini' : ''}`}>
+          {(parseMsg || sourceFallback.kind !== 'idle') && (
+            <div className="player-stage-notices">
+              {parseMsg && (
+                <div className="player-stage-notice player-stage-notice--error" title={parseMsg}>
+                  {parseMsg}
                 </div>
-              </>
-            )}
-          </output>
-        )}
-        <div className="pwin-stage">
+              )}
+              {sourceFallback.kind !== 'idle' && (
+                <output className="player-source-fallback" aria-live="polite">
+                  {sourceFallback.kind === 'searching' && <span>当前媒体流播放失败，正在搜索并核验同剧同集的备用来源…</span>}
+                  {sourceFallback.kind === 'switching' && <span>正在切换到已核验的备用源：{sourceFallback.sourceName}</span>}
+                  {sourceFallback.kind === 'unavailable' && <>
+                    <span>{sourceFallback.message}</span>
+                    <div className="player-source-fallback__actions">
+                      <button type="button" className="player-source-fallback-choice" onClick={() => void retryAlternativeSearch()}>重新搜索备用源</button>
+                    </div>
+                  </>}
+                  {sourceFallback.kind === 'choices' && (
+                    <>
+                      <span>
+                        已核验到 {sourceFallback.candidates.length} 个同剧同集来源，请选择。
+                        {sourceFallback.incompleteSources > 0 && ` 另有 ${sourceFallback.incompleteSources} 个来源尚未完成核验。`}
+                        {sourceFallback.truncated && ' 候选较多，仅核验了前几项。'}
+                      </span>
+                      <div className="player-source-fallback__choices">
+                        {sourceFallback.candidates.map(candidate => (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            className="player-source-fallback-choice"
+                            onClick={() => selectAlternative(candidate.id)}
+                          >
+                            {candidate.sourceName}{candidate.profileName ? ` · ${candidate.profileName}` : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </output>
+              )}
+            </div>
+          )}
           {activeUrl && true ? (
             <VideoPlayer
               url={activeUrl}
