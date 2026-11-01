@@ -12,12 +12,13 @@ export interface PlaybackAlternativeCandidate {
 export interface PlaybackAlternativeSearchResult {
   candidates: PlaybackAlternativeCandidate[];
   incompleteSources: number;
+  searchIncomplete?: boolean;
   truncated: boolean;
 }
 
 export interface PlaybackAlternativeSearchPort {
-  search(query: string, signal: AbortSignal, refresh?: boolean): Promise<SearchAllReport>;
-  loadDetail(input: { key: string; id: string; profileId: string }): Promise<VodDetail | null>;
+  search(query: string, signal: AbortSignal, onReport: (report: SearchAllReport) => void, refresh?: boolean): Promise<SearchAllReport>;
+  loadDetail(input: { key: string; id: string; profileId: string }, signal?: AbortSignal): Promise<VodDetail | null>;
 }
 
 export interface DiscoverPlaybackAlternativesInput {
@@ -30,16 +31,20 @@ export interface DiscoverPlaybackAlternativesInput {
 
 const MAX_DETAIL_LOOKUPS = 24;
 const DETAIL_LOOKUP_CONCURRENCY = 4;
-const SEARCH_DEADLINE_MS = 30_000;
+const SEARCH_DEADLINE_MS = 45_000;
 const DETAIL_DEADLINE_MS = 10_000;
+const DISCOVERY_DEADLINE_MS = 60_000;
 
 /** Search all configured profiles, then verify title/year/episode against each source's detail. */
 export async function discoverPlaybackAlternatives(
   input: DiscoverPlaybackAlternativesInput,
   port: PlaybackAlternativeSearchPort,
   signal: AbortSignal,
+  onCandidate?: (candidate: PlaybackAlternativeCandidate) => void,
 ): Promise<PlaybackAlternativeSearchResult> {
   if (signal.aborted) throw abortError();
+  const deadlineAt = Date.now() + DISCOVERY_DEADLINE_MS;
+  const remainingBudget = (): number => Math.max(0, deadlineAt - Date.now());
   const selectedEpisode = input.current.episodes[input.episodeIndex];
   const currentId = input.current.meta?.vodId || input.current.meta?.id || '';
   const currentKey = input.current.meta?.fromKey || input.current.key;
@@ -48,7 +53,11 @@ export async function discoverPlaybackAlternatives(
   let currentDetail: VodDetail | null = null;
   if (currentId && currentKey && currentProfileId) {
     try {
-      currentDetail = await withDeadline(port.loadDetail({ key: currentKey, id: currentId, profileId: currentProfileId }), DETAIL_DEADLINE_MS, signal);
+      currentDetail = await withDeadline(
+        detailSignal => port.loadDetail({ key: currentKey, id: currentId, profileId: currentProfileId }, detailSignal),
+        Math.min(DETAIL_DEADLINE_MS, remainingBudget()),
+        signal,
+      );
     } catch {
       // The already-open player may have been launched from history or its detail endpoint may be stale.
       if (signal.aborted) throw abortError();
@@ -56,68 +65,54 @@ export async function discoverPlaybackAlternatives(
   }
 
   const title = currentDetail?.name?.trim() || input.current.title.trim();
-  if (!title || !selectedEpisode?.name.trim()) return { candidates: [], incompleteSources: 0, truncated: false };
-
-  const controller = new AbortController();
-  const abortSearch = () => controller.abort();
-  signal.addEventListener('abort', abortSearch, { once: true });
-  let report: SearchAllReport;
-  try {
-    report = await withDeadline(port.search(title, controller.signal, input.refresh === true), SEARCH_DEADLINE_MS, signal);
-  } catch (error) {
-    controller.abort();
-    throw error;
-  } finally {
-    signal.removeEventListener('abort', abortSearch);
-  }
-  if (signal.aborted) throw abortError();
+  if (!title || !selectedEpisode?.name.trim()) return { candidates: [], incompleteSources: 0, searchIncomplete: false, truncated: false };
 
   const expectedYear = parseYear(currentDetail?.year) ?? playbackTitleYear(title);
-  const uniqueItems = new Map<string, AggVodItem>();
-  for (const item of report.items) {
-    const profileId = item.sourceRef?.profileId;
-    const sourceKey = item.sourceRef?.key || item.sourceKey;
-    if (!profileId || !sourceKey || !item.id || item.tag === 'folder') continue;
-    if (!samePlaybackTitle(title, item.name)) continue;
-    if (expectedYear != null && (parseYear(item.year) ?? playbackTitleYear(item.name)) != null
-      && (parseYear(item.year) ?? playbackTitleYear(item.name)) !== expectedYear) continue;
-    if (profileId === currentProfileId && sourceKey === currentKey) continue;
-
-    const id = sourceIdentity(profileId, sourceKey, item.id);
-    if (input.excludedSourceIds.has(id)) continue;
-    if (!uniqueItems.has(id)) uniqueItems.set(id, item);
-  }
-
-  const entries = [...uniqueItems.entries()];
-  const truncated = entries.length > MAX_DETAIL_LOOKUPS;
-  const exactItems = entries.slice(0, MAX_DETAIL_LOOKUPS);
+  let latestReport: SearchAllReport = { items: [], perSource: [], hitSources: 0, failedSources: 0, totalRaw: 0 };
+  const queuedItems = new Set<string>();
+  const detailQueue: Array<[string, AggVodItem]> = [];
+  const candidatesById = new Map<string, PlaybackAlternativeCandidate>();
+  let lookupCount = 0;
+  let truncated = false;
   let failedDetailLookups = 0;
-  const candidates = (await mapConcurrent(exactItems, DETAIL_LOOKUP_CONCURRENCY, async ([id, item]) => {
+  let drainTask: Promise<void> | null = null;
+
+  const verifyItem = async ([id, item]: [string, AggVodItem]): Promise<void> => {
+    if (signal.aborted) return;
     const profileId = item.sourceRef!.profileId;
     const sourceKey = item.sourceRef!.key || item.sourceKey;
     let detail: VodDetail | null;
     try {
-      detail = await withDeadline(port.loadDetail({ key: sourceKey, id: item.id, profileId }), DETAIL_DEADLINE_MS, signal);
+      const detailBudget = Math.min(DETAIL_DEADLINE_MS, remainingBudget());
+      if (detailBudget <= 0) {
+        failedDetailLookups += 1;
+        return;
+      }
+      detail = await withDeadline(
+        detailSignal => port.loadDetail({ key: sourceKey, id: item.id, profileId }, detailSignal),
+        detailBudget,
+        signal,
+      );
     } catch {
       if (!signal.aborted) failedDetailLookups += 1;
-      return null;
+      return;
     }
-    if (signal.aborted) return null;
+    if (signal.aborted) return;
     if (!detail?.name) {
       failedDetailLookups += 1;
-      return null;
+      return;
     }
-    if (!samePlaybackTitle(title, detail.name)) return null;
+    if (!samePlaybackTitle(title, detail.name)) return;
 
     const targetYear = expectedYear;
     const candidateYear = parseYear(detail.year) ?? parseYear(item.year) ?? playbackTitleYear(detail.name);
-    if (targetYear != null && candidateYear != null && candidateYear !== targetYear) return null;
+    if (targetYear != null && candidateYear != null && candidateYear !== targetYear) return;
 
     const episodeMatch = matchPlaybackEpisode(selectedEpisode.name, detail.episodes || {});
-    if (episodeMatch.kind !== 'unique') return null;
+    if (episodeMatch.kind !== 'unique') return;
     const episodes = detail.episodes[episodeMatch.match.flag];
     const episodeIndex = episodeMatch.match.index;
-    if (!episodes?.[episodeIndex]) return null;
+    if (!episodes?.[episodeIndex]) return;
 
     const sourceName = item.sourceName || item.sourceKey;
     const displayTitle = detail.name.trim();
@@ -142,35 +137,91 @@ export async function discoverPlaybackAlternatives(
         profileId,
       },
     };
-    return {
+    const candidate: PlaybackAlternativeCandidate = {
       id,
       sourceName,
       profileName: item.sourceProfileName || '',
       data,
-    } satisfies PlaybackAlternativeCandidate;
-  })).filter((candidate): candidate is PlaybackAlternativeCandidate => candidate != null);
+    };
+    if (!candidatesById.has(id)) {
+      candidatesById.set(id, candidate);
+      onCandidate?.(candidate);
+    }
+  };
+
+  const drainDetails = (): Promise<void> => {
+    if (drainTask) return drainTask;
+    drainTask = (async () => {
+      while (detailQueue.length > 0 && !signal.aborted) {
+        if (remainingBudget() <= 0) {
+          failedDetailLookups += detailQueue.length;
+          detailQueue.length = 0;
+          break;
+        }
+        const batch = detailQueue.splice(0, DETAIL_LOOKUP_CONCURRENCY);
+        await Promise.all(batch.map(verifyItem));
+      }
+    })().finally(() => { drainTask = null; });
+    return drainTask;
+  };
+
+  const enqueueReport = (partial: SearchAllReport): void => {
+    if (signal.aborted) return;
+    latestReport = partial;
+    for (const item of partial.items) {
+      const profileId = item.sourceRef?.profileId;
+      const sourceKey = item.sourceRef?.key || item.sourceKey;
+      if (!profileId || !sourceKey || !item.id || item.tag === 'folder') continue;
+      if (!samePlaybackTitle(title, item.name)) continue;
+      const itemYear = parseYear(item.year) ?? playbackTitleYear(item.name);
+      if (expectedYear != null && itemYear != null && itemYear !== expectedYear) continue;
+      if (profileId === currentProfileId && sourceKey === currentKey) continue;
+      const id = sourceIdentity(profileId, sourceKey, item.id);
+      if (input.excludedSourceIds.has(id) || queuedItems.has(id)) continue;
+      queuedItems.add(id);
+      if (lookupCount >= MAX_DETAIL_LOOKUPS) {
+        truncated = true;
+        continue;
+      }
+      lookupCount += 1;
+      detailQueue.push([id, item]);
+    }
+    if (detailQueue.length > 0) void drainDetails();
+  };
+
+  let report: SearchAllReport;
+  let searchIncomplete = false;
+  try {
+    const searchBudget = Math.min(SEARCH_DEADLINE_MS, remainingBudget());
+    if (searchBudget <= 0) throw new PlaybackDeadlineError();
+    report = await withDeadline(
+      searchSignal => port.search(title, searchSignal, enqueueReport, input.refresh === true),
+      searchBudget,
+      signal,
+    );
+  } catch (error) {
+    if (signal.aborted) throw abortError();
+    if (!(error instanceof PlaybackDeadlineError)) throw error;
+    // Keep verified partial results when the aggregate scan exceeds its budget.
+    // The partial scan is explicitly marked so it cannot be presented as “no source exists”.
+    report = latestReport;
+    searchIncomplete = true;
+  }
+  enqueueReport(report);
+  while (drainTask || detailQueue.length > 0) {
+    if (drainTask) await drainTask;
+    else await drainDetails();
+  }
+  if (signal.aborted) throw abortError();
 
   return {
-    candidates,
+    candidates: [...candidatesById.values()],
     // Any failed or still-pending source might contain another exact match. A
     // single verified candidate is not safe to auto-select in that case.
     incompleteSources: Math.max(0, (report.pendingSources || 0) + (report.failedSources || 0) + failedDetailLookups),
+    searchIncomplete,
     truncated,
   };
-}
-
-async function mapConcurrent<T, R>(items: T[], concurrency: number, map: (item: T) => Promise<R>): Promise<R[]> {
-  const results = Array.from<R>({ length: items.length });
-  let nextIndex = 0;
-  const workerCount = Math.min(items.length, Math.max(1, concurrency));
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (true) {
-      const index = nextIndex++;
-      if (index >= items.length) return;
-      results[index] = await map(items[index]);
-    }
-  }));
-  return results;
 }
 
 export function sourceIdentity(profileId: string, sourceKey: string, vodId: string): string {
@@ -182,25 +233,57 @@ function parseYear(value: string | number | undefined): number | null {
   return match ? Number(match[0]) : null;
 }
 
-function withDeadline<T>(promise: Promise<T>, timeoutMs: number, signal: AbortSignal): Promise<T> {
+function withDeadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  parentSignal: AbortSignal,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    if (signal.aborted) {
+    if (parentSignal.aborted) {
       reject(abortError());
       return;
     }
-    const timer = setTimeout(() => finish(() => reject(new Error('备用源搜索超时'))), timeoutMs);
-    const onAbort = () => finish(() => reject(abortError()));
+    if (timeoutMs <= 0) {
+      reject(new PlaybackDeadlineError());
+      return;
+    }
+    const controller = new AbortController();
+    let settled = false;
+    const timer = setTimeout(() => {
+      controller.abort();
+      finish(() => reject(new PlaybackDeadlineError()));
+    }, timeoutMs);
+    const onAbort = () => {
+      controller.abort();
+      finish(() => reject(abortError()));
+    };
     const finish = (complete: () => void) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      signal.removeEventListener('abort', onAbort);
+      parentSignal.removeEventListener('abort', onAbort);
       complete();
     };
-    signal.addEventListener('abort', onAbort, { once: true });
+    parentSignal.addEventListener('abort', onAbort, { once: true });
+    let promise: Promise<T>;
+    try {
+      promise = operation(controller.signal);
+    } catch (error) {
+      finish(() => reject(error));
+      return;
+    }
     promise.then(
       value => finish(() => resolve(value)),
       error => finish(() => reject(error)),
     );
   });
+}
+
+class PlaybackDeadlineError extends Error {
+  constructor() {
+    super('备用源搜索超时');
+    this.name = 'TimeoutError';
+  }
 }
 
 function abortError(): Error {

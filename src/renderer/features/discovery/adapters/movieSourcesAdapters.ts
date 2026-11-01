@@ -12,7 +12,7 @@ export const movieSourcesSearchAdapter: MovieSourcesSearchPort = {
     };
   },
   onProgress: client.onSearchAllProgress,
-  searchAll: client.searchAll,
+  searchAll: (query, options, signal) => client.searchAll(query, options, signal),
 };
 
 /** Renderer IPC adapter for expanding a cloud-drive search result. */

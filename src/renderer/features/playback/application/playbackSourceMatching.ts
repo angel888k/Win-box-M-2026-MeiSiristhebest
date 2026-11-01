@@ -47,21 +47,46 @@ export function matchPlaybackEpisode(
 ): EpisodeSourceMatchResult {
   const selectedOrdinal = episodeOrdinal(selectedName);
   const selectedLabel = normalizeEpisodeLabel(selectedName);
-  if (selectedOrdinal == null && !selectedLabel) return { kind: 'none' };
+  const selectedMovieKind = movieEditionKind(selectedName);
+  if (selectedOrdinal == null && !selectedLabel && !selectedMovieKind) return { kind: 'none' };
 
   const matches: EpisodeSourceMatch[] = [];
   for (const [flag, episodes] of Object.entries(candidateEpisodes)) {
     episodes.forEach((episode, index) => {
-      const matchesOrdinal = selectedOrdinal != null
-        ? episodeOrdinal(episode.name) === selectedOrdinal
-        : normalizeEpisodeLabel(episode.name) === selectedLabel;
-      if (matchesOrdinal) matches.push({ flag, index, episode });
+      const candidateOrdinal = episodeOrdinal(episode.name);
+      const matchesOrdinal = selectedOrdinal != null && candidateOrdinal != null
+        && candidateOrdinal.episode === selectedOrdinal.episode
+        // A missing season is unknown, not a wildcard. Treat it as a match only
+        // when both sources omit season; otherwise auto-failover could cross seasons.
+        && selectedOrdinal.season === candidateOrdinal.season;
+      const matchesMovieEdition = selectedOrdinal == null && selectedMovieKind != null
+        && movieEditionKind(episode.name) === selectedMovieKind;
+      const matchesExactLabel = selectedOrdinal == null && selectedMovieKind == null
+        && normalizeEpisodeLabel(episode.name) === selectedLabel;
+      if (matchesOrdinal || matchesMovieEdition || matchesExactLabel) matches.push({ flag, index, episode });
     });
   }
 
   if (matches.length === 0) return { kind: 'none' };
-  if (matches.length !== 1) return { kind: 'ambiguous', count: matches.length };
-  return { kind: 'unique', match: matches[0] };
+  if (selectedOrdinal?.season == null) {
+    const explicitSeasons = new Set(matches
+      .map(match => episodeOrdinal(match.episode.name)?.season)
+      .filter((season): season is number => season != null));
+    if (explicitSeasons.size > 1) return { kind: 'ambiguous', count: matches.length };
+  }
+  // Multiple flags often describe alternate routes (audio/quality) to the same
+  // episode. They are not ambiguous. Duplicate matching entries within one
+  // flag still need a human choice because they may be different cuts.
+  const matchesByFlag = new Map<string, EpisodeSourceMatch[]>();
+  for (const match of matches) {
+    const routes = matchesByFlag.get(match.flag) || [];
+    routes.push(match);
+    matchesByFlag.set(match.flag, routes);
+  }
+  const duplicateEpisodes = [...matchesByFlag.values()].filter(routes => routes.length > 1).flat();
+  if (duplicateEpisodes.length > 0) return { kind: 'ambiguous', count: duplicateEpisodes.length };
+  const preferred = [...matches].sort((left, right) => flagQualityScore(right.flag) - flagQualityScore(left.flag));
+  return { kind: 'unique', match: preferred[0] };
 }
 
 function titleIdentity(raw: string): TitleIdentity {
@@ -85,19 +110,54 @@ function titleIdentity(raw: string): TitleIdentity {
   };
 }
 
-function episodeOrdinal(value: string): number | null {
+interface EpisodeOrdinal {
+  season: number | null;
+  episode: number;
+}
+
+function episodeOrdinal(value: string): EpisodeOrdinal | null {
   const normalized = (value || '').normalize('NFKC').trim();
   const seasonEpisode = /\bS\s*\d{1,2}\s*E\s*0*(\d{1,4})\b/i.exec(normalized);
-  if (seasonEpisode) return Number(seasonEpisode[1]);
+  if (seasonEpisode) {
+    const season = /\bS\s*0*(\d{1,2})\s*E/i.exec(normalized);
+    return { season: season ? Number(season[1]) : null, episode: Number(seasonEpisode[1]) };
+  }
+
+  const chineseSeasonEpisode = /第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*季.*?第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*[集话話回]/i.exec(normalized);
+  if (chineseSeasonEpisode) {
+    const season = parseChineseNumber(chineseSeasonEpisode[1]);
+    const episode = parseChineseNumber(chineseSeasonEpisode[2]);
+    return episode == null ? null : { season, episode };
+  }
 
   const chinese = /第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*[集话話回]/i.exec(normalized);
-  if (chinese) return parseChineseNumber(chinese[1]);
+  if (chinese) {
+    const episode = parseChineseNumber(chinese[1]);
+    return episode == null ? null : { season: null, episode };
+  }
 
   const ep = /(?:^|[^\p{L}\p{N}])(?:EP?|EPISODE)\s*0*(\d{1,4})(?=$|[^\p{L}\p{N}])/iu.exec(normalized);
-  if (ep) return Number(ep[1]);
+  if (ep) return { season: null, episode: Number(ep[1]) };
 
   const numericLabel = /^0*(\d{1,4})$/.exec(normalized);
-  return numericLabel ? Number(numericLabel[1]) : null;
+  return numericLabel ? { season: null, episode: Number(numericLabel[1]) } : null;
+}
+
+function movieEditionKind(value: string): 'feature' | null {
+  const normalized = (value || '').normalize('NFKC').toLocaleLowerCase();
+  if (/预告|花絮|幕后|片段|彩蛋|解说/.test(normalized)) return null;
+  return /正片|电影|(?:^|[^\p{L}\p{N}])(?:hd|uhd|4k|2160p|1080p|720p|超清|高清)(?:$|[^\p{L}\p{N}])/iu.test(normalized)
+    ? 'feature'
+    : null;
+}
+
+function flagQualityScore(flag: string): number {
+  const normalized = flag.normalize('NFKC').toLocaleLowerCase();
+  if (/2160p|4k|uhd/.test(normalized)) return 40;
+  if (/1080p|fhd/.test(normalized)) return 30;
+  if (/720p|hd/.test(normalized)) return 20;
+  if (/480p|sd/.test(normalized)) return 10;
+  return 0;
 }
 
 function normalizeEpisodeLabel(value: string): string {

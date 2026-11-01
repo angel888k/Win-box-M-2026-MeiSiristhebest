@@ -16,7 +16,7 @@ export interface MovieSourcesSearchOptions {
 export interface MovieSourcesSearchPort {
   readScope(): Promise<MovieSourcesSearchScope>;
   onProgress(listener: (event: SearchAllProgressEvent) => void): () => void;
-  searchAll(query: string, options: MovieSourcesSearchOptions): Promise<SearchAllReport>;
+  searchAll(query: string, options: MovieSourcesSearchOptions, signal?: AbortSignal): Promise<SearchAllReport>;
 }
 
 export interface MovieSourceCategoryRequest {

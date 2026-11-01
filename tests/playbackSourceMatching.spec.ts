@@ -10,8 +10,8 @@ describe('playback source identity matching', () => {
     expect(samePlaybackTitle('繁花 2023', '繁花 2024')).toBe(false);
   });
 
-  it('matches an explicit episode number across Chinese and S01E01 labels', () => {
-    expect(matchPlaybackEpisode('第十二集', {
+  it('matches an explicit season and episode across Chinese and S01E01 labels', () => {
+    expect(matchPlaybackEpisode('第1季第十二集', {
       '高清': [{ name: 'S01E12.1080p.mkv', url: 'episode-12' }],
     })).toEqual({
       kind: 'unique',
@@ -29,11 +29,39 @@ describe('playback source identity matching', () => {
     })).toEqual({ kind: 'none' });
   });
 
-  it('rejects duplicate episode matches across play flags as ambiguous', () => {
+  it('treats duplicate matches across play flags as alternate routes to the same episode', () => {
     expect(matchPlaybackEpisode('第01集', {
       '国语': [{ name: '第01集', url: 'episode-1-zh' }],
       '粤语': [{ name: '第01集', url: 'episode-1-yue' }],
+    })).toMatchObject({ kind: 'unique', match: { flag: '国语', index: 0 } });
+  });
+
+  it('prefers the best quality flag while still rejecting duplicate cuts in one flag', () => {
+    expect(matchPlaybackEpisode('第01集', {
+      '720P': [{ name: '第01集', url: '720' }],
+      '4K': [{ name: '第01集', url: '4k' }],
+    })).toMatchObject({ kind: 'unique', match: { flag: '4K', index: 0 } });
+    expect(matchPlaybackEpisode('第01集', {
+      '线路A': [{ name: '第01集', url: 'cut-a' }, { name: '第01集', url: 'cut-b' }],
     })).toEqual({ kind: 'ambiguous', count: 2 });
+  });
+
+  it('keeps season with episode identity and matches equivalent movie editions', () => {
+    expect(matchPlaybackEpisode('S01E02', {
+      '线路': [{ name: 'S02E02', url: 'wrong-season' }],
+    })).toEqual({ kind: 'none' });
+    expect(matchPlaybackEpisode('S01E02', {
+      '线路': [{ name: '第02集', url: 'season-not-provided' }],
+    })).toEqual({ kind: 'none' });
+    expect(matchPlaybackEpisode('第02集', {
+      '线路': [{ name: 'S01E02', url: 'season-not-provided-on-current-source' }],
+    })).toEqual({ kind: 'none' });
+    expect(matchPlaybackEpisode('HD', {
+      '线路': [{ name: '正片', url: 'feature' }],
+    })).toMatchObject({ kind: 'unique', match: { index: 0 } });
+    expect(matchPlaybackEpisode('HD', {
+      '线路': [{ name: '预告片', url: 'trailer' }],
+    })).toEqual({ kind: 'none' });
   });
 
   it('uses an exact label only when the selected episode has no explicit ordinal', () => {

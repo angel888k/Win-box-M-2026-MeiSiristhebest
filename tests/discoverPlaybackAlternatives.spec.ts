@@ -77,7 +77,7 @@ describe('discoverPlaybackAlternatives', () => {
       excludedSourceIds: new Set([sourceIdentity('profile-current', 'current-source', 'current-id')]),
     }, port, new AbortController().signal);
 
-    expect(port.search).toHaveBeenCalledWith('海风', expect.any(AbortSignal), false);
+    expect(port.search).toHaveBeenCalledWith('海风', expect.any(AbortSignal), expect.any(Function), false);
     expect(result).toMatchObject({ incompleteSources: 0, truncated: false, candidates: [{ sourceName: '备用源' }] });
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0].data).toMatchObject({
@@ -97,8 +97,7 @@ describe('discoverPlaybackAlternatives', () => {
     const port = makePort([related, wrongYear, ambiguous], detail({
       id: 'ambiguous',
       episodes: {
-        线路B: [{ name: '第02集', url: 'episode-a' }],
-        线路C: [{ name: 'S01E02', url: 'episode-b' }],
+        线路B: [{ name: 'S01E02', url: 'episode-a' }, { name: 'S01E02', url: 'episode-b' }],
       },
     }));
 
@@ -125,6 +124,135 @@ describe('discoverPlaybackAlternatives', () => {
 
     expect(result.candidates).toHaveLength(1);
     expect(result.incompleteSources).toBe(0);
+  });
+
+  it('verifies and publishes a candidate before aggregate search has completed', async () => {
+    const item = searchItem();
+    const candidateReady = vi.fn();
+    let finishSearch!: (value: SearchAllReport) => void;
+    const port = {
+      search: vi.fn((_query: string, _signal: AbortSignal, onReport: (value: SearchAllReport) => void) => {
+        onReport(report([item]));
+        return new Promise<SearchAllReport>(resolve => { finishSearch = resolve; });
+      }),
+      loadDetail: vi.fn(async ({ id }: { id: string }) => id === 'current-id' ? detail({ id }) : detail()),
+    };
+
+    const pending = discoverPlaybackAlternatives({
+      current,
+      episodeIndex: 1,
+      position: 137,
+      excludedSourceIds: new Set(),
+    }, port, new AbortController().signal, candidateReady);
+
+    await vi.waitFor(() => expect(candidateReady).toHaveBeenCalledOnce());
+    expect(candidateReady.mock.calls[0][0].sourceName).toBe('备用源');
+    finishSearch(report([item]));
+    await expect(pending).resolves.toMatchObject({ candidates: [{ sourceName: '备用源' }] });
+  });
+
+  it('aborts an in-flight detail request when discovery is canceled', async () => {
+    const item = searchItem();
+    const controller = new AbortController();
+    let candidateDetailSignal: AbortSignal | undefined;
+    const port = {
+      search: vi.fn(async (_query: string, _signal: AbortSignal, onReport: (value: SearchAllReport) => void) => {
+        const result = report([item]);
+        onReport(result);
+        return result;
+      }),
+      loadDetail: vi.fn(({ id }: { id: string }, signal?: AbortSignal) => {
+        if (id === 'current-id') return Promise.resolve(detail({ id }));
+        candidateDetailSignal = signal;
+        return new Promise<VodDetail>((_resolve, reject) => {
+          const rejectCanceled = () => reject(new Error('detail request canceled'));
+          if (signal?.aborted) rejectCanceled();
+          else signal?.addEventListener('abort', rejectCanceled, { once: true });
+        });
+      }),
+    };
+
+    const pending = discoverPlaybackAlternatives({
+      current,
+      episodeIndex: 1,
+      position: 0,
+      excludedSourceIds: new Set(),
+    }, port, controller.signal);
+
+    await vi.waitFor(() => expect(candidateDetailSignal).toBeDefined());
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(candidateDetailSignal?.aborted).toBe(true);
+  });
+
+  it('keeps exact candidates from a partial scan when the aggregate search deadline expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const item = searchItem();
+      const port = {
+        search: vi.fn((_query: string, _signal: AbortSignal, onReport: (value: SearchAllReport) => void) => {
+          onReport(report([item], { pendingSources: 9 }));
+          return new Promise<SearchAllReport>(() => undefined);
+        }),
+        loadDetail: vi.fn(async ({ id }: { id: string }) => id === 'current-id' ? detail({ id }) : detail()),
+      };
+
+      const pending = discoverPlaybackAlternatives({
+        current,
+        episodeIndex: 1,
+        position: 33,
+        excludedSourceIds: new Set(),
+      }, port, new AbortController().signal);
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      await expect(pending).resolves.toMatchObject({
+        searchIncomplete: true,
+        incompleteSources: 9,
+        candidates: [{ sourceName: '备用源', data: { startTime: 33 } }],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds all batched detail verification to the shared discovery deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const items = Array.from({ length: 24 }, (_, index) => searchItem({
+        id: `slow-${index}`,
+        sourceKey: `slow-source-${index}`,
+        sourceRef: { profileId: `slow-profile-${index}`, key: `slow-source-${index}` },
+      }));
+      const port = {
+        search: vi.fn(async (_query: string, _signal: AbortSignal, onReport: (value: SearchAllReport) => void) => {
+          const result = report(items);
+          onReport(result);
+          return result;
+        }),
+        loadDetail: vi.fn(({ id }: { id: string }, detailSignal?: AbortSignal) => {
+          if (id === 'current-id') return Promise.resolve(detail({ id }));
+          return new Promise<VodDetail>((_resolve, reject) => {
+            const rejectCanceled = () => reject(new Error('detail request canceled'));
+            if (detailSignal?.aborted) rejectCanceled();
+            else detailSignal?.addEventListener('abort', rejectCanceled, { once: true });
+          });
+        }),
+      };
+
+      const pending = discoverPlaybackAlternatives({
+        current,
+        episodeIndex: 1,
+        position: 0,
+        excludedSourceIds: new Set(),
+      }, port, new AbortController().signal);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await expect(pending).resolves.toMatchObject({ candidates: [], incompleteSources: 24, truncated: false });
+      expect(port.loadDetail).toHaveBeenCalledTimes(25);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('verifies up to 24 exact source details with bounded concurrency and marks the result truncated beyond that budget', async () => {

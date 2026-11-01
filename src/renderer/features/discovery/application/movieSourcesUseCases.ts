@@ -68,7 +68,7 @@ export async function searchMovieSources(
     const options = profileIds.length
       ? { profileIds, refresh }
       : { profileId: scope.activeProfileId, refresh };
-    const report = await port.searchAll(query, options);
+    const report = await port.searchAll(query, options, signal);
     return { report, progress: latestProgress };
   } finally {
     signal?.removeEventListener('abort', onAbort);

@@ -13,13 +13,14 @@ export const playerPageSessionAdapter: PlayerPageSessionPort = {
     sourceName,
   }),
   loadDetail: (input) => client.detail(input),
-    discover: async (input, signal) => discoverPlaybackAlternatives(input, {
-      search: async (query, searchSignal, refresh = false) => {
-        const result = await searchMovieSources(query, refresh, movieSourcesSearchAdapter, () => undefined, searchSignal);
-      return result.report;
-    },
-    loadDetail: ({ key, id, profileId }) => client.detail({ key, ids: [id], profileId }),
-  }, signal),
+    discover: async (input, signal, onCandidate) => discoverPlaybackAlternatives(input, {
+      search: async (query, searchSignal, onReport, refresh = false) => {
+        const result = await searchMovieSources(query, refresh, movieSourcesSearchAdapter,
+          update => onReport(update.report), searchSignal);
+        return result.report;
+      },
+      loadDetail: ({ key, id, profileId }, detailSignal) => client.detail({ key, ids: [id], profileId }, detailSignal),
+    }, signal, onCandidate),
   onInit: (listener) => client.playerOnInit((data) => {
     if (data) listener(data as PlayerInitData);
   }),
