@@ -99,31 +99,7 @@ export function useSourcePickerController({ port, enabled, open, onPick, current
 
   const clearError = useCallback(() => setError(''), []);
 
-  const activateProfile = useCallback(async (profileId: string) => {
-    if (!profileId || switchInProgress.current || !profileSites) return false;
-    if (!profileSites.profiles.some(profile => profile.id === profileId && profile.restorable !== false)) return false;
-    if (profileId === profileSites.activeId) {
-      setSelectedProfileId(profileId);
-      return true;
-    }
-    switchInProgress.current = true;
-    setSwitching(true);
-    setError('');
-    try {
-      await port.activateProfile(profileId);
-      if (alive.current) setSelectedProfileId(profileId);
-      port.publishProfileChanged();
-      return true;
-    } catch (cause) {
-      if (alive.current) setError(describeFailure(cause));
-      return false;
-    } finally {
-      switchInProgress.current = false;
-      if (alive.current) setSwitching(false);
-    }
-  }, [port, profileSites]);
-
-  const previewProfile = useCallback((profileId: string) => {
+  const selectProfilePane = useCallback((profileId: string) => {
     if (switchInProgress.current || !profileSites?.profiles.some(profile => profile.id === profileId && profile.restorable !== false)) return false;
     setSelectedProfileId(profileId);
     return true;
@@ -178,6 +154,6 @@ export function useSourcePickerController({ port, enabled, open, onPick, current
 
   return {
     model: { sources, activeSourceKey, profileSites, selectedProfileId, error, switching },
-    actions: { beginOpen, refreshSources, refreshProfileSites, activateProfile, previewProfile, pickSource, clearError },
+    actions: { beginOpen, refreshSources, refreshProfileSites, selectProfilePane, pickSource, clearError },
   };
 }

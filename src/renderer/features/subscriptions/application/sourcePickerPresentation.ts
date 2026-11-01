@@ -54,7 +54,7 @@ export function presentSourcePicker(input: SourcePickerPresentationInput) {
         ? selectedProfile ? '该子仓暂无点播源；直播线路不显示在这里' : '未导入源'
         : '没有匹配的来源',
     tip: input.profileSites
-      ? `${hasMultipleProfiles ? '点子仓切换配置 · 点眼睛仅预览 · ' : ''}点站点切换当前浏览内容 · ${sourceCount}${hasMultipleProfiles ? ` · ${profiles.length} 份订阅` : ''}`
+      ? `${hasMultipleProfiles ? '左侧选择子仓查看站点；右侧选站点后一起切换子仓和站点 · ' : '选站点切换当前内容 · '}${sourceCount}${hasMultipleProfiles ? ` · ${profiles.length} 份订阅` : ''}`
       : '正在加载订阅…',
   };
 }

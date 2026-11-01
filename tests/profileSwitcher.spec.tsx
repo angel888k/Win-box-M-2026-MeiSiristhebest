@@ -40,11 +40,29 @@ describe('ProfileSwitcher', () => {
     expect(screen.queryByRole('button', { name: /失败子仓/ })).toBeNull();
     const current = await within(dialog).findByRole('button', { name: /A子仓/ });
     expect(current.getAttribute('aria-pressed')).toBe('true');
-    expect(within(current).getByText('当前')).toBeTruthy();
-    expect(within(current).queryByText('当前使用')).toBeNull();
+    expect(within(current).getByText('当前使用')).toBeTruthy();
+    expect(within(current).queryByText('当前')).toBeNull();
     fireEvent.change(screen.getByRole('textbox', { name: '筛选子仓' }), { target: { value: 'B子仓' } });
     expect(within(dialog).queryByRole('button', { name: /A子仓/ })).toBeNull();
     expect(within(dialog).getByRole('button', { name: /B子仓/ })).toBeTruthy();
+  });
+
+  it('hides empty archived profiles from the normal switch list and labels them when explicitly shown', async () => {
+    const current = profileConfig('A');
+    const empty = profileConfig('cleaned', false, false);
+    const config = {
+      ...current,
+      profiles: [...current.profiles, ...empty.profiles],
+    };
+    setup(config);
+    fireEvent.click(screen.getByRole('button', { name: /切换子仓/ }));
+    const dialog = await screen.findByRole('dialog', { name: '切换子仓' });
+
+    expect(within(dialog).queryByRole('button', { name: /cleaned子仓/ })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: '显示空档案 1' }));
+    const emptyChoice = within(dialog).getByRole('button', { name: /cleaned子仓/ }) as HTMLButtonElement;
+    expect(emptyChoice.disabled).toBe(true);
+    expect(within(emptyChoice).getByText(/没有可播放站点或直播线路/)).toBeTruthy();
   });
 
   it('activates once and notifies site and live consumers only after success', async () => {

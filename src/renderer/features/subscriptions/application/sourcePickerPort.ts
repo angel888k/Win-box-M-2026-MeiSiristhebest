@@ -10,7 +10,6 @@ export interface SourcePickerPort {
   loadCurrentSources(): Promise<CurrentSourcesSnapshot>;
   loadProfileSites(): Promise<ProfileSitesView>;
   setActiveSource(sourceKey: string): Promise<void>;
-  activateProfile(profileId: string): Promise<void>;
   switchProfileSource(profileId: string, sourceKey: string): Promise<void>;
   publishSourceChanged(sourceKey: string): void;
   publishProfileChanged(sourceKey?: string): void;

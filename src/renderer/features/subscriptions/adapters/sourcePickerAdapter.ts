@@ -9,7 +9,6 @@ export const sourcePickerAdapter: SourcePickerPort = {
   },
   loadProfileSites: () => client.cfgProfileSites(),
   setActiveSource: sourceKey => client.cfgSetActiveSource(sourceKey),
-  activateProfile: profileId => client.cfgActivateProfile(profileId),
   switchProfileSource: (profileId, sourceKey) => client.cfgSwitchProfileSource(profileId, sourceKey),
   publishSourceChanged(sourceKey) {
     window.dispatchEvent(new CustomEvent(SOURCE_CHANGED_EVENT, { detail: sourceKey }));

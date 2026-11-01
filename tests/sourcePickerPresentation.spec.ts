@@ -81,7 +81,7 @@ describe('source picker presentation', () => {
     });
     expect(broken.emptyMessage).toBe('保存的配置快照无法解析');
     expect(broken.selectedProfile?.restorable).toBe(false);
-    expect(broken.tip).toContain('点子仓切换配置 · 点眼睛仅预览 · 点站点切换当前浏览内容');
+    expect(broken.tip).toContain('左侧选择子仓查看站点；右侧选站点后一起切换子仓和站点');
   });
 
   it('explains an empty active profile even when there is no second profile column', () => {

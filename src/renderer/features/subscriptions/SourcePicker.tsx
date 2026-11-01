@@ -3,9 +3,9 @@
 // 经典皮肤与 TopNav 皮肤共用本组件。
 // ★ 2026-09-24（用户定稿）：换源改成「手机 TVBox」那套 —— 源名只显示文字。
 // ★ 2026-09-30（用户要求）：
-//   ① 弹层升级为「左订阅 / 右源」双栏：点左侧订阅，右侧源列表同步切换；名字过长一律省略号（hover 看全名）；
+//   ① 弹层为「左子仓 / 右站点」双栏：左侧浏览子仓，右侧选站点时原子切换子仓与站点；名字过长省略显示；
 //   ② 顶部加**源名实时检索**（在当前订阅的源里随输入过滤；回车选中首个匹配）；
-//   ③ 跨订阅点选 = 一步完成「切换档案 + 选中源」（CFG_SWITCH_PROFILE_SOURCE，单次 apply）；
+//   ③ 跨子仓点选 = 一步完成「切换档案 + 选中站点」（CFG_SWITCH_PROFILE_SOURCE，单次 apply）；
 //   ④ **触发方式由「长按≥500ms 或右键」改为「左键单击」**（原长按/右键已移除），
 //      并在鼠标离开换源区域后自动收起（带 150ms 宽限，越过「按钮↔弹层」那道 6px 缝隙时不闪关）。
 // 用法：
@@ -14,9 +14,8 @@
 // ★ 2026-10-09（用户指令：「删除之前版本做的换源的下拉菜单调整源的位置的功能，不美观」）：
 //   源行内管理按钮（⤒置顶 / ↑上移 / ↓下移 / ✕删除）与本组件内的对应逻辑已删除 —— 源管理只在配置页保留
 //   （IPC `cfg:moveSource` / `cfg:deleteSource` 未动）。
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Eye16Regular } from '@fluentui/react-icons';
 import { useSourcePickerOverlay } from '../../components/useSourcePickerOverlay';
 import type { SourceBean } from '../../../shared/types';
 import type { SourcePickerPort } from './application/sourcePickerPort';
@@ -45,6 +44,7 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
   const { sources: ownSites, activeSourceKey: ownKey, profileSites: views, selectedProfileId: paneId, error, switching } = model;
   const list = sites ?? ownSites;
   const cur = current ?? ownKey;
+  const [showEmptyProfiles, setShowEmptyProfiles] = useState(false);
   const srcColRef = useRef<HTMLDivElement | null>(null);
   /** ★ 2026-10-16（用户要求「展开即定位当前所在的源」）：当前源那一行的 DOM（定位用，见上面 effect） */
   const activeRef = useRef<HTMLButtonElement | null>(null);
@@ -76,15 +76,13 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
     query: q,
   });
   const { label, profiles, selectedProfile: pane, hasMultipleProfiles: multi, paneIsActive, filteredSources: filtered } = presentation;
+  const emptyProfileCount = profiles.filter(profile => profile.id !== views?.activeId && profile.sites.length === 0 && profile.restorable !== false).length;
+  const visibleProfiles = profiles.filter(profile =>
+    showEmptyProfiles || profile.id === views?.activeId || profile.sites.length > 0 || profile.restorable === false,
+  );
 
-  /**
-   * ★ 2026-10-16（用户要求）：**左侧点选订阅时，配置档案也同步切换**（不再只是"浏览"）。
-   *   此前点左侧订阅只切换右栏列表，生效档案要到"再点一个源"才切换 —— 与配置页「已保存配置」的
-   *   "当前订阅"不一致；这里点选即 `cfgActivateProfile`，并广播 profile-changed / sources-changed
-   *   让点播页与各列表按新档案重载。
-   *   该订阅无可恢复内容（早期迁移档案 json 为空）→ 仅浏览，不改生效档案。
-   */
-  const selectPane = (id: string): void => { void actions.activateProfile(id); };
+  /** The left column only browses a profile's sources; switching happens atomically on source selection. */
+  const selectPane = (id: string): void => { actions.selectProfilePane(id); };
 
   /**
    * 点选某源：目标订阅 = 当前生效订阅 → 按常规来源选择流程处理；
@@ -115,7 +113,7 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
         aria-controls={panelId}
         aria-label={`切换站点，当前：${label}`}
         title={`当前源：${label}\n点击切换源`}
-        onClick={(event) => overlay.toggle(event, () => { actions.clearError(); actions.beginOpen(); })}
+        onClick={(event) => overlay.toggle(event, () => { setShowEmptyProfiles(false); actions.clearError(); actions.beginOpen(); })}
         onContextMenu={(e) => e.preventDefault()}
       >
         {isSidebar ? <span className="srcpick-label">站点</span> : null}
@@ -139,8 +137,8 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
           <input
             ref={inputRef}
             className="srcpick-search"
-            aria-label="筛选订阅源"
-            placeholder="输入源名检索…"
+            aria-label="筛选当前查看子仓的站点"
+            placeholder="输入站点名筛选…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(event) => overlay.onSearchKeyDown(event, () => {
@@ -149,9 +147,28 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
           />
           <div className="srcpick-cols">
             {pane && multi && (
-              <div className="srcpick-col-sub">
-                {profiles.map((p) => {
+              <div className="srcpick-col-sub" role="group" aria-label="子仓，点选后查看该子仓的站点">
+                <div className="srcpick-col-heading">
+                  <span>子仓</span>
+                  {emptyProfileCount > 0 && (
+                    <button
+                      type="button"
+                      className="srcpick-empty-toggle"
+                      aria-pressed={showEmptyProfiles}
+                      onClick={() => {
+                        if (showEmptyProfiles && pane && pane.id !== views?.activeId && pane.sites.length === 0) {
+                          actions.selectProfilePane(views?.activeId ?? '');
+                        }
+                        setShowEmptyProfiles(value => !value);
+                      }}
+                    >
+                      {showEmptyProfiles ? '隐藏无点播源' : `显示无点播源 ${emptyProfileCount}`}
+                    </button>
+                  )}
+                </div>
+                {visibleProfiles.map((p) => {
                   const current = p.id === views!.activeId;
+                  const selected = p.id === pane.id;
                   const restorable = p.restorable !== false;
                   const state = restorable
                     ? `${p.sites.length} 个点播源${current ? ' · 当前使用' : ''}`
@@ -161,19 +178,19 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
                       <button
                         type="button"
                         aria-label={`${p.name}，${state}`}
-                        aria-pressed={p.id === pane.id}
+                        aria-pressed={selected}
                         aria-current={current ? 'true' : undefined}
                         aria-disabled={!restorable || undefined}
-                        className={`srcpick-item ui-action srcpick-sub${p.id === pane.id ? ' active' : ''}${current ? ' cur' : ''}${!restorable ? ' unavailable' : ''}`}
+                        className={`srcpick-item ui-action srcpick-sub${selected ? ' active' : ''}${current ? ' cur' : ''}${!restorable ? ' unavailable' : ''}`}
                         title={`${p.name} · ${state}`}
                         disabled={switching || !restorable}
                         onClick={() => selectPane(p.id)}
                       >
                         <span className="srcpick-profile-heading">
                           <span className="srcpick-sname">{p.name}</span>
-                          {p.id === pane.id && (
+                          {(current || selected) && (
                             <span className={`srcpick-profile-state${current ? ' current' : ' previewing'}`}>
-                              {current ? '当前' : '预览中'}
+                              {current ? '当前使用' : '正在查看'}
                             </span>
                           )}
                         </span>
@@ -181,20 +198,18 @@ export default function SourcePicker({ sites, current, onPick, port, variant = '
                           {restorable ? `${p.sites.length} 个点播源` : p.unavailableReason || '配置快照不可用'}
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        className="srcpick-item ui-action srcpick-sub-preview"
-                        aria-label={`仅预览${p.name}来源`}
-                        title={p.restorable === false ? p.unavailableReason || '配置快照不可用' : `仅预览${p.name}来源，不立即激活`}
-                        disabled={switching || p.restorable === false}
-                        onClick={() => actions.previewProfile(p.id)}
-                      ><Eye16Regular aria-hidden="true" /></button>
                     </div>
                   );
                 })}
               </div>
             )}
-            <div className="srcpick-col-src" ref={srcColRef}>
+            <div
+              className="srcpick-col-src"
+              ref={srcColRef}
+              role="group"
+              aria-label={pane && pane.id !== views?.activeId ? '站点，选中后切换到该子仓和站点' : '站点，选中后切换当前内容'}
+            >
+              <div className="srcpick-col-heading">站点{pane && pane.id !== views?.activeId ? ' · 选中后切换子仓与站点' : ' · 选中后切换当前内容'}</div>
               {filtered.length === 0 && (
                 <div className="srcpick-item muted">{presentation.emptyMessage}</div>
               )}
