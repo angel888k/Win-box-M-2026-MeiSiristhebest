@@ -6,6 +6,7 @@ import { livePlaybackDependencies } from '../features/live/adapters/livePlayback
 import { liveExportAdapter } from '../features/live/adapters/liveExportAdapter';
 import { useLiveExportPresenter } from '../features/live/useLiveExportPresenter';
 import { SelectionButton } from '../components/ui/SelectionButton';
+import { standalonePlayerHandoffAdapter } from '../features/playback/adapters/standalonePlayerHandoffAdapter';
 
 export default function LivePage() {
   const {
@@ -15,6 +16,7 @@ export default function LivePage() {
     pickLive, pickChannel,
   } = useLivePlayback(livePlaybackDependencies);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [handoffMessage, setHandoffMessage] = useState('');
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -22,6 +24,22 @@ export default function LivePage() {
   }, []);
   const exportKey = JSON.stringify([profileId, liveIdx, liveName]);
   const liveExport = useLiveExportPresenter(exportKey, liveExportAdapter);
+
+  const openInStandalonePlayer = async () => {
+    setHandoffMessage('正在打开独立播放器…');
+    try {
+      await standalonePlayerHandoffAdapter.open({
+        url: playUrl,
+        title: isCatchupActive ? `${channelName} - ${catchupTitle}` : channelName,
+        playbackKind: isCatchupActive ? 'live-catchup' : 'live',
+        profileId,
+        sourceName: liveName,
+      });
+      setHandoffMessage('已在独立播放器窗口打开');
+    } catch (error) {
+      setHandoffMessage(error instanceof Error ? `打开失败：${error.message}` : '打开独立播放器失败');
+    }
+  };
 
 
   return (
@@ -145,6 +163,15 @@ export default function LivePage() {
                   <button type="button" className="linkbtn" onClick={exitCatchup}>返回实时直播</button>
                 </div>
               )}
+              {playUrl && (
+                <div className="live-player-actions">
+                  <span className="muted">在独立窗口使用兼容播放内核</span>
+                  <button type="button" className="linkbtn" onClick={() => void openInStandalonePlayer()}>
+                    在独立播放器打开
+                  </button>
+                  {handoffMessage && <span role="status" aria-live="polite">{handoffMessage}</span>}
+                </div>
+              )}
               {/* ★ 2026-09-27：播放器必须有「有高度」的 flex 宿主 —— `.vplayer` 的高度只来自 flex（flex:1），
                   直接放进 block 容器 `.right` 会折成 0 高度（用户报「直播界面播放器消失」）。 */}
               {playUrl ? (
@@ -153,6 +180,7 @@ export default function LivePage() {
                   <VideoPlayer
                     url={playUrl}
                     playTitle={isCatchupActive ? `${channelName} - ${catchupTitle}` : channelName}
+                    playbackKind={isCatchupActive ? 'live-catchup' : 'live'}
                     onPlaybackFailure={(_time, reason) => failoverToNextLine(reason)}
                   />
                 </div>

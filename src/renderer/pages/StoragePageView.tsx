@@ -11,6 +11,8 @@ interface StoragePageViewProps {
   error: string;
   message: string;
   playUrl: string;
+  playName: string;
+  handoffMessage: string;
   breadcrumbs: Array<{ name: string; path: string }>;
   onManage(): void;
   onSelectServer(id: string): void;
@@ -18,10 +20,11 @@ interface StoragePageViewProps {
   onBrowse(path: string): void;
   onGoToParent(): void;
   onOpenEntry(entry: DavEntry): void;
+  onOpenStandalonePlayer(): void;
 }
 
 export function StoragePageView(props: StoragePageViewProps) {
-  const { servers, serverId, currentServer, path, entries, busy, error, message, playUrl, breadcrumbs } = props;
+  const { servers, serverId, currentServer, path, entries, busy, error, message, playUrl, playName, handoffMessage, breadcrumbs } = props;
   return (
     <div className="content storage-content">
       <header className="page-heading">
@@ -44,7 +47,14 @@ export function StoragePageView(props: StoragePageViewProps) {
           {breadcrumbs.map((crumb) => <span key={crumb.path}><span className="muted" aria-hidden="true"> / </span><button type="button" className="dav-crumb-item ui-action" aria-current={crumb.path === path ? 'page' : undefined} onClick={() => props.onBrowse(crumb.path)}>{crumb.name}</button></span>)}
         </nav>
         {message && <output className="status" style={{ display: 'block', marginBottom: 10 }}>{message}</output>}
-        {playUrl && <div className="dav-player"><VideoPlayer url={playUrl} /></div>}
+        {playUrl && <>
+          <div className="dav-player-actions">
+            <span className="muted">{playName}</span>
+            <button type="button" className="linkbtn" onClick={props.onOpenStandalonePlayer}>在独立播放器打开</button>
+            {handoffMessage && <span role="status" aria-live="polite">{handoffMessage}</span>}
+          </div>
+          <div className="dav-player"><VideoPlayer url={playUrl} playbackKind="storage" /></div>
+        </>}
         <div className="dav-list">
           {path !== '/' && <button type="button" className="dav-row ui-action" aria-label="返回上级目录" disabled={busy} onClick={props.onGoToParent}>
             <span className="dav-ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m5 9 5-5 5 5M10 4v12" /></svg></span><span className="dav-name">返回上级</span>

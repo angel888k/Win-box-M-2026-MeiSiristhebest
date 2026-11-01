@@ -108,7 +108,7 @@ describe('player page session workflow', () => {
     await vi.waitFor(() => expect(session.play).toHaveBeenCalledTimes(5));
     await vi.waitFor(() => expect(actions).toContainEqual({ type: 'resolution-succeeded', url: 'https://media.invalid/alternate.mp4' }));
 
-    expect(session.discover).toHaveBeenCalledWith(expect.objectContaining({ episodeIndex: 1, position: 125 }), expect.any(AbortSignal));
+    expect(session.discover).toHaveBeenCalledWith(expect.objectContaining({ episodeIndex: 1, position: 125 }), expect.any(AbortSignal), expect.any(Function));
     expect(session.play).toHaveBeenNthCalledWith(5, expect.objectContaining({ key: 'source-b', id: 'other-episode-2', parseOffset: undefined }));
     expect(history.recordHistory).not.toHaveBeenCalled();
     expect(sourceMemory.rememberSource).not.toHaveBeenCalled();
@@ -144,19 +144,19 @@ describe('player page session workflow', () => {
     const workflow = createPlayerPageSessionWorkflow({ session, history, sourceMemory, publish: action => actions.push(action) });
 
     await workflow.applyInit(playbackInit());
-    await vi.waitFor(() => expect(history.recordHistory).toHaveBeenCalledOnce());
+    expect(history.recordHistory).not.toHaveBeenCalled();
 
     await workflow.autoChangeParse(125, 'decode failed', 'media-failure');
 
     expect(session.play).toHaveBeenCalledTimes(2);
     expect(session.play).toHaveBeenNthCalledWith(2, expect.objectContaining({ key: 'source-b', id: 'other-episode-2', parseOffset: undefined }));
     expect(session.discover).toHaveBeenCalledOnce();
-    expect(history.recordHistory).toHaveBeenCalledOnce();
+    expect(history.recordHistory).not.toHaveBeenCalled();
     expect(actions).toContainEqual({ type: 'source-fallback-switching', sourceName: 'Source B' });
 
     workflow.confirmPlaybackStarted();
 
-    expect(history.recordHistory).toHaveBeenCalledTimes(2);
+    expect(history.recordHistory).toHaveBeenCalledOnce();
   });
 
   it('lets the user force-refresh the backup-source search when the first scan is incomplete', async () => {
@@ -164,7 +164,7 @@ describe('player page session workflow', () => {
       play: vi.fn(async () => ({ parse: 0, url: 'https://media.invalid/current.mp4', playUrl: '', flag: 'line-a' })),
       resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
       loadDetail: vi.fn(async () => null),
-      discover: vi.fn(async () => ({ candidates: [], incompleteSources: 2, truncated: false })),
+      discover: vi.fn(async () => ({ candidates: [], incompleteSources: 2, searchIncomplete: true, truncated: false })),
       cleanupTemporaryFiles: vi.fn(async () => undefined),
     };
     const history: PlayerPageWorkflowHistoryPort = {
@@ -179,11 +179,14 @@ describe('player page session workflow', () => {
     await workflow.applyInit(playbackInit());
     await workflow.autoChangeParse(125, 'HTTP 403', 'media-failure');
 
-    expect(actions).toContainEqual(expect.objectContaining({ type: 'source-fallback-unavailable', message: expect.stringContaining('2 个来源或影片详情未完成') }));
+    expect(actions).toContainEqual(expect.objectContaining({
+      type: 'source-fallback-unavailable',
+      message: expect.stringContaining('全源检查尚未完成。另有 2 个来源或影片详情未完成核验。'),
+    }));
     await workflow.retryAlternativeSearch();
 
-    expect(session.discover).toHaveBeenNthCalledWith(1, expect.objectContaining({ refresh: false, position: 125 }), expect.any(AbortSignal));
-    expect(session.discover).toHaveBeenNthCalledWith(2, expect.objectContaining({ refresh: true, position: 125 }), expect.any(AbortSignal));
+    expect(session.discover).toHaveBeenNthCalledWith(1, expect.objectContaining({ refresh: false, position: 125 }), expect.any(AbortSignal), expect.any(Function));
+    expect(session.discover).toHaveBeenNthCalledWith(2, expect.objectContaining({ refresh: true, position: 125 }), expect.any(AbortSignal), expect.any(Function));
   });
 
   it('auto-switches to an exact verified candidate even when the aggregate search is incomplete', async () => {
@@ -213,5 +216,179 @@ describe('player page session workflow', () => {
 
     workflow.confirmPlaybackStarted();
     expect(history.recordHistory).toHaveBeenCalledOnce();
+  });
+
+  it('keeps discovering later candidates while the first verified source is resolving', async () => {
+    const first = alternateCandidate();
+    const second = {
+      ...first,
+      id: 'profile-c\u001fsource-c\u001fmovie-c',
+      sourceName: 'Source C',
+      data: {
+        ...first.data,
+        key: 'source-c',
+        episodes: [{ name: '第01集', url: 'source-c-episode-1' }, { name: '第02集', url: 'source-c-episode-2' }],
+        meta: { fromKey: 'source-c', id: 'movie-c', vodId: 'movie-c', profileId: 'profile-c', sourceName: 'Source C' },
+      },
+    };
+    const discovery = deferred<{ candidates: typeof first[]; incompleteSources: number; truncated: boolean }>();
+    const session: PlayerPagePlaybackWorkflowPort = {
+      play: vi.fn(async (input) => input.key === 'source-a'
+        ? { parse: 0, url: '', playUrl: '', flag: input.flag, message: '源站没有返回媒体流' }
+        : { parse: 0, url: `https://media.invalid/${input.key}.mp4`, playUrl: '', flag: input.flag }),
+      resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+      loadDetail: vi.fn(async () => null),
+      discover: vi.fn(async (_input, _signal, onCandidate) => {
+        onCandidate?.(first);
+        return discovery.promise;
+      }),
+      cleanupTemporaryFiles: vi.fn(async () => undefined),
+    };
+    const history: PlayerPageWorkflowHistoryPort = {
+      beginPlayerHistorySession: vi.fn(),
+      recordHistory: vi.fn(),
+      persist: vi.fn(),
+    };
+    const sourceMemory: PlayerSourceMemoryPort = { rememberSource: vi.fn() };
+    const actions: PlayerPageSessionAction[] = [];
+    const workflow = createPlayerPageSessionWorkflow({ session, history, sourceMemory, publish: action => actions.push(action) });
+
+    await workflow.applyInit(playbackInit());
+    await vi.waitFor(() => expect(actions).toContainEqual({ type: 'resolution-succeeded', url: 'https://media.invalid/source-b.mp4' }));
+    const nextAfterFailure = workflow.autoChangeParse(92, 'segment failed', 'media-failure');
+    discovery.resolve({ candidates: [first, second], incompleteSources: 0, truncated: false });
+    await nextAfterFailure;
+
+    expect(actions).toContainEqual({ type: 'source-fallback-switching', sourceName: 'Source C' });
+    expect(actions).toContainEqual({ type: 'resolution-succeeded', url: 'https://media.invalid/source-c.mp4' });
+    expect(session.play).toHaveBeenCalledWith(expect.objectContaining({ key: 'source-c', id: 'source-c-episode-2' }));
+  });
+
+  it('tries a queued verified source immediately while the discovery scan is still running', async () => {
+    const first = alternateCandidate();
+    const second = {
+      ...first,
+      id: 'profile-c\u001fsource-c\u001fmovie-c',
+      sourceName: 'Source C',
+      data: {
+        ...first.data,
+        key: 'source-c',
+        episodes: [{ name: '第01集', url: 'source-c-episode-1' }, { name: '第02集', url: 'source-c-episode-2' }],
+        meta: { fromKey: 'source-c', id: 'movie-c', vodId: 'movie-c', profileId: 'profile-c', sourceName: 'Source C' },
+      },
+    };
+    const discovery = deferred<{ candidates: typeof first[]; incompleteSources: number; truncated: boolean }>();
+    const session: PlayerPagePlaybackWorkflowPort = {
+      play: vi.fn(async (input) => ({
+        parse: 0,
+        url: `https://media.invalid/${input.key}.mp4`,
+        playUrl: '',
+        flag: input.flag,
+      })),
+      resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+      loadDetail: vi.fn(async () => null),
+      discover: vi.fn(async (_input, _signal, onCandidate) => {
+        onCandidate?.(first);
+        onCandidate?.(second);
+        return discovery.promise;
+      }),
+      cleanupTemporaryFiles: vi.fn(async () => undefined),
+    };
+    const actions: PlayerPageSessionAction[] = [];
+    const workflow = createPlayerPageSessionWorkflow({
+      session,
+      history: { beginPlayerHistorySession: vi.fn(), recordHistory: vi.fn(), persist: vi.fn() },
+      sourceMemory: { rememberSource: vi.fn() },
+      publish: action => actions.push(action),
+    });
+
+    await workflow.applyInit(playbackInit());
+    const initialFailure = workflow.autoChangeParse(125, 'HTTP 403', 'media-failure');
+    await vi.waitFor(() => expect(actions).toContainEqual({ type: 'resolution-succeeded', url: 'https://media.invalid/source-b.mp4' }));
+
+    await workflow.autoChangeParse(92, 'segment failed', 'media-failure');
+
+    expect(actions).toContainEqual({ type: 'source-fallback-switching', sourceName: 'Source C' });
+    expect(actions).toContainEqual({ type: 'resolution-succeeded', url: 'https://media.invalid/source-c.mp4' });
+    expect(session.play).toHaveBeenCalledWith(expect.objectContaining({ key: 'source-c', id: 'source-c-episode-2' }));
+
+    discovery.resolve({ candidates: [first, second], incompleteSources: 0, truncated: false });
+    await initialFailure;
+  });
+
+  it('keeps the classified media failure attached when no verified backup source is found', async () => {
+    const session: PlayerPagePlaybackWorkflowPort = {
+      play: vi.fn(async (input) => ({
+        parse: 0,
+        url: `https://media.invalid/${input.key}.mp4`,
+        playUrl: '',
+        flag: input.flag,
+      })),
+      resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+      loadDetail: vi.fn(async () => null),
+      discover: vi.fn(async () => ({ candidates: [], incompleteSources: 0, truncated: false })),
+      cleanupTemporaryFiles: vi.fn(async () => undefined),
+    };
+    const actions: PlayerPageSessionAction[] = [];
+    const workflow = createPlayerPageSessionWorkflow({
+      session,
+      history: { beginPlayerHistorySession: vi.fn(), recordHistory: vi.fn(), persist: vi.fn() },
+      sourceMemory: { rememberSource: vi.fn() },
+      publish: action => actions.push(action),
+    });
+
+    await workflow.applyInit(playbackInit());
+    await workflow.autoChangeParse(125, 'HTTP 403', 'media-failure', {
+      stage: 'authorization', engine: 'html5', httpStatus: 403, retryable: false,
+    });
+
+    expect(actions).toContainEqual(expect.objectContaining({
+      type: 'source-fallback-unavailable',
+      message: expect.stringContaining('源站要求登录或拒绝了当前访问权限'),
+    }));
+  });
+
+  it('keeps direct live playback out of VOD parsing, failover search and watch history', async () => {
+    const session: PlayerPagePlaybackWorkflowPort = {
+      play: vi.fn(async () => ({ parse: 0, url: '', playUrl: '', flag: '' })),
+      resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+      loadDetail: vi.fn(async () => null),
+      discover: vi.fn(async () => ({ candidates: [], incompleteSources: 0, truncated: false })),
+      cleanupTemporaryFiles: vi.fn(async () => undefined),
+    };
+    const history: PlayerPageWorkflowHistoryPort = {
+      beginPlayerHistorySession: vi.fn(),
+      recordHistory: vi.fn(),
+      persist: vi.fn(),
+    };
+    const sourceMemory: PlayerSourceMemoryPort = { rememberSource: vi.fn() };
+    const actions: PlayerPageSessionAction[] = [];
+    const workflow = createPlayerPageSessionWorkflow({ session, history, sourceMemory, publish: action => actions.push(action) });
+    const directUrl = 'https://media.invalid/channel.m3u8';
+
+    await workflow.applyInit({
+      key: '',
+      flag: '',
+      episodes: [{ name: '新闻频道', url: directUrl }],
+      epIndex: 0,
+      title: '新闻频道',
+      lastUrl: directUrl,
+      lastName: '新闻频道',
+      playbackKind: 'live',
+      recordHistory: false,
+    });
+
+    expect(actions).toContainEqual({ type: 'resolution-succeeded', url: directUrl, parseName: undefined });
+    expect(session.play).not.toHaveBeenCalled();
+    expect(session.resolveHistorySource).not.toHaveBeenCalled();
+    expect(await workflow.autoChangeParse(0, 'HTTP 403', 'media-failure')).toBe(false);
+    workflow.retryCurrent('failed');
+    workflow.confirmPlaybackStarted();
+
+    expect(session.discover).not.toHaveBeenCalled();
+    expect(session.play).not.toHaveBeenCalled();
+    expect(history.recordHistory).not.toHaveBeenCalled();
+    expect(history.persist).not.toHaveBeenCalled();
+    expect(sourceMemory.rememberSource).not.toHaveBeenCalled();
   });
 });

@@ -5,7 +5,7 @@ import { useSuperResolution } from './useSuperResolution';
 import { usePlaybackBoost } from './usePlaybackBoost';
 import { usePlayerContextMenu } from './usePlayerContextMenu';
 import { openConfiguredExternalFallback, type ExternalPlaybackFallbackPort } from './externalPlayback';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from 'react';
 import { playbackProgressKey, type PlaybackSourceRef } from '../../lib/playbackProgress';
 // ★ 2026-09-30（用户要求）：图片/音乐分流 + 直播态判定（纯函数，见 lib/mediaKind.ts）
 import { detectMediaKind, isLikelyLive } from '../../lib/mediaKind';
@@ -74,11 +74,19 @@ import { usePlayerKernelFitSync } from './usePlayerKernelFitSync';
 import { runPlayerKernelCommandWithFeedback } from './application/runPlayerKernelCommandWithFeedback';
 import { cyclePlayerFit } from './application/playerFitCycle';
 import { reportPlaybackFailure } from './application/reportPlaybackFailure';
+import type { PlaybackFailureContext } from '../../../shared/playbackFailure';
+import type { PlayerPlaybackKind } from '../../../shared/playerInit';
 
 export interface VideoPlayerProps {
   url: string;
+  /** Page-owned recovery messages rendered inside the actual video surface. */
+  statusOverlay?: ReactNode;
+  /** The page owns recovery feedback while an automatic source fallback is active. */
+  suppressPlaybackFailure?: boolean;
   /** Source identity for profile-scoped playback progress. */
   playbackSource?: PlaybackSourceRef;
+  /** Explicitly preserve live, catch-up and storage semantics across player surfaces. */
+  playbackKind?: PlayerPlaybackKind;
   canPrev?: boolean;
   canNext?: boolean;
   onPrev?: () => void;
@@ -89,13 +97,13 @@ export interface VideoPlayerProps {
   episodes?: { name: string; url: string }[];
   onPickEpisode?: (index: number) => void;
   /** Media failures search verified same-episode sources; resolution failures rotate parser strategies. */
-  onAutoChangeParse?: (currentTime: number, reason: string, cause: 'media-failure') => Promise<boolean> | boolean;
+  onAutoChangeParse?: (currentTime: number, reason: string, cause: 'media-failure', failure?: PlaybackFailureContext) => Promise<boolean> | boolean;
   /** Confirms that an alternate source actually began playing before history is committed. */
   onPlaybackStarted?: () => void;
   /** Re-resolve the selected episode instead of reloading the player window. */
   onRetryPlayback?: () => void;
   /** ★ 2026-10-25（播放故障回调）：供外层（如直播切备用线）接管流异常 */
-  onPlaybackFailure?: (time: number, reason: string) => void;
+  onPlaybackFailure?: (time: number, reason: string, failure?: PlaybackFailureContext) => void;
   /** 当前解析线路名称（展示在 HUD 提示中） */
   parseName?: string;
   /** 视频分辨率回传到窗口标题；未知/换源时为空。 */
@@ -177,7 +185,9 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
   const mediaKind = detectMediaKind(url);
   const isImage = mediaKind === 'image';
   const isAudio = mediaKind === 'audio';
-  const liveHint = isLikelyLive(url);
+  const liveHint = props.playbackKind === undefined
+    ? isLikelyLive(url)
+    : props.playbackKind === 'live';
   const progressKey = playbackProgressKey(url, props.playbackSource);
   const ref = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -230,7 +240,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
   // oxlint-disable-next-line react/refs -- The adapter reads the current session's narrow audio-track capability only when a user action runs.
   const audioPort = useMemo(() => createAudioTracksPort(adaptiveAudioTracksRef), [adaptiveAudioTracksRef, createAudioTracksPort]);
   const audio = usePlayerAudioTracks(url, kernel, audioPort, dependencies.sessionAudioPreference);
-  const superResolution = useSuperResolution(allowMpv && kernel === 'mpv', dependencies.superResolution);
+  const superResolution = useSuperResolution(allowMpv, `${url}\u0000${progressKey}`, dependencies.superResolution, kernel === 'mpv');
   const controlsRevealRef = useRef<() => void>(() => undefined);
   const revealControls = useCallback(() => controlsRevealRef.current(), []);
   const playbackHandoff = useMemo(() => createPlaybackHandoffPort(), []);
@@ -529,12 +539,12 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
 
   const onAutoChangeParse = props.onAutoChangeParse;
   const onPlaybackFailure = props.onPlaybackFailure;
-  const handlePlaybackFailure = useCallback((time: number, reason: string) => {
+  const handlePlaybackFailure = useCallback((time: number, reason: string, failure?: PlaybackFailureContext) => {
     void reportPlaybackFailure(time, reason, {
       autoChangeParse: onAutoChangeParse,
       onPlaybackFailure,
       notify: showSkipToast,
-    });
+    }, failure);
   }, [onAutoChangeParse, onPlaybackFailure, showSkipToast]);
 
   const parseName = props.parseName;
@@ -724,7 +734,26 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     rate: { rate, onRateChange: kSetRate },
     kernel: controlAvailability.kernelSelectorVisible ? { kernel, preference: kernelPref, choices: engines.choices, containerRef: wrapRef, onSelect: preference => switchKernel(resolvePreference(preference), true, preference), onOpen: openKernelPanel } : null,
     kernelTools: controlAvailability.kernelToolsVisible ? { statsOpen, onToggleStats: toggleStats, keysOpen, onToggleKeys: toggleKeys } : null,
-    superResolution: { visible: controlAvailability.superResolutionVisible, active: controlAvailability.superResolutionActive, info: superResolution.info, mode: superResolution.mode, feedback: superResolution.feedback, open: superResolution.open, containerRef: wrapRef, onOpen: () => openPanel('superResolution'), onClose: () => superResolution.setOpen(false), onSelect: value => { void superResolution.apply(value); poke(); } },
+    superResolution: {
+      visible: controlAvailability.superResolutionVisible,
+      active: controlAvailability.superResolutionActive,
+      mpvStatusResolved: mpvInfo !== null,
+      mpvAvailable: !!mpvInfo?.available,
+      capabilityLoading: superResolution.loading,
+      capabilityError: superResolution.error,
+      info: superResolution.info,
+      mode: superResolution.mode,
+      feedback: superResolution.feedback,
+      renderStatus: superResolution.renderStatus,
+      renderStatusLoading: superResolution.renderStatusLoading,
+      renderStatusError: superResolution.renderStatusError,
+      open: superResolution.open,
+      containerRef: wrapRef,
+      onOpen: () => openPanel('superResolution'),
+      onClose: () => superResolution.setOpen(false),
+      onSwitchToMpv: () => { switchKernel('mpv', true, 'mpv'); poke(); },
+      onSelect: value => { void superResolution.apply(value); poke(); },
+    },
     audio: { spdif, effectiveSpdif: technical.tech?.spdif, onSpdifChange: value => { const next = normalizeSpdif(value); setSpdif(next); if (kernel === 'mpv') void sendKernelCommandWithFeedback({ type: 'audio-spdif', value: next }); }, open: audio.open, tracks: audio.tracks, aid: audio.aid, isMpv: kernel === 'mpv', containerRef: wrapRef, onOpen: () => openPanel('audio'), onClose: () => audio.setOpen(false), onSelect: audio.apply },
     fit: { fit, open: fitPanel, onFitSelect: setFit, onFitOpen: () => openPanel('fit'), onFitPointerEnter: () => openPanel('fit'), onFitPointerLeave: () => setFitPanel(false) },
     episodes: controlAvailability.episodeSelectorVisible ? { open: epPanel, onToggle: toggleEpPanel } : null,

@@ -1,22 +1,9 @@
 import type { PlayResult, VodDetail } from '../../../../shared/types';
 import type { PlayerHistoryProgressPort } from './playerHistoryProgress';
-import type { PlaybackAlternativeSearchResult } from './discoverPlaybackAlternatives';
+import type { PlaybackAlternativeCandidate, PlaybackAlternativeSearchResult } from './discoverPlaybackAlternatives';
+import type { PlayerInitData } from '../../../../shared/playerInit';
 
-export interface PlayerInitData {
-  key: string;
-  flag: string;
-  episodes: { name: string; url: string }[];
-  epIndex: number;
-  title: string;
-  subtitleTitle?: string;
-  lastUrl: string;
-  lastName: string;
-  meta?: { pic?: string; remarks?: string; sourceName?: string; vodId?: string; fromKey?: string; id?: string; profileId?: string };
-  startTime?: number;
-  initSeq?: number;
-  /** Alternate-source history is written only after a media engine confirms playback started. */
-  deferHistoryUntilPlayback?: boolean;
-}
+export type { PlayerInitData } from '../../../../shared/playerInit';
 
 export type PlaybackRecoveryCause = 'media-failure' | 'resolution-failure';
 
@@ -27,7 +14,7 @@ export interface PlaybackAlternativeDiscoveryPort {
     position: number;
     excludedSourceIds: ReadonlySet<string>;
     refresh?: boolean;
-  }, signal: AbortSignal): Promise<PlaybackAlternativeSearchResult>;
+  }, signal: AbortSignal, onCandidate?: (candidate: PlaybackAlternativeCandidate) => void): Promise<PlaybackAlternativeSearchResult>;
 }
 
 /** Capability required when resolving a selected episode to a playable URL. */

@@ -12,6 +12,7 @@ export function useStorageBrowserPresenter(port: StorageBrowserPort) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [playUrl, setPlayUrl] = useState('');
+  const [playName, setPlayName] = useState('');
   const browseRequest = useRef(0);
 
   const browse = useCallback(async (id: string, nextPath: string): Promise<void> => {
@@ -54,6 +55,7 @@ export function useStorageBrowserPresenter(port: StorageBrowserPort) {
     setEntries([]);
     setPath('/');
     setPlayUrl('');
+    setPlayName('');
     setMessage('');
     void browse(id, '/');
   }, [browse]);
@@ -63,14 +65,17 @@ export function useStorageBrowserPresenter(port: StorageBrowserPort) {
     const action = resolveDavEntryAction(entry, serverId);
     if (action.kind === 'browse') {
       setPlayUrl('');
+      setPlayName('');
       void browse(serverId, action.path);
       return;
     }
     if (action.kind === 'play-inline') {
       setPlayUrl(action.url);
+      setPlayName(entry.name);
       return;
     }
     setPlayUrl('');
+    setPlayName('');
     try {
       const result = await port.openExternal(action.url);
       setMessage(result.ok ? `已用「${result.player}」打开播放` : (result.error || '无法用外部播放器打开'));
@@ -95,6 +100,7 @@ export function useStorageBrowserPresenter(port: StorageBrowserPort) {
     error,
     message,
     playUrl,
+    playName,
     breadcrumbs,
     browse,
     refresh: () => { void browse(serverId, path); },

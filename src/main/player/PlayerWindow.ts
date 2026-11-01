@@ -7,29 +7,9 @@ import { join } from 'node:path';
 import { applyWindowCorner } from '../util/windowCorner';
 import { applyUiScale, registerUiWindow, scaledWindowFor, uiScaleState } from '../ui/uiScale';
 import { applyEpisodeSwitch, type PlayerEpisodeSwitch } from '../../shared/playerEpisode';
+import type { PlayerInitData } from '../../shared/playerInit';
 
-// 与渲染层 PlayerPage 约定的初始播放数据（可序列化）
-export interface PlayerInit {
-  key: string; // 播放源 key
-  flag: string; // 线路
-  episodes: { name: string; url: string }[];
-  epIndex: number;
-  title: string; // 资源名（不含集）
-  subtitleTitle?: string; // ★ 供字幕检索的剧名副名（详情页主标题，独立于集名）
-  lastUrl: string; // 当前集解析出的真实地址
-  lastName: string; // 当前集展示名（资源名 - 集名）
-  meta?: {
-    pic?: string;
-    remarks?: string;
-    sourceName?: string;
-    vodId?: string;
-    fromKey?: string;
-    id?: string;
-    profileId?: string;
-  };
-  /** ★ 历史续播：上次播放进度（秒），交给播放器自动 seek（详情页正常播放不传） */
-  startTime?: number;
-}
+export type PlayerInit = PlayerInitData;
 
 let playerWin: BrowserWindow | null = null;
 /**
