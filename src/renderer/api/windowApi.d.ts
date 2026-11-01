@@ -40,7 +40,7 @@ import type { DanmakuAnime, DanmakuCandidate, DanmakuSettings } from '../../shar
 import type { MetaHit, MetaExtra, DiscoverSection, DiscoverGenre, DiscoverGenrePage, MetaImages, MovieHotList } from '../../shared/types';
 import type { MetaSettings, MetaSettingsView, MetaSuggestion } from '../../shared/meta';
 import type { ExploreQuery, ExplorePage, ExploreVocabulary } from '../../shared/discover';
-import type { PlayerSettings, MpvStatus, MpvStartOptions, MpvCommand, MpvStateEvent, MediaStateEvent, MediaRuntimeId, MediaRuntimeStatus, MediaRuntimeProgress } from '../../shared/player';
+import type { PlayerSettings, MpvStatus, MpvStartOptions, MpvCommand, MpvCommandResult, MpvStateEvent, MediaStateEvent, MediaRuntimeId, MediaRuntimeStatus, MediaRuntimeProgress } from '../../shared/player';
 import type { PluginView, PluginInspectResult, SrState, ThemeSkinView, LiveTemplateView, UiCommandView, KeymapView, SettingsPanelView, UiSlotView, PlayerEngineView } from '../../shared/plugin';
 import type { BackupExportResult, BackupImportResult } from '../../shared/backup';
 import type { PluginDialogReply, PluginDialogRequest } from '../../shared/pluginDialog';
@@ -330,7 +330,7 @@ declare global {
       mpv: {
         status: () => Promise<IpcResult<MpvStatus>>;
         start: (opts: MpvStartOptions) => Promise<IpcResult<{ session: number; path: string }>>;
-        cmd: (cmd: MpvCommand) => Promise<IpcResult<{ ok: boolean }>>;
+        cmd: (cmd: MpvCommand) => Promise<IpcResult<MpvCommandResult>>;
         stop: () => Promise<IpcResult<{ ok: boolean }>>;
         onState: (cb: (s: MpvStateEvent) => void) => () => void;
       };

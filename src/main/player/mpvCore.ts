@@ -7,7 +7,7 @@
 //     窗口必须 transparent + 播放区页面透明；HTML 覆盖层仍绘制在 mpv 画面之上，点击归 HTML）；
 //   · `--input-ipc-server=\\.\pipe\<name>` + Node `net.connect` 可用（loadfile / set_property /
 //     observe_property 全通）；属性事件以 JSON 行推送。
-import type { MpvAudioParams, MpvAudioTrack, MpvCommand, MpvKernelState, MpvSubtitleTrack, MpvVideoParams } from '../../shared/player';
+import type { MpvAudioParams, MpvAudioTrack, MpvCommand, MpvKernelState, MpvShaderRenderStatus, MpvSubtitleTrack, MpvVideoParams } from '../../shared/player';
 import { mpvFontSize } from '../../shared/player';
 import { playerCandidates } from '../torrent/externalPlayer';
 
@@ -241,10 +241,50 @@ export function mpvShadersCmd(paths: readonly string[]): string[] {
   return lines;
 }
 
+/** Extract mpv's documented `//!DESC` labels from a shader source. */
+export function mpvShaderPassDescriptions(source: string): string[] {
+  const descriptions = new Set<string>();
+  for (const line of String(source || '').split(/\r?\n/)) {
+    const match = line.trim().match(/^\/\/!DESC\s+(.+?)\s*$/);
+    if (match?.[1]) descriptions.add(match[1]);
+  }
+  return [...descriptions];
+}
+
+/**
+ * Compare MPV's `vo-passes` observation with the selected shader descriptions.
+ * Exact normalized labels avoid treating unrelated scaler passes as proof that
+ * a shader is active.
+ */
+export function inspectMpvShaderPasses(data: unknown, expectedDescriptions: readonly string[]): MpvShaderRenderStatus {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { state: 'unsupported' };
+  const map = data as Record<string, unknown>;
+  const descriptions: string[] = [];
+  for (const kind of ['fresh', 'redraw']) {
+    const passes = map[kind];
+    if (!Array.isArray(passes)) continue;
+    for (const raw of passes) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const desc = (raw as Record<string, unknown>).desc;
+      if (typeof desc === 'string' && desc.trim()) descriptions.push(desc.trim());
+    }
+  }
+  const activePasses = [...new Set(descriptions)].slice(0, 24);
+  if (!activePasses.length) return { state: 'waiting-for-frame' };
+
+  const normalize = (value: string): string => value.normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const expected = new Set(expectedDescriptions.map(normalize).filter(Boolean));
+  if (!expected.size) return { state: 'unidentifiable', activePasses };
+  const matchingPasses = activePasses.filter((description) => expected.has(normalize(description)));
+  return matchingPasses.length
+    ? { state: 'observed', activePasses, matchingPasses }
+    : { state: 'not-observed', activePasses };
+}
+
 /**
  * 归一 mpv 推送的一行消息到内核状态（就地更新，返回是否有变化）。
  * 覆盖：property-change（time-pos/duration/pause/paused-for-cache/eof-reached/width/height/
- * cache-speed/demuxer-cache-time/track-list/aid）、file-loaded、end-file。
+ * cache-speed/demuxer-cache-time/track-list/aid）、file-loaded/playback-restart、end-file。
  */
 export function reduceMpvMessage(state: MpvKernelState, msg: unknown): boolean {
   const m = msg as { event?: string; name?: string; data?: unknown; reason?: string; error?: unknown } | null;
@@ -271,13 +311,20 @@ export function reduceMpvMessage(state: MpvKernelState, msg: unknown): boolean {
     state.eof = true;
     return true;
   };
+  // `time-pos` can jump to a saved resume position before the output pipeline
+  // presents anything. MPV's playback-restart event is the stronger signal
+  // that playback actually resumed after load/seek/buffering.
+  if (m.event === 'playback-restart') {
+    if (state.playbackStarted) return false;
+    state.playbackStarted = true;
+    return true;
+  }
   if (m.event === 'property-change') {
     switch (m.name) {
       case 'time-pos': {
         const v = num(m.data);
         if (v === null || v === state.time) return false;
         state.time = v;
-        if (v > 0.25) state.playbackStarted = true;
         return true;
       }
       case 'duration': {

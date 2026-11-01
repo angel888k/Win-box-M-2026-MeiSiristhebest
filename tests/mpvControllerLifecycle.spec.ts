@@ -79,4 +79,64 @@ describe('mpv lifecycle', () => {
     newProc.finish(); controller.stop();
     expect(win.listenerCount('resize')).toBe(0);
   });
+
+  it('keeps ordinary property updates throttled after file-loaded', async () => {
+    const { controller, sockets } = make();
+    const proc = new Proc(); vi.mocked(spawn).mockReturnValue(proc as any);
+    const win = windowStub();
+    await controller.start(win as any, { url: 'video.mp4' });
+    const send = win.webContents.send;
+    sockets[0].emit('data', Buffer.from('{"event":"file-loaded"}\n'));
+    expect(send).toHaveBeenCalledTimes(1);
+    send.mockClear();
+    vi.useFakeTimers();
+    sockets[0].emit('data', Buffer.from('{"event":"property-change","name":"time-pos","data":1}\n'));
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(send).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+    proc.finish(); controller.stop();
+  });
+
+  it('only reports a shader list as applied after a successful MPV JSON IPC acknowledgement', async () => {
+    const { controller, sockets } = make();
+    const proc = new Proc(); vi.mocked(spawn).mockReturnValue(proc as any);
+    await controller.start(windowStub() as any, { url: 'video.mp4' });
+
+    const accepted = controller.replaceShaders([]);
+    await tick();
+    const acceptedCommand = JSON.parse(sockets[0].write.mock.calls[sockets[0].write.mock.calls.length - 1]?.[0] || '{}');
+    expect(acceptedCommand.command).toEqual(['change-list', 'glsl-shaders', 'clr', '']);
+    sockets[0].emit('data', Buffer.from(JSON.stringify({ request_id: acceptedCommand.request_id, error: 'success' }) + '\n'));
+    await expect(accepted).resolves.toBe(true);
+
+    const declined = controller.replaceShaders([]);
+    await tick();
+    const declinedCommand = JSON.parse(sockets[0].write.mock.calls[sockets[0].write.mock.calls.length - 1]?.[0] || '{}');
+    sockets[0].emit('data', Buffer.from(JSON.stringify({ request_id: declinedCommand.request_id, error: 'property unavailable' }) + '\n'));
+    await expect(declined).resolves.toBe(false);
+
+    proc.finish(); controller.stop();
+  });
+
+  it('queries vo-passes through request-id IPC and reports only an observed shader description', async () => {
+    const { controller, sockets } = make();
+    const proc = new Proc(); vi.mocked(spawn).mockReturnValue(proc as any);
+    await controller.start(windowStub() as any, { url: 'video.mp4' });
+
+    const status = controller.readShaderRenderStatus(['missing-test-shader.glsl']);
+    await vi.waitFor(() => expect(sockets[0].write.mock.calls.flat().join('')).toContain('"get_property","vo-passes"'));
+    const request = sockets[0].write.mock.calls.flat().join('').trim().split(/\r?\n/)
+      .map((line: string) => { try { return JSON.parse(line); } catch { return null; } })
+      .filter((entry: { command?: unknown[] } | null) => entry?.command?.[0] === 'get_property').at(-1);
+    expect(request?.command).toEqual(['get_property', 'vo-passes']);
+    sockets[0].emit('data', Buffer.from(JSON.stringify({
+      request_id: request.request_id,
+      error: 'success',
+      data: { fresh: [{ desc: 'Bicubic scaler' }], redraw: [] },
+    }) + '\n'));
+    await expect(status).resolves.toMatchObject({ state: 'unidentifiable', activePasses: ['Bicubic scaler'] });
+
+    proc.finish(); controller.stop();
+  });
 });

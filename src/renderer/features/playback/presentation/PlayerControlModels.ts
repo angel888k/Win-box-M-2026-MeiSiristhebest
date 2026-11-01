@@ -1,5 +1,5 @@
 import type { DanmakuCandidate, DanmakuSettings } from '../../../../shared/danmaku';
-import type { MpvAudioTrack, MpvSubtitleTrack, SrMode } from '../../../../shared/player';
+import type { MpvAudioTrack, MpvShaderRenderStatus, MpvSubtitleTrack, SrMode } from '../../../../shared/player';
 import type { SrState } from '../../../../shared/plugin';
 import type { SubtitleCandidate } from '../../../../shared/subtitle';
 import type { PlayerFit } from '../application/playerPreferences';
@@ -188,13 +188,21 @@ export interface KernelToolsControlModel {
 export interface SuperResolutionControlModel {
   visible: boolean;
   active: boolean;
+  mpvStatusResolved: boolean;
+  mpvAvailable: boolean;
+  capabilityLoading: boolean;
+  capabilityError: string | null;
   info: SrState | null;
   mode: SrMode;
   feedback: SuperResolutionFeedback | null;
+  renderStatus: MpvShaderRenderStatus | null;
+  renderStatusLoading: boolean;
+  renderStatusError: string | null;
   open: boolean;
   containerRef: ElementHandle<HTMLDivElement>;
   onOpen: () => void;
   onClose: () => void;
+  onSwitchToMpv: () => void;
   onSelect: (mode: SrMode) => void;
 }
 

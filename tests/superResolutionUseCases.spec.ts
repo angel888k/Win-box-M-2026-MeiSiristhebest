@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SrMode } from '../src/shared/player';
 import type { SuperResolutionPort } from '../src/renderer/features/playback/application/superResolutionPort';
 import { changeSuperResolutionMode } from '../src/renderer/features/playback/application/superResolutionUseCases';
-import { formatSuperResolutionFeedback } from '../src/renderer/features/playback/presentation/superResolutionFeedback';
+import { formatSuperResolutionFeedback, formatSuperResolutionRenderStatus } from '../src/renderer/features/playback/presentation/superResolutionFeedback';
 
 function createPort(overrides: Partial<SuperResolutionPort> = {}): SuperResolutionPort {
   return {
     readCapability: vi.fn(async () => ({ available: true, modes: [], mode: 'off' })),
     saveMode: vi.fn(async () => undefined),
-    applyMode: vi.fn(async () => ({ ok: true })),
+    applyMode: vi.fn(async () => ({ ok: true, acknowledged: true })),
     ...overrides,
   };
 }
@@ -18,11 +18,11 @@ describe('changeSuperResolutionMode', () => {
     const order: string[] = [];
     const port = createPort({
       saveMode: vi.fn(async () => { order.push('save'); }),
-      applyMode: vi.fn(async () => { order.push('apply'); return { ok: true }; }),
+      applyMode: vi.fn(async () => { order.push('apply'); return { ok: true, acknowledged: true }; }),
     });
 
     await expect(changeSuperResolutionMode(port, 'quality' as SrMode)).resolves.toEqual({
-      type: 'saved-and-applied', mode: 'quality',
+      type: 'saved-and-acknowledged', mode: 'quality', renderVerified: false,
     });
     expect(order).toEqual(['save', 'apply']);
   });
@@ -40,9 +40,17 @@ describe('changeSuperResolutionMode', () => {
     const port = createPort({ applyMode: vi.fn(async () => ({ ok: false })) });
 
     await expect(changeSuperResolutionMode(port, 'quality' as SrMode)).resolves.toEqual({
-      type: 'saved-but-not-applied', mode: 'quality',
+      type: 'saved-but-unconfirmed', mode: 'quality',
     });
     expect(port.saveMode).toHaveBeenCalledWith('quality');
+  });
+
+  it('does not call a write-only player adapter applied without an MPV acknowledgement', async () => {
+    const port = createPort({ applyMode: vi.fn(async () => ({ ok: true, acknowledged: false })) });
+
+    await expect(changeSuperResolutionMode(port, 'quality' as SrMode)).resolves.toEqual({
+      type: 'saved-but-unconfirmed', mode: 'quality',
+    });
   });
 
   it('keeps the saved mode when sending the live command throws', async () => {
@@ -56,15 +64,26 @@ describe('changeSuperResolutionMode', () => {
 
 describe('formatSuperResolutionFeedback', () => {
   it('formats capability-independent application outcomes as explicit user feedback', () => {
-    expect(formatSuperResolutionFeedback({ type: 'saved-and-applied', mode: 'off' })).toEqual({
-      kind: 'ok', message: '已向 MPV 发送关闭着色器指令。',
+    expect(formatSuperResolutionFeedback({ type: 'saved-and-acknowledged', mode: 'off', renderVerified: false })).toEqual({
+      kind: 'ok', message: 'MPV 已确认清空着色器列表；GPU 实际渲染状态尚未核验。',
     });
-    expect(formatSuperResolutionFeedback({ type: 'saved-but-not-applied', mode: 'quality' })).toMatchObject({
-      kind: 'error', message: '档位已保存，但当前 MPV 会话未接收切换指令；下次启动播放器时会按保存的档位尝试加载。',
+    expect(formatSuperResolutionFeedback({ type: 'saved-but-unconfirmed', mode: 'quality' })).toMatchObject({
+      kind: 'error', message: '档位已保存，但 MPV 未确认切换命令成功。请确认使用 MPV 内核后重试；下次启动时仍会按保存的档位尝试加载。',
     });
     expect(formatSuperResolutionFeedback({ type: 'saved-but-command-failed', mode: 'quality', error: 'pipe closed' }).message)
       .toContain('pipe closed');
     expect(formatSuperResolutionFeedback({ type: 'persistence-failed', error: new Error('disk full') }).message)
       .toContain('disk full');
+  });
+});
+
+describe('formatSuperResolutionRenderStatus', () => {
+  it('never equates command acknowledgement with a shader render pass', () => {
+    expect(formatSuperResolutionRenderStatus({ state: 'observed', matchingPasses: ['Anime4K Restore'] }))
+      .toContain('MPV 渲染管线已观察到所选着色器');
+    expect(formatSuperResolutionRenderStatus({ state: 'unsupported', detail: 'property unavailable' }))
+      .toContain('不支持渲染 pass 查询');
+    expect(formatSuperResolutionRenderStatus({ state: 'not-observed', activePasses: ['Bicubic scaler'] }))
+      .toContain('没有发现所选档位的着色器');
   });
 });

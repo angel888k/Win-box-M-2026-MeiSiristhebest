@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { extractArchiveEntries } from '../src/main/subtitle/archive';
 import { validatePluginPackage } from '../src/shared/pluginPackage';
 import { pluginLevelOf, shaderModes } from '../src/shared/plugin';
+import { mpvShaderPassDescriptions } from '../src/main/player/mpvCore';
 
 const SHIPPED = [
   { file: 'super-resolution.winbox', id: 'super-resolution', modes: ['efficiency', 'quality'] },
@@ -37,7 +38,15 @@ describe('内置实时超分插件包', () => {
       expect(manifest.runtimeDeps ?? []).toEqual([]);
       expect(pluginLevelOf(manifest)).toBe('L1');
       expect(shaderModes(manifest.contributes, 'mpv.shaders').map((mode) => mode.id)).toEqual(plugin.modes);
-      for (const mode of shaderModes(manifest.contributes, 'mpv.shaders')) expect(mode.shaders.length).toBeGreaterThan(0);
+      for (const mode of shaderModes(manifest.contributes, 'mpv.shaders')) {
+        expect(mode.shaders.length).toBeGreaterThan(0);
+        const descriptions = mode.shaders.flatMap((shader) => {
+          const entry = entries.find((item) => item.name === `files/${shader}`);
+          expect(entry, `${plugin.id}:${mode.id} should contain ${shader}`).toBeTruthy();
+          return mpvShaderPassDescriptions(entry?.bytes.toString('utf8') ?? '');
+        });
+        expect(descriptions.length, `${plugin.id}:${mode.id} should expose MPV pass labels`).toBeGreaterThan(0);
+      }
     }
   });
 

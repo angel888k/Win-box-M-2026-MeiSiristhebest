@@ -3,8 +3,8 @@ import type { SuperResolutionPort } from './superResolutionPort';
 
 export type SuperResolutionModeChange =
   | { type: 'persistence-failed'; error: unknown }
-  | { type: 'saved-and-applied'; mode: SrMode }
-  | { type: 'saved-but-not-applied'; mode: SrMode }
+  | { type: 'saved-and-acknowledged'; mode: SrMode; renderVerified: false }
+  | { type: 'saved-but-unconfirmed'; mode: SrMode }
   | { type: 'saved-but-command-failed'; mode: SrMode; error: unknown };
 
 /** Persist the preference before attempting to change the live MPV session. */
@@ -20,9 +20,9 @@ export async function changeSuperResolutionMode(
 
   try {
     const result = await port.applyMode(mode);
-    return result.ok
-      ? { type: 'saved-and-applied', mode }
-      : { type: 'saved-but-not-applied', mode };
+    return result.ok && result.acknowledged === true
+      ? { type: 'saved-and-acknowledged', mode, renderVerified: false }
+      : { type: 'saved-but-unconfirmed', mode };
   } catch (error) {
     return { type: 'saved-but-command-failed', mode, error };
   }

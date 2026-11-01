@@ -207,12 +207,17 @@ describe('PluginHost — 超分着色器解析', () => {
     expect(await h.srState('general')).toMatchObject({ mode: 'off' }); // 插件没这档 → off
   });
 
-  it('着色器文件缺失 → 不返回不存在的路径', async () => {
+  it('着色器文件缺失 → 整个档位不可用，不发送不完整着色器链', async () => {
     writeBuiltin(manifest());
     const h = host();
     await h.init();
     rmSync(join(pluginsDir, 'super-resolution.winbox', 'files', 'b.glsl'));
-    expect(await h.srShaders('efficiency')).toEqual([join(pluginsDir, 'super-resolution.winbox', 'files', 'a.glsl')]);
+    expect(await h.srShaders('efficiency')).toEqual([]);
+    expect(await h.srState('efficiency')).toMatchObject({ available: true, mode: 'off' });
+    expect((await h.srState('efficiency')).modes.map((mode) => mode.id)).toEqual(['quality']);
+
+    rmSync(join(pluginsDir, 'super-resolution.winbox', 'files', 'c.glsl'));
+    expect(await h.srState('quality')).toEqual({ available: false, modes: [], mode: 'off' });
   });
 });
 

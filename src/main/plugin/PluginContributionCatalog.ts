@@ -69,11 +69,9 @@ export class PluginContributionCatalog {
     const modes = this.modesFrom(entries);
     const eff = srModeUsable(mode, modes.map((m) => m.id));
     if (eff === 'off') return [];
-    const e = entries.find((entry) => this.modesOf(entry).some((m) => m.id === eff));
+    const e = entries.find((entry) => this.readyModesOf(entry).some((m) => m.id === eff));
     if (!e) return [];
-    return shadersForMode(e.manifest.contributes, 'mpv.shaders', eff)
-      .map((n) => this.ports.shaderPath(e, n))
-      .filter((p) => this.ports.fileExists(p));
+    return this.shaderPathsForMode(e, eff) ?? [];
   }
 
   async srModes(): Promise<Array<{ id: string; label: string }>> {
@@ -292,14 +290,26 @@ export class PluginContributionCatalog {
   private async srPlugins(): Promise<PluginEntry[]> {
     return this.ports.entries().filter((e) => this.ports.enabled(e.id)
       && this.ports.ready(e)
-      && shaderModes(e.manifest.contributes, 'mpv.shaders').length > 0);
+      && this.readyModesOf(e).length > 0);
+  }
+
+  private readyModesOf(e: PluginEntry): Array<{ id: string; label: string }> {
+    return this.modesOf(e).filter((mode) => this.shaderPathsForMode(e, mode.id) !== null);
+  }
+
+  /** A mode is usable only when its complete shader chain exists; partial chains can fail in MPV. */
+  private shaderPathsForMode(e: PluginEntry, mode: string): string[] | null {
+    const files = shadersForMode(e.manifest.contributes, 'mpv.shaders', mode);
+    if (files.length === 0) return null;
+    const paths = files.map((name) => this.ports.shaderPath(e, name));
+    return paths.every((path) => this.ports.fileExists(path)) ? paths : null;
   }
 
   private modesFrom(entries: PluginEntry[]): Array<{ id: string; label: string }> {
     const seen = new Set<string>();
     const modes: Array<{ id: string; label: string }> = [];
     for (const entry of entries) {
-      for (const mode of this.modesOf(entry)) {
+      for (const mode of this.readyModesOf(entry)) {
         if (seen.has(mode.id)) continue;
         seen.add(mode.id);
         modes.push(mode);

@@ -12,6 +12,8 @@ import {
   mpvFitProps,
   mpvObserveLines,
   mpvShadersCmd,
+  mpvShaderPassDescriptions,
+  inspectMpvShaderPasses,
   mpvSubtitleTracks,
   mpvVideoParams,
   reduceMpvMessage,
@@ -137,6 +139,23 @@ describe('mpvCore · 超分插件（glsl-shaders 注入）', () => {
   });
 });
 
+describe('mpvCore · 超分渲染状态观察', () => {
+  it('读取着色器的唯一 DESC 标签，并精确匹配 MPV fresh/redraw pass', () => {
+    const descriptions = mpvShaderPassDescriptions('//!DESC Anime4K Restore\n//!DESC Anime4K Restore\n//!HOOK MAIN');
+    expect(descriptions).toEqual(['Anime4K Restore']);
+    expect(inspectMpvShaderPasses({ fresh: [{ desc: 'Anime4K Restore', last: 10 }], redraw: [] }, descriptions))
+      .toMatchObject({ state: 'observed', matchingPasses: ['Anime4K Restore'] });
+    expect(inspectMpvShaderPasses({ fresh: [{ desc: 'Bicubic scaler' }], redraw: [] }, descriptions).state)
+      .toBe('not-observed');
+  });
+
+  it('不把没有帧、没有描述标记或畸形属性误报为超分已运行', () => {
+    expect(inspectMpvShaderPasses({ fresh: [], redraw: [] }, ['Anime4K Restore']).state).toBe('waiting-for-frame');
+    expect(inspectMpvShaderPasses({ fresh: [{ desc: 'scale' }], redraw: [] }, []).state).toBe('unidentifiable');
+    expect(inspectMpvShaderPasses(null, ['Anime4K Restore']).state).toBe('unsupported');
+  });
+});
+
 describe('mpvCore · 状态归一', () => {
   it('property-change 逐项映射（含 duration=null 表未知）', () => {
     const s = initialKernelState();
@@ -213,6 +232,7 @@ describe('mpvCore · 状态归一', () => {
       reduceMpvMessage(s, { event: 'file-loaded' });
       reduceMpvMessage(s, { event: 'property-change', name: 'duration', data: 7200 });
       reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 1.5 });
+      reduceMpvMessage(s, { event: 'playback-restart' });
       expect(s.playbackStarted).toBe(true);
       expect(reduceMpvMessage(s, eofMessage)).toBe(true);
       expect(s.eof).toBe(false);
@@ -225,6 +245,7 @@ describe('mpvCore · 状态归一', () => {
       reduceMpvMessage(s, { event: 'file-loaded' });
       reduceMpvMessage(s, { event: 'property-change', name: 'duration', data: 7200 });
       reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 3600 });
+      reduceMpvMessage(s, { event: 'playback-restart' });
       reduceMpvMessage(s, eofMessage);
       expect(s.eof).toBe(false);
       expect(s.error).toBe('视频流提前结束');
@@ -235,6 +256,7 @@ describe('mpvCore · 状态归一', () => {
       reduceMpvMessage(s, { event: 'file-loaded' });
       reduceMpvMessage(s, { event: 'property-change', name: 'duration', data: 100 });
       reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 99 });
+      reduceMpvMessage(s, { event: 'playback-restart' });
       reduceMpvMessage(s, eofMessage);
       expect(s.eof).toBe(true);
       expect(s.error).toBeNull();
@@ -244,6 +266,7 @@ describe('mpvCore · 状态归一', () => {
       const s = initialKernelState();
       reduceMpvMessage(s, { event: 'file-loaded' });
       reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 12.5 });
+      reduceMpvMessage(s, { event: 'playback-restart' });
       reduceMpvMessage(s, eofMessage);
       expect(s.eof).toBe(true);
       expect(s.error).toBeNull();
@@ -253,6 +276,7 @@ describe('mpvCore · 状态归一', () => {
       const s = initialKernelState();
       reduceMpvMessage(s, { event: 'file-loaded' });
       reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 100 });
+      reduceMpvMessage(s, { event: 'playback-restart' });
       reduceMpvMessage(s, { event: 'end-file', reason: 'error', error: 'decoder failed' });
       reduceMpvMessage(s, eofMessage);
       expect(s.eof).toBe(false);
@@ -264,6 +288,7 @@ describe('mpvCore · 状态归一', () => {
       reduceMpvMessage(s, { event: 'file-loaded' });
       reduceMpvMessage(s, { event: 'property-change', name: 'duration', data: 7200 });
       reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 1.5 });
+      reduceMpvMessage(s, { event: 'playback-restart' });
       reduceMpvMessage(s, { event: 'end-file', reason: 'error', error: 'decoder failed' });
       expect(reduceMpvMessage(s, eofMessage)).toBe(false);
       expect(s.eof).toBe(false);
@@ -275,6 +300,7 @@ describe('mpvCore · 状态归一', () => {
     const s = initialKernelState();
     reduceMpvMessage(s, { event: 'file-loaded' });
     reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: 100 });
+    reduceMpvMessage(s, { event: 'playback-restart' });
     reduceMpvMessage(s, { event: 'property-change', name: 'eof-reached', data: true });
     expect(s.eof).toBe(true);
     const error = { event: 'end-file', reason: 'error', error: 'decoder failed' };
@@ -299,6 +325,7 @@ describe('mpvCore · 状态归一', () => {
     const played = initialKernelState();
     reduceMpvMessage(played, { event: 'file-loaded' });
     reduceMpvMessage(played, { event: 'property-change', name: 'time-pos', data: 12.5 });
+    reduceMpvMessage(played, { event: 'playback-restart' });
     expect(reduceMpvMessage(played, { event: 'end-file', reason: 'eof' })).toBe(true);
     expect(played.eof).toBe(true);
     expect(played.playbackStarted).toBe(true);
@@ -306,6 +333,16 @@ describe('mpvCore · 状态归一', () => {
     expect(reduceMpvMessage(s, { event: 'property-change', name: 'time-pos', data: null })).toBe(false);
     expect(reduceMpvMessage(s, { event: 'unknown-event' })).toBe(false);
     expect(reduceMpvMessage(s, null)).toBe(false);
+  });
+
+  it('resume time alone is not playback confirmation; playback-restart confirms the active session', () => {
+    const state = initialKernelState();
+    reduceMpvMessage(state, { event: 'file-loaded' });
+    reduceMpvMessage(state, { event: 'property-change', name: 'time-pos', data: 1800 });
+    expect(state.playbackStarted).toBe(false);
+    expect(reduceMpvMessage(state, { event: 'playback-restart' })).toBe(true);
+    expect(state.playbackStarted).toBe(true);
+    expect(reduceMpvMessage(state, { event: 'playback-restart' })).toBe(false);
   });
 
   it('畸形数据不崩、不误写（string/NaN 全忽略）', () => {

@@ -24,7 +24,7 @@ import type {
 import type { DanmakuSettings } from '../../shared/danmaku';
 import type { MetaSettings } from '../../shared/meta';
 import type { ExploreQuery } from '../../shared/discover';
-import type { PlayerSettings, MpvStatus, MpvStartOptions, MpvCommand, MpvStateEvent, MediaStateEvent, MediaRuntimeId, MediaRuntimeStatus, MediaRuntimeProgress } from '../../shared/player';
+import type { PlayerSettings, MpvStatus, MpvStartOptions, MpvCommand, MpvCommandResult, MpvStateEvent, MediaStateEvent, MediaRuntimeId, MediaRuntimeStatus, MediaRuntimeProgress } from '../../shared/player';
 import type { PluginView, PluginInspectResult, SrState, ThemeSkinView, LiveTemplateView, UiCommandView, KeymapView, SettingsPanelView, UiSlotView, PlayerEngineView } from '../../shared/plugin';
 import type { DavServer } from '../../shared/webdav';
 import type { DlnaCastTarget, DlnaDevice } from '../../shared/dlna';
@@ -329,7 +329,7 @@ export const client = {
   /** ★ 2026-10-08 MPV 高兼容播放内核：探活/路径、启停、控制命令、状态事件（仅独立播放器窗口用） */
   mpvStatus: () => unwrap<MpvStatus>(window.api.mpv.status()),
   mpvStart: (opts: MpvStartOptions) => unwrap<{ session: number; path: string }>(window.api.mpv.start(opts)),
-  mpvCmd: (cmd: MpvCommand) => unwrap<{ ok: boolean }>(window.api.mpv.cmd(cmd)),
+  mpvCmd: (cmd: MpvCommand) => unwrap<MpvCommandResult>(window.api.mpv.cmd(cmd)),
   mpvStop: () => unwrap<{ ok: boolean }>(window.api.mpv.stop()),
   mpvOnState: (cb: (s: MpvStateEvent) => void) => window.api.mpv.onState(cb as (s: unknown) => void),
   mediaRuntimeStatus: () => unwrap<MediaRuntimeStatus>(window.api.mediaRuntime.status()),

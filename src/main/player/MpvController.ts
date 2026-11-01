@@ -9,10 +9,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { connect, type Socket } from 'node:net';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import type { Logger } from '../../shared/types';
-import type { MpvCommand, MpvKernelState, MpvStartOptions, MpvStatus } from '../../shared/player';
+import type { MpvCommand, MpvKernelState, MpvShaderRenderStatus, MpvStartOptions, MpvStatus } from '../../shared/player';
 import { IPC } from '../../shared/ipc-channels';
 import { cacheDir, resourcesDir } from '../util/paths';
 import { playerSettings } from './playerSettings';
@@ -23,7 +24,9 @@ import {
   mpvCmdLine,
   mpvCommandLines,
   mpvObserveLines,
+  inspectMpvShaderPasses,
   mpvShadersCmd,
+  mpvShaderPassDescriptions,
   reduceMpvMessage,
   resolveMpvPath,
 } from './mpvCore';
@@ -34,6 +37,10 @@ const PUSH_INTERVAL_MS = 200;
 const CONNECT_TIMEOUT_MS = 6000;
 /** quit 后的强杀宽限 */
 const QUIT_GRACE_MS = 1500;
+/** MPV JSON IPC command replies normally arrive immediately; bound slow/broken pipes. */
+const COMMAND_ACK_TIMEOUT_MS = 3000;
+
+type MpvIpcReply = { accepted: boolean; data?: unknown; error?: string };
 
 /** 取窗口 HWND（Windows 指针宽度的十进制字符串，mpv `--wid` 接受十进制 int64） */
 export function hwndOf(win: BrowserWindow): string {
@@ -55,7 +62,14 @@ export class MpvController {
   private pushTimer: NodeJS.Timeout | null = null;
   private retiring = new Set<ChildProcess>();
   private pipeSeq = 0;
+  private nextCommandRequestId = 0;
   private lineBuf = '';
+  private readonly pendingCommandAcks = new Map<number, {
+    session: number;
+    timer: NodeJS.Timeout;
+    resolve(reply: MpvIpcReply | null): void;
+  }>();
+  private shaderCommandChain: Promise<void> = Promise.resolve();
   /**
    * `start()` can be called twice before the first process has finished
    * connecting (React effect cleanup/start does exactly that when the kernel
@@ -196,10 +210,12 @@ export class MpvController {
     sock.write(mpvCmdLine(['set_property', 'mute', 'no']));
     sock.write(mpvCmdLine(['set_property', 'pause', opts.paused ? 'yes' : 'no']));
     sock.write(mpvCmdLine(['set_property', 'volume', Math.max(0, Math.min(1, opts.volume ?? 1)) * 100]));
-    // ★ 超分插件（M1）：初始着色器链必须在 loadfile **之前**下发（逐条 clr+append，见 mpvShadersCmd）；
-    //   运行期换档走 `command({type:'glsl-shaders'})`，同样即时生效、不重启会话。
+    // 超分插件：等待 MPV 对每条列表命令的 JSON IPC 回执，再开始加载媒体。
     const shaders = (opts.shaders ?? []).map((s) => String(s ?? '').trim()).filter(Boolean);
-    if (shaders.length) for (const l of mpvShadersCmd(shaders)) sock.write(l);
+    if (shaders.length && !(await this.replaceShaderChain(shaders, session))) {
+      this.log.w('mpv: 初始着色器列表未获命令回执；继续播放，但超分尚未确认');
+    }
+    if (session !== this.session || proc !== this.proc) return { session, path: st.path };
     sock.write(mpvCmdLine(['loadfile', url, 'replace']));
     return { session, path: st.path };
   }
@@ -235,6 +251,102 @@ export class MpvController {
     }
   }
 
+  /**
+   * Replace the MPV shader list and wait for protocol replies. A successful
+   * result proves that MPV accepted the list commands, not that a VO rendered
+   * those shaders; `vo-passes` is not supported by every output backend.
+   */
+  replaceShaders(paths: readonly string[]): Promise<boolean> {
+    const session = this.session;
+    const run = this.shaderCommandChain.then(() => this.replaceShaderChain(paths, session));
+    this.shaderCommandChain = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  /** Query one bounded snapshot of active render passes; this is not a polling subscription. */
+  readShaderRenderStatus(paths: readonly string[]): Promise<MpvShaderRenderStatus> {
+    const session = this.session;
+    const run = this.shaderCommandChain.then(() => this.readShaderRenderStatusNow(paths, session));
+    this.shaderCommandChain = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  private async readShaderRenderStatusNow(paths: readonly string[], session: number): Promise<MpvShaderRenderStatus> {
+    const sock = this.sock;
+    if (!sock || session !== this.session) return { state: 'no-session' };
+    const shaderPaths = [...new Set(paths.map((path) => String(path || '').trim()).filter(Boolean))].slice(0, 64);
+    if (!shaderPaths.length) return { state: 'unavailable', detail: '当前档位没有可加载的着色器文件。' };
+
+    const sources = await Promise.all(shaderPaths.map(async (path) => {
+      try { return await readFile(path, 'utf8'); } catch { return ''; }
+    }));
+    const expectedDescriptions = [...new Set(sources.flatMap(mpvShaderPassDescriptions))].slice(0, 512);
+    const reply = await this.sendCommandAndWait(sock, session, ['get_property', 'vo-passes']);
+    if (!reply) return { state: 'unavailable', detail: '读取 MPV 渲染状态超时或通信管道已关闭。' };
+    if (!reply.accepted) {
+      return { state: 'unsupported', detail: reply.error || '当前 MPV 输出后端不支持 vo-passes 查询。' };
+    }
+    return inspectMpvShaderPasses(reply.data, expectedDescriptions);
+  }
+
+  private async replaceShaderChain(paths: readonly string[], session: number): Promise<boolean> {
+    const sock = this.sock;
+    if (!sock || session !== this.session) return false;
+    const commands = mpvShadersCmd(paths).map((line) => {
+      const parsed = JSON.parse(line) as { command: unknown[] };
+      return parsed.command;
+    });
+    for (const command of commands) {
+      if (session !== this.session || sock !== this.sock) return false;
+      const reply = await this.sendCommandAndWait(sock, session, command);
+      if (!reply?.accepted) return false;
+    }
+    return true;
+  }
+
+  private sendCommandAndWait(sock: Socket, session: number, command: unknown[]): Promise<MpvIpcReply | null> {
+    const requestId = ++this.nextCommandRequestId;
+    return new Promise<MpvIpcReply | null>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingCommandAcks.delete(requestId);
+        resolve(null);
+      }, COMMAND_ACK_TIMEOUT_MS);
+      this.pendingCommandAcks.set(requestId, { session, timer, resolve });
+      try {
+        sock.write(`${JSON.stringify({ command, request_id: requestId })}\n`);
+      } catch {
+        clearTimeout(timer);
+        this.pendingCommandAcks.delete(requestId);
+        resolve(null);
+      }
+    });
+  }
+
+  private settleCommandAck(message: unknown, session: number): boolean {
+    if (!message || typeof message !== 'object') return false;
+    const response = message as { request_id?: unknown; error?: unknown; data?: unknown };
+    if (!Number.isSafeInteger(response.request_id)) return false;
+    const requestId = response.request_id as number;
+    const pending = this.pendingCommandAcks.get(requestId);
+    if (!pending || pending.session !== session) return false;
+    clearTimeout(pending.timer);
+    this.pendingCommandAcks.delete(requestId);
+    pending.resolve({
+      accepted: response.error === 'success' && session === this.session,
+      data: response.data,
+      error: typeof response.error === 'string' ? response.error : undefined,
+    });
+    return true;
+  }
+
+  private clearCommandAcks(): void {
+    for (const [id, pending] of this.pendingCommandAcks) {
+      clearTimeout(pending.timer);
+      pending.resolve(null);
+      this.pendingCommandAcks.delete(id);
+    }
+  }
+
   /** 停止会话（quit → 宽限后强杀；幂等） */
   stop(): void {
     this.unbindViewport?.();
@@ -245,6 +357,7 @@ export class MpvController {
     this.proc = null;
     this.target = null;
     this.session += 1; // 在途事件/连接立即作废
+    this.clearCommandAcks();
     if (this.pushTimer) {
       clearTimeout(this.pushTimer);
       this.pushTimer = null;
@@ -321,10 +434,15 @@ export class MpvController {
       } catch {
         continue;
       }
+      if (this.settleCommandAck(msg, session)) continue;
       const changed = reduceMpvMessage(this.state, msg);
       if (!changed) continue;
-      // 关键节点（加载完成/播完）立即推，其余节流合并
-      this.schedulePush(this.state.loaded || this.state.eof || this.state.exited);
+      const event = msg && typeof msg === 'object' && 'event' in msg
+        ? (msg as { event?: unknown }).event
+        : undefined;
+      // A state such as `loaded` remains true for the whole playback. Use the
+      // transition event to keep ordinary time/track updates on the 200ms path.
+      this.schedulePush(event === 'file-loaded' || event === 'end-file' || this.state.exited);
     }
   }
 
@@ -336,6 +454,8 @@ export class MpvController {
 
   private schedulePush(immediate: boolean): void {
     if (immediate) {
+      if (this.pushTimer) clearTimeout(this.pushTimer);
+      this.pushTimer = null;
       this.pushNow();
       return;
     }

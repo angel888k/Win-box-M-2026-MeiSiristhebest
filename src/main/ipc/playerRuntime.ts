@@ -11,6 +11,8 @@ import type {
   MediaRuntimeId,
   MediaRuntimeStatus,
   MpvCommand,
+  MpvCommandResult,
+  MpvShaderRenderStatus,
   MpvStartOptions,
   MpvStatus,
   PlayerSettings,
@@ -32,6 +34,8 @@ interface MpvRuntimePort {
   status(): MpvStatus;
   start(window: BrowserWindow, options: MpvStartOptions): Promise<{ session: number; path: string }>;
   command(command: MpvCommand): boolean;
+  replaceShaders?(paths: readonly string[]): Promise<boolean>;
+  readShaderRenderStatus?(paths: readonly string[]): Promise<MpvShaderRenderStatus>;
   stop(): void;
   dispose(): void;
 }
@@ -94,11 +98,28 @@ export function registerPlayerRuntimeIpc({
     return mpv.start(window, shaders.length ? { ...base, shaders } : base);
   }, logger);
   registerHandler(IPC.MPV_CMD, async (_event: unknown, command: MpvCommand) => {
+    if (command?.type === 'sr-render-status') {
+      if (command.value === 'off') return { ok: true, renderStatus: { state: 'disabled' } } satisfies MpvCommandResult;
+      const shaders = await plugins.srShaders(command.value as SrMode);
+      if (!shaders.length) {
+        return { ok: false, renderStatus: { state: 'unavailable', detail: '当前档位没有可加载的着色器文件。' } } satisfies MpvCommandResult;
+      }
+      if (!mpv.readShaderRenderStatus) {
+        return { ok: false, renderStatus: { state: 'unsupported', detail: '当前播放器适配器不支持渲染 pass 查询。' } } satisfies MpvCommandResult;
+      }
+      const renderStatus = await mpv.readShaderRenderStatus(shaders);
+      return { ok: true, renderStatus } satisfies MpvCommandResult;
+    }
     if (command?.type === 'sr-mode') {
       const shaders = await plugins.srShaders(command.value as SrMode);
-      return { ok: mpv.command({ type: 'glsl-shaders', value: shaders }) };
+      if (mpv.replaceShaders) {
+        const acknowledged = await mpv.replaceShaders(shaders);
+        return { ok: acknowledged, acknowledged } satisfies MpvCommandResult;
+      }
+      // Legacy adapters can write the command but cannot confirm MPV accepted it.
+      return { ok: mpv.command({ type: 'glsl-shaders', value: shaders }), acknowledged: false } satisfies MpvCommandResult;
     }
-    return { ok: mpv.command(command) };
+    return { ok: mpv.command(command) } satisfies MpvCommandResult;
   }, logger);
   registerHandler(IPC.MPV_STOP, () => {
     mpv.stop();
