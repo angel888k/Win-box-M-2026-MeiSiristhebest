@@ -347,9 +347,16 @@ export class UserConfigApplicationService {
   profileSitesView(): ProfileSitesView {
     const activeId = this.snap.activeProfileId;
     const pick = (s: SourceBean): { key: string; name: string } => ({ key: s.key, name: s.name || s.key });
+    const globallyBlocked = new Set(this.snap.globallyBlockedSourceKeys ?? []);
+    const visibleSites = (profileId: string, sites: readonly SourceBean[]) =>
+      filterDeletedProfileSources(
+        this.snap,
+        sites.filter((site) => !globallyBlocked.has(site.key)),
+        profileId,
+      ).sources;
     const profiles = this.snap.profiles.map((profile) => {
       if (profile.id === activeId) {
-        return { id: profile.id, name: profile.name, sites: this.sources().map(pick), restorable: true };
+        return { id: profile.id, name: profile.name, sites: visibleSites(profile.id, this.sources()).map(pick), restorable: true };
       }
       if (!profile.json) {
         return {
@@ -365,7 +372,7 @@ export class UserConfigApplicationService {
         return {
           id: profile.id,
           name: profile.name,
-          sites: config?.sites.map(pick) ?? [],
+          sites: config ? visibleSites(profile.id, config.sites).map(pick) : [],
           restorable: Boolean(config),
           ...(config ? {} : { unavailableReason: '配置档案已不存在' }),
         };

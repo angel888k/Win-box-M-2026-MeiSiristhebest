@@ -142,6 +142,27 @@ describe('source deletions belong to one child profile', () => {
     expect(restarted.sources().map(item => item.key)).toContain('shared');
   });
 
+  it('does not show a profile-deleted source from an older inactive profile snapshot', () => {
+    const manager = newUserConfigService(tmpDir());
+    manager.replaceFromImport(fullConfig([bean('shared'), bean('a')]), 'https://a.test/config');
+    const first = manager.activeProfileId();
+    const second = manager.saveAsProfile('B', {
+      parsed: fullConfig([bean('shared'), bean('b')]),
+      apiUrl: 'https://b.test/config',
+    });
+
+    manager.deleteSource('shared');
+    manager.activateProfile(first);
+
+    // Simulate an older subscription snapshot that still contains the deleted key.
+    const snapshot = manager.snapshot();
+    snapshot.profiles.find((profile) => profile.id === second.id)!.json = JSON.stringify(fullConfig([bean('shared'), bean('b')]));
+    manager.restore(snapshot);
+
+    expect(manager.profileSitesView().profiles.find((profile) => profile.id === second.id)?.sites.map((site) => site.key))
+      .toEqual(['b']);
+  });
+
   it('rejects stale cleanup when a source was edited under the same key', () => {
     const manager = newUserConfigService(tmpDir());
     manager.replaceFromImport(fullConfig([bean('same-key')]), 'https://a.test/config');
