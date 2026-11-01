@@ -17,6 +17,9 @@ import type { PlaybackHandoffPort } from './application/playbackHandoff';
 import type { PlayerPlaybackPresentationUpdate } from './application/PlayerPlaybackPresentation';
 import type { AdaptiveAudioTrackController } from './application/playerAudioTracks';
 import { createHlsAudioTrackControllerAdapter } from './adapters/hlsAudioTrackControllerAdapter';
+import { classifyPlaybackFailure, type PlaybackFailureContext } from '../../../shared/playbackFailure';
+
+const FIRST_FRAME_TIMEOUT_MS = 45_000;
 
 export interface Html5PlaybackSessionOptions {
   videoRef: MutableRefObject<HTMLVideoElement | null>;
@@ -42,7 +45,7 @@ export interface Html5PlaybackSessionOptions {
   clearAuto(): void;
   revealControls(): void;
   recoverHtmlPlayback(): boolean;
-  onPlaybackFailure?(currentTime: number, reason: string): void;
+  onPlaybackFailure?(currentTime: number, reason: string, failure?: PlaybackFailureContext): void;
   onPlaybackStarted?(): void;
   tryExternalFallback?(sourceUrl: string, position: number): Promise<{ opened: boolean; player?: string; error?: string } | null>;
   handlePlaybackEnd(): void;
@@ -122,11 +125,43 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
     let terminalFailureReported = false;
     const recovery = createHtml5PlaybackRecovery();
     let playbackConfirmed = false;
-    const reportTerminalFailure = (message: string, reason: string) => {
+    let playbackFramePending = false;
+    let playbackFrameAttempt = 0;
+    let playbackFrameCallbackId: number | null = null;
+    let playbackRafId: number | null = null;
+    let firstFrameTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearFirstFrameTimer = () => {
+      if (firstFrameTimer) clearTimeout(firstFrameTimer);
+      firstFrameTimer = null;
+    };
+    const reportTerminalFailure = (message: string, reason: string, failure?: PlaybackFailureContext) => {
       if (terminalFailureReported || cancelled) return;
       terminalFailureReported = true;
+      clearFirstFrameTimer();
       updatePlaybackStatus({ error: message, loading: false });
-      onPlaybackFailure?.(Math.max(0, video.currentTime || 0), reason);
+      const context = failure || classifyPlaybackFailure({ engine: 'unknown', reason });
+      onPlaybackFailure?.(Math.max(0, video.currentTime || 0), reason, context);
+    };
+    const armFirstFrameTimer = () => {
+      if (cancelled || playbackConfirmed || firstFrameTimer) return;
+      firstFrameTimer = setTimeout(() => {
+        firstFrameTimer = null;
+        if (cancelled || playbackConfirmed || video.paused) return;
+        reportTerminalFailure(
+          '播放已开始请求，但 45 秒内没有显示视频画面。可检查线路权限，或等待自动查找同集备用源。',
+          'first-frame-timeout',
+          { stage: 'startup', engine: 'html5', code: 'first-frame-timeout', retryable: true },
+        );
+      }, FIRST_FRAME_TIMEOUT_MS);
+    };
+    const confirmRenderedFrame = (attempt: number) => {
+      if (attempt !== playbackFrameAttempt) return;
+      playbackFramePending = false;
+      playbackFrameCallbackId = null;
+      if (cancelled || playbackConfirmed || video.paused) return;
+      playbackConfirmed = true;
+      clearFirstFrameTimer();
+      onPlaybackStarted?.();
     };
     let previousBytes = -1;
     let previousTime = 0;
@@ -183,19 +218,41 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
     };
     const onPlay = () => {
       updatePlaybackStatus({ paused: false, buffering: false });
+      armFirstFrameTimer();
       clearAuto();
       revealControls();
     };
     const onPause = () => {
       updatePlaybackStatus({ paused: true });
+      clearFirstFrameTimer();
+      playbackFrameAttempt += 1;
+      playbackFramePending = false;
+      if (playbackFrameCallbackId != null && typeof video.cancelVideoFrameCallback === 'function') {
+        video.cancelVideoFrameCallback(playbackFrameCallbackId);
+      }
+      playbackFrameCallbackId = null;
+      if (playbackRafId != null) cancelAnimationFrame(playbackRafId);
+      playbackRafId = null;
       revealControls();
     };
     const onWaiting = () => updatePlaybackStatus({ buffering: true });
     const onPlaying = () => {
       updatePlaybackStatus({ buffering: false });
-      if (!playbackConfirmed) {
-        playbackConfirmed = true;
-        onPlaybackStarted?.();
+      if (playbackConfirmed || playbackFramePending) return;
+      playbackFramePending = true;
+      const attempt = ++playbackFrameAttempt;
+      if (typeof video.requestVideoFrameCallback === 'function') {
+        playbackFrameCallbackId = video.requestVideoFrameCallback(() => confirmRenderedFrame(attempt));
+      } else {
+        // Older Chromium fallback: wait for a composited frame after the media
+        // element reports data, instead of treating URL resolution/`playing`
+        // alone as proof that the viewer saw a frame.
+        playbackRafId = requestAnimationFrame(() => {
+          playbackRafId = null;
+          if (attempt !== playbackFrameAttempt) return;
+          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) confirmRenderedFrame(attempt);
+          else playbackFramePending = false;
+        });
       }
     };
     const onError = () => {
@@ -207,6 +264,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
         externalFallbackAvailable: !!tryExternalFallback,
       });
       if (decision.kind === 'ignore') return;
+      clearFirstFrameTimer();
       const reason = mediaError?.code === 2
         ? '网络读取失败，源站可能拒绝连接或链接已失效'
         : mediaError?.code === 3
@@ -220,6 +278,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
       const redundantFormatCode = mediaError?.code === 4 && /MEDIA_ELEMENT_ERROR:\\s*Format error/i.test(nativeMessage || '');
       const errorMessage = `播放出错：${reason}${nativeMessage && !redundantFormatCode ? `（技术信息：${nativeMessage}）` : ''}`;
       updatePlaybackStatus({ loading: false });
+      const failure = classifyPlaybackFailure({ engine: 'html5', reason: nativeMessage || reason, mediaErrorCode: mediaError?.code });
       // When the user has explicitly enabled an external player, hand formats
       // Chromium cannot demux (for example HEVC/MKV or a source-specific stream)
       // to that player using the same local proxy URL and current seek position.
@@ -234,16 +293,16 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
             return;
           }
           const message = completion.error ? `${errorMessage}（外部播放器启动失败：${completion.error}）` : errorMessage;
-          reportTerminalFailure(message, completion.error || nativeMessage || reason);
+          reportTerminalFailure(message, completion.error || nativeMessage || reason, { ...failure, engine: 'external' });
         }).catch((error) => {
           const detail = error instanceof Error ? error.message : String(error);
           const completion = recovery.completeExternalFallback({ opened: false, error: detail });
           if (completion.kind === 'ignore') return;
-          reportTerminalFailure(`${errorMessage}（外部播放器启动失败：${detail}）`, detail);
+          reportTerminalFailure(`${errorMessage}（外部播放器启动失败：${detail}）`, detail, { ...failure, engine: 'external' });
         });
         return;
       }
-      reportTerminalFailure(errorMessage, nativeMessage || reason);
+      reportTerminalFailure(errorMessage, nativeMessage || reason, failure);
     };
     const onEnded = () => handlePlaybackEnd();
 
@@ -262,6 +321,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
         updatePlaybackStatus({ paused: true });
         return;
       }
+      armFirstFrameTimer();
       video.play().then(() => updatePlaybackStatus({ paused: false })).catch(() => undefined);
     };
 
@@ -277,23 +337,23 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
         void import('hls.js').then(({ default: Hls }) => {
           if (cancelled) return;
           if (!Hls.isSupported()) {
-        updatePlaybackStatus({ error: '当前环境不支持 HLS 播放', loading: false });
+            updatePlaybackStatus({ error: '当前环境不支持 HLS 播放', loading: false });
             return;
           }
           const hls = new Hls({
-          maxBufferLength: 20,
-          maxMaxBufferLength: 60,
-          maxBufferSize: 30 * 1000 * 1000,
-          backBufferLength: 30,
+            maxBufferLength: 20,
+            maxMaxBufferLength: 60,
+            maxBufferSize: 30 * 1000 * 1000,
+            backBufferLength: 30,
             enableWorker: true,
-            manifestLoadingTimeOut: 180000,
-            levelLoadingTimeOut: 180000,
-            fragLoadingTimeOut: 180000,
-            manifestLoadingMaxRetry: 4,
-            manifestLoadingRetryDelay: 800,
-            levelLoadingMaxRetry: 4,
-            fragLoadingMaxRetry: 4,
-            fragLoadingRetryDelay: 800,
+            manifestLoadingTimeOut: 12000,
+            levelLoadingTimeOut: 15000,
+            fragLoadingTimeOut: 20000,
+            manifestLoadingMaxRetry: 2,
+            manifestLoadingRetryDelay: 600,
+            levelLoadingMaxRetry: 2,
+            fragLoadingMaxRetry: 2,
+            fragLoadingRetryDelay: 600,
           });
           hlsInstanceRef.current = hls;
           const audioTrackController = createHlsAudioTrackControllerAdapter(hls);
@@ -310,9 +370,10 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
             updatePlaybackStatus({ isLive: live });
           });
           hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
-            const stats = (data as { stats?: { loading: number; loaded: number } }).stats;
-            if (stats && stats.loading > 0) {
-              reportKiloBytesPerSecond(stats.loaded / 1024 / (stats.loading / 1000));
+            const { loading, loaded } = data.frag.stats;
+            const durationMs = loading.end - loading.start;
+            if (Number.isFinite(durationMs) && durationMs > 0 && loaded > 0) {
+              reportKiloBytesPerSecond(loaded / 1024 / (durationMs / 1000));
             }
           });
           hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -325,6 +386,12 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
                 : 'other';
             const decision = recovery.onHlsFatal({ type: errorType, responseStatus });
             if (decision.kind === 'ignore') return;
+            const failure = classifyPlaybackFailure({
+              engine: 'hls.js',
+              reason: data.details,
+              httpStatus: responseStatus,
+              code: data.details,
+            });
             reportHtmlMediaEvent(mediaDiagnostics, {
               event: 'hls-fatal:' + data.type + ':' + data.details,
               url: htmlUrl,
@@ -332,6 +399,10 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
               readyState: video.readyState,
               currentTime: video.currentTime,
               paused: video.paused,
+              failureStage: failure.stage,
+              failureHttpStatus: failure.httpStatus,
+              failureRetryable: failure.retryable,
+              failureCode: failure.code,
             });
             if (decision.kind === 'retry-network') {
               updatePlaybackStatus({ error: '' });
@@ -346,7 +417,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
             if (decision.kind === 'switch-kernel' && recoverHtmlPlayback()) return;
             const retries = decision.retryCount ?? 0;
             const reason = hlsErrorText(data.type, data.details, responseStatus, data.response?.data);
-            reportTerminalFailure(`HLS 播放失败：${reason}` + (retries ? `（已自动重试 ${retries} 次）` : ''), reason);
+            reportTerminalFailure(`HLS 播放失败：${reason}` + (retries ? `（已自动重试 ${retries} 次）` : ''), reason, failure);
           });
         }).catch(() => {
           if (cancelled) return;
@@ -377,12 +448,14 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
         player.on(mpegts.Events.ERROR, (type: string, detail: string, info: unknown) => {
           if (cancelled || recoverHtmlPlayback()) return;
           const reason = [type, detail, typeof info === 'string' ? info : ''].filter(Boolean).join(': ').slice(0, 180);
-          reportTerminalFailure(`MPEG-TS 播放失败：${reason || '媒体流读取或解复用失败'}`, reason || 'mpegts-error');
+          const failure = classifyPlaybackFailure({ engine: 'mpegts.js', reason: reason || 'media stream demux failure', code: type });
+          reportTerminalFailure(`MPEG-TS 播放失败：${reason || '媒体流读取或解复用失败'}`, reason || 'mpegts-error', failure);
         });
         const keepPaused = currentHandoff()?.paused;
         if (keepPaused) {
           updatePlaybackStatus({ paused: true });
         } else {
+          armFirstFrameTimer();
           try { player.play(); } catch { /* Ignore autoplay refusal. */ }
           updatePlaybackStatus({ paused: false });
         }
@@ -428,6 +501,12 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
     return () => {
       cancelled = true;
       recovery.cancel();
+      clearFirstFrameTimer();
+      playbackFrameAttempt += 1;
+      if (playbackFrameCallbackId != null && typeof video.cancelVideoFrameCallback === 'function') {
+        video.cancelVideoFrameCallback(playbackFrameCallbackId);
+      }
+      if (playbackRafId != null) cancelAnimationFrame(playbackRafId);
       if (speedTimer) clearInterval(speedTimer);
       video.removeEventListener('timeupdate', onTime);
       video.removeEventListener('canplay', onCanPlay);

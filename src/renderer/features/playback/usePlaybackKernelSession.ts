@@ -12,6 +12,7 @@ import type { PlaybackHandoffPort } from './application/playbackHandoff';
 import type { PlayerPlaybackPresentationUpdate } from './application/PlayerPlaybackPresentation';
 import type { PlaybackKernelSessionPort } from './application/mpvPlaybackPorts';
 import { projectMpvPlaybackEvent } from './application/mpvPlaybackEventModel';
+import { classifyPlaybackFailure, type PlaybackFailureContext } from '../../../shared/playbackFailure';
 
 export interface PlaybackKernelSessionOptions {
   port: PlaybackKernelSessionPort;
@@ -21,7 +22,7 @@ export interface PlaybackKernelSessionOptions {
   onState?: (state: MpvKernelState) => void;
   onEngineFailure?: (kernel: Kernel, reason: string) => void;
   /** ★ 2026-10-25（自动切源容错机制 AutoChangeParse）：流播放失败/崩溃时回调并自动切线 */
-  onPlaybackFailure?: (currentTime: number, reason: string) => void;
+  onPlaybackFailure?: (currentTime: number, reason: string, failure?: PlaybackFailureContext) => void;
   onPlaybackStarted?: () => void;
   url: string;
   progressKey: string;
@@ -174,7 +175,9 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
       if (plan.terminalPresentation) {
         updatePlaybackStatus(plan.terminalPresentation);
         if (plan.terminalPresentation.mpvError) {
-          latestOptions.current.onPlaybackFailure?.(timeRef.current, String(plan.terminalPresentation.mpvError));
+            const reason = String(plan.terminalPresentation.mpvError);
+            const failure = classifyPlaybackFailure({ engine: engine ? 'unknown' : 'mpv', reason });
+            latestOptions.current.onPlaybackFailure?.(timeRef.current, reason, failure);
         }
       }
       eofFired = plan.nextEofHandled;
@@ -202,7 +205,8 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
       pendingEvents = [];
       const reason = error instanceof Error ? error.message : String(error);
       updatePlaybackStatus({ mpvError: label + '启动失败：' + reason + '（可切回内置内核）', loading: false });
-      latestOptions.current.onPlaybackFailure?.(timeRef.current, reason);
+      const failure = classifyPlaybackFailure({ engine: engine ? 'unknown' : 'mpv', reason });
+      latestOptions.current.onPlaybackFailure?.(timeRef.current, reason, failure);
       if (engine) latestOptions.current.onEngineFailure?.(kernel, reason);
     });
 

@@ -1,4 +1,5 @@
 import type { MediaStateEvent } from '../../../../shared/player';
+import type { PlaybackFailureStage } from '../../../../shared/playbackFailure';
 
 /** Telemetry capability owned by playback; implementations live at the renderer boundary. */
 export interface MediaDiagnosticsPort {
@@ -15,6 +16,10 @@ export interface HtmlMediaDiagnosticSnapshot {
   mediaErrorCode?: number;
   networkState?: number;
   mediaErrorMessage?: string;
+  failureStage?: PlaybackFailureStage;
+  failureHttpStatus?: number;
+  failureRetryable?: boolean;
+  failureCode?: string;
 }
 
 export function createHtmlMediaDiagnosticEvent(snapshot: HtmlMediaDiagnosticSnapshot): MediaStateEvent {
@@ -29,6 +34,10 @@ export function createHtmlMediaDiagnosticEvent(snapshot: HtmlMediaDiagnosticSnap
     ...(snapshot.mediaErrorCode == null ? {} : { mediaErrorCode: snapshot.mediaErrorCode }),
     ...(snapshot.networkState == null ? {} : { networkState: snapshot.networkState }),
     ...(snapshot.mediaErrorMessage ? { mediaErrorMessage: snapshot.mediaErrorMessage } : {}),
+    ...(snapshot.failureStage ? { failureStage: snapshot.failureStage } : {}),
+    ...(snapshot.failureHttpStatus == null ? {} : { failureHttpStatus: snapshot.failureHttpStatus }),
+    ...(snapshot.failureRetryable == null ? {} : { failureRetryable: snapshot.failureRetryable }),
+    ...(snapshot.failureCode ? { failureCode: snapshot.failureCode } : {}),
   };
 }
 

@@ -60,5 +60,9 @@ const playerDependencies: VideoPlayerPresenterDependencies = {
 
 export default function VideoPlayer(props: VideoPlayerProps) {
   const model = useVideoPlayerPresenter(props, playerDependencies);
-  return <VideoPlayerView model={model} />;
+  return <VideoPlayerView
+    model={model}
+    statusOverlay={props.statusOverlay}
+    suppressPlaybackFailure={props.suppressPlaybackFailure}
+  />;
 }

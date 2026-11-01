@@ -16,6 +16,7 @@ const hlsTestState = vi.hoisted(() => ({
   destroyed: 0,
   instances: [] as Array<{
     errorHandler?: (...args: unknown[]) => void;
+    fragmentLoadedHandler?: (...args: unknown[]) => void;
     startLoads: number;
     mediaRecoveries: number;
     destroyed: boolean;
@@ -38,6 +39,7 @@ vi.mock('hls.js', () => {
     ];
     instanceState = { startLoads: 0, mediaRecoveries: 0, destroyed: false } as {
       errorHandler?: (...args: unknown[]) => void;
+    fragmentLoadedHandler?: (...args: unknown[]) => void;
       startLoads: number;
       mediaRecoveries: number;
       destroyed: boolean;
@@ -47,6 +49,7 @@ vi.mock('hls.js', () => {
     attachMedia() {}
     on(event: string, handler: (...args: unknown[]) => void) {
       if (event === Events.ERROR) this.instanceState.errorHandler = handler;
+      if (event === Events.FRAG_LOADED) this.instanceState.fragmentLoadedHandler = handler;
     }
     startLoad() { this.instanceState.startLoads++; }
     recoverMediaError() { this.instanceState.mediaRecoveries++; }
@@ -56,6 +59,7 @@ vi.mock('hls.js', () => {
 });
 
 const playbackUrl = 'https://media.example/video.mp4';
+const videoFrameCallbacks: VideoFrameRequestCallback[] = [];
 const playbackSource: PlaybackSourceRef = { profileId: 'profile-a', key: 'source-a' };
 const mediaDiagnostics: MediaDiagnosticsPort = { report: async () => undefined };
 const storedPositions = new Map<string, number>();
@@ -80,6 +84,7 @@ function emitFatalHlsError(instanceIndex: number, type: 'networkError' | 'mediaE
 function Harness({
   pausedHandoff = false,
   onEnded = () => undefined,
+  onPlaybackStarted = () => undefined,
   clearAuto = () => undefined,
   tryExternalFallback,
   kernel = 'html5',
@@ -91,6 +96,7 @@ function Harness({
 }: {
   pausedHandoff?: boolean;
   onEnded?: () => void;
+  onPlaybackStarted?: () => void;
   clearAuto?: () => void;
   tryExternalFallback?: (sourceUrl: string, position: number) => Promise<{ opened: boolean; player?: string; error?: string } | null>;
   kernel?: Kernel;
@@ -137,6 +143,14 @@ function Harness({
     });
     video.load = vi.fn();
     video.canPlayType = vi.fn((): CanPlayTypeResult => 'probably');
+    Object.defineProperty(video, 'requestVideoFrameCallback', {
+      configurable: true,
+      value: (callback: VideoFrameRequestCallback) => {
+        videoFrameCallbacks.push(callback);
+        return videoFrameCallbacks.length;
+      },
+    });
+    Object.defineProperty(video, 'cancelVideoFrameCallback', { configurable: true, value: vi.fn() });
   }, []);
 
   useHtml5PlaybackSession({
@@ -173,6 +187,7 @@ function Harness({
     clearAuto,
     revealControls: () => undefined,
     recoverHtmlPlayback,
+    onPlaybackStarted,
     tryExternalFallback,
     handlePlaybackEnd: onEnded,
     canAdvance: () => true,
@@ -195,6 +210,7 @@ afterEach(() => {
   localStorage.clear();
   hlsTestState.destroyed = 0;
   hlsTestState.instances = [];
+  videoFrameCallbacks.length = 0;
   vi.restoreAllMocks();
 });
 
@@ -302,6 +318,46 @@ describe('useHtml5PlaybackSession', () => {
     expect(positionMemory.read(playbackUrl, playbackSource)).toBe(52);
   });
 
+  it('confirms playback history only after the browser presents a video frame', async () => {
+    const onPlaybackStarted = vi.fn();
+    render(<Harness onPlaybackStarted={onPlaybackStarted} />);
+    const video = screen.getByTestId('video') as HTMLVideoElement;
+    await waitFor(() => expect(video.play).toHaveBeenCalledOnce());
+
+    act(() => video.dispatchEvent(new Event('playing')));
+    expect(onPlaybackStarted).not.toHaveBeenCalled();
+    expect(videoFrameCallbacks).toHaveLength(1);
+
+    act(() => videoFrameCallbacks.shift()?.(performance.now(), {} as VideoFrameCallbackMetadata));
+    expect(onPlaybackStarted).toHaveBeenCalledOnce();
+  });
+
+  it('re-arms frame confirmation when playback pauses before the first frame', async () => {
+    const onPlaybackStarted = vi.fn();
+    render(<Harness onPlaybackStarted={onPlaybackStarted} />);
+    const video = screen.getByTestId('video') as HTMLVideoElement;
+    await waitFor(() => expect(video.play).toHaveBeenCalledOnce());
+
+    act(() => video.dispatchEvent(new Event('playing')));
+    const firstCallback = videoFrameCallbacks[0];
+    expect(firstCallback).toBeDefined();
+
+    act(() => {
+      Object.defineProperty(video, 'paused', { configurable: true, writable: true, value: true });
+      video.dispatchEvent(new Event('pause'));
+    });
+    expect(video.cancelVideoFrameCallback).toHaveBeenCalledWith(1);
+
+    act(() => {
+      Object.defineProperty(video, 'paused', { configurable: true, writable: true, value: false });
+      video.dispatchEvent(new Event('playing'));
+    });
+    expect(videoFrameCallbacks).toHaveLength(2);
+
+    act(() => videoFrameCallbacks[1]?.(performance.now(), {} as VideoFrameCallbackMetadata));
+    expect(onPlaybackStarted).toHaveBeenCalledOnce();
+  });
+
   it('keeps a paused kernel handoff paused instead of autoplaying', async () => {
     render(<Harness pausedHandoff />);
     const video = screen.getByTestId('video') as HTMLVideoElement;
@@ -356,6 +412,17 @@ describe('useHtml5PlaybackSession', () => {
     expect(hlsTestState.instances[0]?.startLoads).toBe(0);
     expect(recoverHtmlPlayback).not.toHaveBeenCalled();
     expect(screen.getByTestId('view').textContent).toContain('HLS 播放失败');
+  });
+
+  it('reports HLS fragment speed from the loader timing object', async () => {
+    render(<Harness url="https://media.example/live.m3u8" runtime={desktopRuntime} />);
+    await waitFor(() => expect(hlsTestState.instances[0]?.fragmentLoadedHandler).toBeTypeOf('function'));
+
+    act(() => hlsTestState.instances[0]?.fragmentLoadedHandler?.('fragment-loaded', {
+      frag: { stats: { loading: { start: 100, first: 120, end: 1100 }, loaded: 1_048_576 } },
+    }));
+
+    expect(screen.getByTestId('view').textContent).toContain('"netSpeed":1024');
   });
 
   it('uses the HLS manifest response body to identify an HTML login redirect', async () => {

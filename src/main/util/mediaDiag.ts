@@ -58,6 +58,12 @@ export function noteMediaState(wcId: number, win: string, raw: unknown): void {
     mediaErrorCode: asNum(r.mediaErrorCode),
     networkState: asNum(r.networkState),
     mediaErrorMessage: sanitizeMediaError(r.mediaErrorMessage),
+    failureStage: ['startup', 'authorization', 'missing-media', 'network', 'demux', 'decode', 'engine', 'unknown'].includes(String(r.failureStage))
+      ? r.failureStage
+      : undefined,
+    failureHttpStatus: asHttpStatus(r.failureHttpStatus),
+    failureRetryable: typeof r.failureRetryable === 'boolean' ? r.failureRetryable : undefined,
+    failureCode: sanitizeFailureCode(r.failureCode),
   };
   last = { wcId, win, at: Date.now(), state };
   const brief =
@@ -66,9 +72,22 @@ export function noteMediaState(wcId: number, win: string, raw: unknown): void {
     + `${state.mediaErrorCode == null ? '' : ` mediaErr=${state.mediaErrorCode}`}`
     + `${state.networkState == null ? '' : ` net=${state.networkState}`}`
     + `${state.mediaErrorMessage ? ` detail=${state.mediaErrorMessage}` : ''}`
+    + `${state.failureStage ? ` stage=${state.failureStage}` : ''}`
+    + `${state.failureHttpStatus == null ? '' : ` http=${state.failureHttpStatus}`}`
+    + `${state.failureRetryable == null ? '' : ` retryable=${state.failureRetryable ? 1 : 0}`}`
+    + `${state.failureCode ? ` code=${state.failureCode}` : ''}`
     + `${state.title ? ` title=${state.title}` : ''}${state.url ? ` url=${state.url}` : ''}`;
   if (LOUD.test(state.event)) fileLogger.w(brief);
   else fileLogger.i(brief);
+}
+
+function asHttpStatus(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599 ? value : undefined;
+}
+
+function sanitizeFailureCode(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^[a-z0-9_.:-]{1,48}$/i.test(value)) return undefined;
+  return value;
 }
 
 /** 最后一次上报的窗口 id（无上报 → null）。GPU 崩溃恢复据此选「最后在播放的那个窗口」。 */

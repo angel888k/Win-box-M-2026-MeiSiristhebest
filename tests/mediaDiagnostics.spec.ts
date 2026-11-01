@@ -38,4 +38,21 @@ describe('HTML media diagnostic mapping', () => {
       mediaErrorMessage: 'MEDIA_ELEMENT_ERROR: Format error',
     });
   });
+
+  it('preserves the first-frame startup timeout stage for recovery diagnostics', () => {
+    expect(createHtmlMediaDiagnosticEvent({
+      event: 'error',
+      url: 'https://media.example/live.m3u8?token=private',
+      readyState: 1,
+      currentTime: 0,
+      paused: true,
+      failureStage: 'startup',
+      failureRetryable: true,
+      failureCode: 'first-frame-timeout',
+    })).toMatchObject({
+      failureStage: 'startup',
+      failureRetryable: true,
+      failureCode: 'first-frame-timeout',
+    });
+  });
 });

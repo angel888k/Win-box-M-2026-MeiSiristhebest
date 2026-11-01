@@ -1,12 +1,9 @@
 import { formatEpisodeLabel } from '../../../lib/epName';
 import { playbackResultError } from '../../../../shared/playbackResult';
-import { recordOpenedPlayerEpisode } from './recordPlayerEpisode';
 import { resolvePlayerPlayback } from './resolvePlayerPlayback';
 import type {
   PlayerInitData,
-  PlayerPageHistoryPort,
   PlayerPlaybackResolutionPort,
-  PlayerSourceMemoryPort,
 } from './playerPageSession';
 import type { PlayerPageSessionAction } from './playerPageSessionState';
 
@@ -19,8 +16,6 @@ export interface ResolvePlayerPageEpisodeRequest {
 
 export interface ResolvePlayerPageEpisodePorts {
   playback: PlayerPlaybackResolutionPort;
-  history: Pick<PlayerPageHistoryPort, 'recordHistory' | 'persist'>;
-  sourceMemory: PlayerSourceMemoryPort;
   publish(action: PlayerPageSessionAction): void;
   isCurrent(): boolean;
 }
@@ -60,8 +55,5 @@ export async function resolvePlayerPageEpisode(
     return 'failed';
   }
 
-  if (!data.deferHistoryUntilPlayback) {
-    recordOpenedPlayerEpisode({ data, index, displayName, episodeLabel }, ports.history, ports.sourceMemory);
-  }
   return 'resolved';
 }

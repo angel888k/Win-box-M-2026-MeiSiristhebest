@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import type { PlaybackRecoveryCause, PlayerPageHistoryPort, PlayerPageSessionPort, PlayerSourceMemoryPort, PlayerInitData } from './application/playerPageSession';
+import type { PlaybackFailureContext } from '../../../shared/playbackFailure';
 import { createPlayerPageSessionWorkflow } from './application/playerPageSessionWorkflow';
 import { usePlayerPageEvents } from './usePlayerPageEvents';
 import { usePlayerHistoryProgress } from './usePlayerHistoryProgress';
@@ -16,7 +17,7 @@ export interface PlayerPageSession extends PlayerPageSessionPresentation {
   canNext: boolean;
   selectEpisode(index: number): void;
   retryCurrent(): void;
-  autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause): Promise<boolean>;
+  autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause, failure?: PlaybackFailureContext): Promise<boolean>;
   retryAlternativeSearch(currentPosition?: number): Promise<boolean>;
   selectAlternative(id: string): boolean;
   confirmPlaybackStarted(): void;

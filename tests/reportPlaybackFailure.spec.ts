@@ -14,12 +14,23 @@ describe('reportPlaybackFailure', () => {
     await reportPlaybackFailure(42, 'decode failed', { autoChangeParse, onPlaybackFailure, notify });
 
     expect(order).toEqual([
-      '当前媒体流播放失败（decode failed），正在查找已核验的同集备用来源…',
+      '播放内核无法解码媒体数据，正在查找已核验的同集备用来源…',
       'auto-change',
       'page-failure',
     ]);
-    expect(autoChangeParse).toHaveBeenCalledWith(42, 'decode failed', 'media-failure');
-    expect(onPlaybackFailure).toHaveBeenCalledWith(42, 'decode failed');
+    expect(autoChangeParse).toHaveBeenCalledWith(42, 'decode failed', 'media-failure', expect.objectContaining({ stage: 'decode', engine: 'unknown' }));
+    expect(onPlaybackFailure).toHaveBeenCalledWith(42, 'decode failed', expect.objectContaining({ stage: 'decode', engine: 'unknown' }));
+  });
+
+  it('passes sanitized failure context into recovery and uses it in the player message', async () => {
+    const notify = vi.fn();
+    const autoChangeParse = vi.fn(() => Promise.resolve(true));
+    const failure = { stage: 'authorization' as const, engine: 'hls.js' as const, httpStatus: 403, retryable: false };
+
+    await reportPlaybackFailure(42, 'HTTP 403', { autoChangeParse, notify }, failure);
+
+    expect(autoChangeParse).toHaveBeenCalledWith(42, 'HTTP 403', 'media-failure', failure);
+    expect(notify).toHaveBeenCalledWith('源站要求登录或拒绝了当前访问权限，正在查找已核验的同集备用来源…');
   });
 
   it('reports rejected failover without leaving an unhandled rejection', async () => {
@@ -32,7 +43,7 @@ describe('reportPlaybackFailure', () => {
       notify,
     })).resolves.toBeUndefined();
 
-    expect(onPlaybackFailure).toHaveBeenCalledWith(12, 'network error');
+    expect(onPlaybackFailure).toHaveBeenCalledWith(12, 'network error', expect.objectContaining({ stage: 'network', retryable: true }));
     expect(notify).toHaveBeenLastCalledWith('备用来源检索失败：no more parses');
   });
 
@@ -43,7 +54,7 @@ describe('reportPlaybackFailure', () => {
       notify,
     });
 
-    expect(notify).toHaveBeenNthCalledWith(1, '当前媒体流播放失败（network error），正在查找已核验的同集备用来源…');
+    expect(notify).toHaveBeenNthCalledWith(1, '网络请求未能稳定取得媒体数据，正在查找已核验的同集备用来源…');
     expect(notify).toHaveBeenLastCalledWith('暂未找到已核验的备用来源；可重新搜索，或切换到其他播放源。');
   });
 
@@ -57,7 +68,7 @@ describe('reportPlaybackFailure', () => {
       notify,
     });
 
-    expect(onPlaybackFailure).toHaveBeenCalledWith(0, 'engine exited');
+    expect(onPlaybackFailure).toHaveBeenCalledWith(0, 'engine exited', expect.objectContaining({ stage: 'unknown' }));
     expect(notify).toHaveBeenLastCalledWith('备用来源检索失败：session unavailable');
   });
 
@@ -67,7 +78,18 @@ describe('reportPlaybackFailure', () => {
 
     await reportPlaybackFailure(8, 'stream ended', { onPlaybackFailure, notify });
 
-    expect(onPlaybackFailure).toHaveBeenCalledWith(8, 'stream ended');
+    expect(onPlaybackFailure).toHaveBeenCalledWith(8, 'stream ended', expect.objectContaining({ stage: 'unknown' }));
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('uses a safe classified summary when no structured failure was supplied', async () => {
+    const notify = vi.fn();
+    await reportPlaybackFailure(8, 'HTTP 403 https://media.invalid/watch?token=secret', {
+      autoChangeParse: vi.fn(() => Promise.resolve(true)),
+      notify,
+    });
+
+    expect(notify).toHaveBeenCalledWith('源站要求登录或拒绝了当前访问权限，正在查找已核验的同集备用来源…');
+    expect(JSON.stringify(notify.mock.calls)).not.toContain('secret');
   });
 });

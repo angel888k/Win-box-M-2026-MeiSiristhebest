@@ -238,7 +238,25 @@ export type MpvCommand =
   // ★ 超分插件（M1）：整链替换 mpv 着色器（空数组 = 关闭超分），即时生效、不重启会话
   | { type: 'glsl-shaders'; value: string[] }
   // ★ 超分插件（M1）：换超分档位 —— 渲染层只报档位，**绝对路径由主进程解析**（渲染层不碰文件系统）
-  | { type: 'sr-mode'; value: SrMode };
+  | { type: 'sr-mode'; value: SrMode }
+  // Query the active MPV render passes for evidence that the selected shader is running.
+  | { type: 'sr-render-status'; value: SrMode };
+
+export interface MpvShaderRenderStatus {
+  state: 'disabled' | 'no-session' | 'unavailable' | 'unsupported' | 'waiting-for-frame' | 'unidentifiable' | 'not-observed' | 'observed';
+  /** Render-pass descriptions reported by the active MPV VO. */
+  activePasses?: string[];
+  /** Pass descriptions that exactly match the selected shader sources' //!DESC labels. */
+  matchingPasses?: string[];
+  detail?: string;
+}
+
+/** `acknowledged` means MPV replied successfully; it does not prove GPU rendering. */
+export interface MpvCommandResult {
+  ok: boolean;
+  acknowledged?: boolean;
+  renderStatus?: MpvShaderRenderStatus;
+}
 
 /** ★ 2026-10-17（用户要求「音轨设置」）：音轨条目（mpv `track-list` 里的 audio 项归一后） */
 export interface MpvAudioTrack {
@@ -450,6 +468,11 @@ export interface MediaStateEvent {
   networkState?: number;
   /** Short browser-provided detail; main-process diagnostics redact URLs and secrets. */
   mediaErrorMessage?: string;
+  /** Structured recovery facts; only allow-listed stages and short codes are written to diagnostics. */
+  failureStage?: import('./playbackFailure').PlaybackFailureStage;
+  failureHttpStatus?: number;
+  failureRetryable?: boolean;
+  failureCode?: string;
 }
 
 /** 字幕字号换算：CSS px → mpv `sub-font-size`（mpv 默认 55 ≈ 720p 常规字号；近似 2:1，两侧共用） */

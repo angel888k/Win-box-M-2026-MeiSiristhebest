@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { formatPlaybackTime } from './formatting';
 import { PlayerEpisodePanel } from './PlayerEpisodePanel';
 import { PlayerContextMenu } from './PlayerContextMenu';
@@ -11,7 +11,11 @@ import { PlayerStatusOverlays } from './PlayerStatusOverlays';
 import { PlayerControlsBar } from './PlayerControlsBar';
 import type { VideoPlayerPresenterModel } from './VideoPlayerPresenter';
 
-export function VideoPlayerView({ model }: { model: VideoPlayerPresenterModel }) {
+export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure = false }: {
+  model: VideoPlayerPresenterModel;
+  statusOverlay?: ReactNode;
+  suppressPlaybackFailure?: boolean;
+}) {
   const { identity, media, navigation, surface, playback, danmaku, contextMenu, episodes, technicalPanels, info, toast, status, controls } = model;
   const { url, resourceName, mini } = identity;
   const { canPrev, canNext, onPrev, onNext } = navigation;
@@ -76,7 +80,7 @@ export function VideoPlayerView({ model }: { model: VideoPlayerPresenterModel })
       className={`vplayer${ui ? ' vui' : ''}${full ? ' vfull' : ''}${mini ? ' vp-mini' : ''}`}
       style={{ '--sub-font': `${subFont}px`, '--sub-bottom': `${subBottom}px` } as CSSProperties}
       onMouseMove={poke}
-            onMouseLeave={hideIfNoPanel}
+      onMouseLeave={hideIfNoPanel}
       onDoubleClick={onSurfaceDoubleClick}
       onContextMenu={playerContextMenu.onContextMenu}
     >
@@ -101,6 +105,7 @@ export function VideoPlayerView({ model }: { model: VideoPlayerPresenterModel })
           onMouseDown={onBoostMouseDown}
         />
       </div>
+      {statusOverlay}
       {/* 弹幕叠加层（canvas，全屏区域，不拦截鼠标；fit 决定绘制区是否避让宽银幕黑边）
           ★ 2026-10-08 MPV 内核：时间/画面尺寸由主进程事件驱动（mpv 子窗口在 Chromium 之下，覆盖层仍在其上） */}
       <DanmakuOverlay
@@ -126,9 +131,13 @@ export function VideoPlayerView({ model }: { model: VideoPlayerPresenterModel })
           {commandError || skipToast || boostTip + 'x'}
         </div>
       )}
-      <PlayerStatusOverlays {...statusProps} />
+      <PlayerStatusOverlays
+        {...statusProps}
+        error={suppressPlaybackFailure ? '' : statusProps.error}
+        mpvError={suppressPlaybackFailure ? '' : statusProps.mpvError}
+      />
       {/* 控制条（小窗口：只保留 上/下集 + 播放暂停） */}
-            <PlayerControlsBar {...playerControlsModel} />
+      <PlayerControlsBar {...playerControlsModel} />
     </div>
   );
 }

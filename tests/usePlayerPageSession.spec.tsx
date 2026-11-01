@@ -81,6 +81,9 @@ describe('usePlayerPageSession', () => {
     });
 
     expect(result.current.activeUrl).toBe('https://media.invalid/episode-2.mp4');
+    expect(historyPort.recordHistory).not.toHaveBeenCalled();
+
+    act(() => result.current.confirmPlaybackStarted());
     expect(historyPort.recordHistory).toHaveBeenCalledTimes(1);
     expect(historyPort.recordHistory).toHaveBeenCalledWith(expect.objectContaining({
       url: 'episode-2',

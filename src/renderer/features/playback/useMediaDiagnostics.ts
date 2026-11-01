@@ -1,8 +1,14 @@
 import { useEffect, type RefObject } from 'react';
 import { reportHtmlMediaEvent, type MediaDiagnosticsPort } from './application/mediaDiagnostics';
+import { classifyPlaybackFailure } from '../../../shared/playbackFailure';
 
 function reportVideoEvent(port: MediaDiagnosticsPort, video: HTMLVideoElement, url: string, title: string | undefined, event: string): void {
   const mediaError = event === 'error' ? video.error : null;
+  const failure = mediaError ? classifyPlaybackFailure({
+    engine: 'html5',
+    reason: mediaError.message,
+    mediaErrorCode: mediaError.code,
+  }) : null;
   reportHtmlMediaEvent(port, {
     event,
     url,
@@ -14,6 +20,11 @@ function reportVideoEvent(port: MediaDiagnosticsPort, video: HTMLVideoElement, u
       mediaErrorCode: mediaError.code,
       mediaErrorMessage: mediaError.message,
       networkState: video.networkState,
+    } : {}),
+    ...(failure ? {
+      failureStage: failure.stage,
+      failureRetryable: failure.retryable,
+      failureCode: failure.code,
     } : {}),
   });
 }

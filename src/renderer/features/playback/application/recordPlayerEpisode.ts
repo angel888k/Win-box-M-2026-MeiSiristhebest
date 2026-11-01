@@ -8,7 +8,7 @@ export interface OpenedPlayerEpisode {
   episodeLabel: string;
 }
 
-/** Persist source memory and watch history after the selected episode has resolved successfully. */
+/** Persist source memory and watch history only after the selected episode has actually started. */
 export function recordOpenedPlayerEpisode(
   opened: OpenedPlayerEpisode,
   history: Pick<PlayerHistoryProgressPort, 'recordHistory' | 'persist'>,
