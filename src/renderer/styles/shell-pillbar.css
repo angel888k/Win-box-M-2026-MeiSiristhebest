@@ -298,7 +298,7 @@
 :root[data-shell='pillbar'] .srcpick-item:hover,
 :root[data-shell='pillbar'] .sp-item:hover { background: var(--accent-soft); }
 :root[data-shell='pillbar'] .srcpick-item.active { color: var(--text-accent); font-weight: 700; }
-:root[data-shell='pillbar'] .srcpick-sub.cur::before { color: var(--text-accent-secondary, var(--accent-2)); }
+:root[data-shell='pillbar'] .srcpick-sub.cur:not([aria-pressed='true']) { border-color: var(--border-strong, var(--border)); }
 :root[data-shell='pillbar'] .sp-rank-no.top { background: var(--accent); color: var(--on-accent); }
 :root[data-shell='pillbar'] .sp-clear { border-color: var(--border); color: var(--text-dim); }
 :root[data-shell='pillbar'] .sp-clear:hover { color: var(--text-danger); border-color: var(--text-danger); }
