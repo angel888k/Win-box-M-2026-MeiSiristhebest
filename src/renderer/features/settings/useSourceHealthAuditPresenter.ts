@@ -71,8 +71,8 @@ export function useSourceHealthAuditPresenter({
     }
     const names = failed.slice(0, 6).map((item) => item.name).join('、');
     const accepted = await confirm(
-      `确定删除 ${failed.length} 个体检失败源吗？\n（${names}${failed.length > 6 ? '…' : ''}）\n此操作只影响当前列表并写入应用配置，不会改动任何导入的原始 JSON 文件。`,
-      { title: '删除体检失败源', confirmLabel: '删除', tone: 'danger' },
+      `本次首页请求有 ${failed.length} 个报错：${names}${failed.length > 6 ? '…' : ''}。\n报错只能说明这次体检没完成，不能证明线路搜索/播放不可用或永久失效。常见原因包括网络、权限、拦截和运行环境。\n仍要从当前子仓档案的站点配置中删除吗？订阅组成员和子仓档案不会删除，因此仍可能出现在子仓切换列表；请到「管理配置档案」单独移除档案。此操作不会改动导入的原始 JSON 文件。`,
+      { title: '移除本次体检报错的站点配置', confirmLabel: '仍然移除', tone: 'danger' },
     );
     if (!accepted) return;
     if (currentContext.current.profileId !== context.profileId || currentContext.current.sourceSignature !== context.sourceSignature) {
@@ -95,12 +95,12 @@ export function useSourceHealthAuditPresenter({
       setAuditSnapshot(null);
       if (result.kind === 'all-removed') {
         setNotice({
-          text: `已从当前档案删除全部 ${result.deletedCount} 个请求失败线路。`,
+          text: `已从当前档案移除 ${result.deletedCount} 个本次体检报错的站点配置。子仓档案和订阅组成员仍保留。`,
           kind: 'ok',
         });
       } else {
         setNotice({
-          text: `已从当前档案删除 ${result.deletedCount} 个请求失败线路，剩余 ${result.remainingCount} 个。档案名称保持不变。`,
+          text: `已从当前档案移除 ${result.deletedCount} 个本次体检报错的站点配置，剩余 ${result.remainingCount} 个。子仓档案和订阅组成员仍保留。`,
           kind: 'ok',
         });
       }
