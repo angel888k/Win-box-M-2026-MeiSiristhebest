@@ -7,7 +7,7 @@ import { registerHandler } from '../util/ipcGuard';
 export interface VodIpcPort {
   home(key: string, profileId?: string, signal?: AbortSignal): Promise<unknown>;
   category(key: string, tid: string, pg: string, extend: Record<string, string>, profileId?: string, signal?: AbortSignal): Promise<unknown>;
-  detail(key: string, ids: string[], profileId?: string): Promise<unknown>;
+  detail(key: string, ids: string[], profileId?: string, signal?: AbortSignal): Promise<unknown>;
   search(key: string, wd: string, profileId?: string, signal?: AbortSignal): Promise<unknown>;
   searchAll(
     wd: string,
@@ -63,6 +63,7 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
   ipcMain.on(IPC.VOD_CATEGORY_CANCEL, (event, requestId) => cancelRequest(event, requestId, '分类浏览已由调用窗口取消'));
   ipcMain.on(IPC.VOD_SEARCH_CANCEL, (event, requestId) => cancelRequest(event, requestId, '搜索已由调用窗口取消'));
   ipcMain.on(IPC.VOD_SEARCH_ALL_CANCEL, (event, requestId) => cancelRequest(event, requestId, '搜索已由调用窗口取消'));
+  ipcMain.on(IPC.VOD_DETAIL_CANCEL, (event, requestId) => cancelRequest(event, requestId, '影片详情请求已取消'));
 
   registerHandler(IPC.VOD_HOME, (event, args: { key: string; profileId?: string; requestId?: string }) =>
     withRequestCancellation(event, args.requestId, '首页浏览', (signal) =>
@@ -76,8 +77,9 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
     requestId?: string;
   }) => withRequestCancellation(event, args.requestId, '分类浏览', (signal) =>
     host.category(args.key, args.tid, args.pg, args.extend || {}, args.profileId, signal)), logger);
-  registerHandler(IPC.VOD_DETAIL, (_event, args: { key: string; ids: string[]; profileId?: string }) =>
-    host.detail(args.key, args.ids, args.profileId), logger);
+  registerHandler(IPC.VOD_DETAIL, (event, args: { key: string; ids: string[]; profileId?: string; requestId?: string }) =>
+    withRequestCancellation(event, args.requestId, '影片详情', (signal) =>
+      host.detail(args.key, args.ids, args.profileId, signal)), logger);
   registerHandler(IPC.VOD_SEARCH, (event, args: { key: string; wd: string; profileId?: string; requestId?: string }) =>
     withRequestCancellation(event, args.requestId, '搜索', (signal) => signal
       ? host.search(args.key, args.wd, args.profileId, signal)

@@ -200,9 +200,9 @@ export class PySpider extends Spider {
     // extend 以 JSON 字符串传入，Python 侧 json.loads 解析
     return this.call('categoryContent', [tid, pg, JSON.stringify(extend || {})], undefined, signal);
   }
-  detailContent(ids: string[]): Promise<string> {
+  detailContent(ids: string[], signal?: AbortSignal): Promise<string> {
     // ids 以 JSON 数组字符串传入，runner.py 用 json.loads 还原为 Python list
-    return this.call('detailContent', [JSON.stringify(ids || [])]);
+    return this.call('detailContent', [JSON.stringify(ids || [])], undefined, signal);
   }
   searchContent(key: string, quick: boolean, timeoutMs?: number, signal?: AbortSignal): Promise<string> {
     return this.call('searchContent', [key, String(quick)], timeoutMs, signal);

@@ -25,8 +25,9 @@ export class CmsSourceAdapter implements SourceCatalogPort, SourcePlaybackPort {
     return { ...result, sourceKey: bean.key };
   }
 
-  detail(bean: SourceBean, ids: string[], timeoutMs = 20000): Promise<VodDetail | null> {
-    return this.catalog.detail(bean.api, bean.type, bean.key, ids, timeoutMs);
+  detail(bean: SourceBean, ids: string[], timeoutMs = 20000, signal?: AbortSignal): Promise<VodDetail | null> {
+    throwIfAborted(signal);
+    return awaitWithAbort(this.catalog.detail(bean.api, bean.type, bean.key, ids, timeoutMs, signal), signal);
   }
 
   search(bean: SourceBean, wd: string, _quick: boolean, timeoutMs: number, signal?: AbortSignal): Promise<VodItem[]> {

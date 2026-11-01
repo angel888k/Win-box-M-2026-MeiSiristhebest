@@ -95,6 +95,24 @@ describe('JarSpider runtimeState — 失败不是准备中', () => {
     expect(bridge.call).toHaveBeenCalledTimes(1);
   });
 
+  it('detail cancellation reaches the shared JVM call without cancelling runtime preparation', async () => {
+    const { bridge, sp } = setup();
+    const controller = new AbortController();
+    let finishCall!: (value: Awaited<ReturnType<JarSpiderRuntimePort['call']>>) => void;
+    bridge.call.mockImplementation((_paths, _className, method, _args, _timeout, _tag, signal) => {
+      expect(method).toBe('detailContent');
+      expect(signal).toBe(controller.signal);
+      return new Promise((resolve) => { finishCall = resolve; });
+    });
+
+    const detail = sp.detailContent(['movie-1'], controller.signal);
+    await vi.waitFor(() => expect(bridge.call).toHaveBeenCalledTimes(1));
+    controller.abort(new Error('detail closed'));
+
+    await expect(detail).rejects.toMatchObject({ name: 'AbortError', message: 'detail closed' });
+    finishCall({ ok: true, output: '{"list":[]}', reason: '', failureKind: null, problemCode: null });
+  });
+
   it('keeps a JVM invocation timeout typed at the public JarSpider boundary', async () => {
     const { bridge, sp } = setup();
     bridge.call.mockResolvedValue({

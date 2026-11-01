@@ -133,6 +133,7 @@ export const IPC = {
   VOD_CATEGORY: 'vod:category',
   VOD_CATEGORY_CANCEL: 'vod:categoryCancel',
   VOD_DETAIL: 'vod:detail',
+  VOD_DETAIL_CANCEL: 'vod:detailCancel',
   VOD_SEARCH: 'vod:search',
   VOD_SEARCH_CANCEL: 'vod:searchCancel',
   VOD_SEARCH_ALL: 'vod:searchAll',

@@ -1,5 +1,5 @@
 // tests/pySpider.spec.ts — .py 蜘蛛（嵌入式 CPython3 宿主 PySpider）适配层单测
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -220,5 +220,40 @@ describe('PySpider — 方法→callPython 的参数契约', () => {
     expect(calls[2].args.slice(1)).toEqual(['kw', 'false']);
     expect(calls[3].method).toBe('searchContent');
     expect(calls[3].args.slice(1)).toEqual(['kw', 'true', '3']);
+  });
+
+  it('forwards detail cancellation to the Python runtime invocation', async () => {
+    const cacheDir = tmpCache();
+    const controller = new AbortController();
+    let finishCall!: (value: Awaited<ReturnType<PythonSpiderRuntimePort['callPython']>>) => void;
+    const callPython: PythonSpiderRuntimePort['callPython'] = vi.fn((
+      _path: string,
+      _className: string,
+      method: string,
+      _args: string[],
+      _timeout?: number,
+      _source?: string,
+      signal?: AbortSignal,
+    ): Promise<Awaited<ReturnType<PythonSpiderRuntimePort['callPython']>>> => {
+      expect(method).toBe('detailContent');
+      expect(signal).toBe(controller.signal);
+      return new Promise((resolve) => { finishCall = resolve; });
+    });
+    const bridge: PythonSpiderRuntimePort = {
+      pyRuntimeReady: () => true,
+      prewarmPythonRuntime: async () => cacheDir,
+      prewarmPython: () => 0,
+      callPython,
+    };
+    const spider = new PySpider({
+      key: 'py', api: 'https://x/a.py', ext: '', jar: '', host: makeHost(Array.from(Buffer.from(PY_SRC))),
+    }, bridge, makeScripts());
+
+    const detail = spider.detailContent(['movie-1'], controller.signal);
+    await vi.waitFor(() => expect(callPython).toHaveBeenCalledTimes(1));
+    controller.abort(new Error('detail closed'));
+
+    await expect(detail).rejects.toMatchObject({ name: 'AbortError', message: 'detail closed' });
+    finishCall({ ok: true, output: '{"list":[]}', reason: '', failureKind: null, problemCode: null });
   });
 });

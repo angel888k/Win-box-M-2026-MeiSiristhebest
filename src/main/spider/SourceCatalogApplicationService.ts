@@ -24,9 +24,11 @@ export class SourceCatalogApplicationService {
     return { ...result, items: result.items.map((item) => withSourceRef(item, context.profileId)) };
   }
 
-  async detail(key: string, ids: string[], profileId?: string): Promise<VodDetail | null> {
+  async detail(key: string, ids: string[], profileId?: string, signal?: AbortSignal): Promise<VodDetail | null> {
     const { context, source } = this.resolve(key, profileId);
-    const detail = await this.ports.gateway.detail(source, ids);
+    const detail = signal
+      ? await this.ports.gateway.detail(source, ids, undefined, signal)
+      : await this.ports.gateway.detail(source, ids);
     const result = detail ? { ...detail, sourceRef: { profileId: context.profileId, key } } : null;
     this.ports.detailLoaded?.(source, context.profileId, result);
     return result;

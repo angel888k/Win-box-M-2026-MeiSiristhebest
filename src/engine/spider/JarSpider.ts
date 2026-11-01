@@ -295,8 +295,8 @@ export class JarSpider extends Spider {
       .join('&');
     return this.call('categoryContent', [tid, pg, kv], undefined, signal);
   }
-  detailContent(ids: string[]): Promise<string> {
-    return this.call('detailContent', [ids.join(',')]);
+  detailContent(ids: string[], signal?: AbortSignal): Promise<string> {
+    return this.call('detailContent', [ids.join(',')], undefined, signal);
   }
   /**
    * 搜索：timeoutMs 由调用方（聚合搜索/单源搜索）传入的更紧预算；缺省用源声明 timeout。

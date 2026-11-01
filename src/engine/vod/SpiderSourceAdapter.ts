@@ -44,15 +44,16 @@ export class SpiderSourceAdapter implements SpiderSourcePort {
     return this.normalizer.normalizeSpiderJson(json, bean.key, false);
   }
 
-  async detail(bean: SourceBean, ids: string[], timeoutMs = 20000): Promise<VodDetail | null> {
+  async detail(bean: SourceBean, ids: string[], timeoutMs = 20000, signal?: AbortSignal): Promise<VodDetail | null> {
+    throwIfAborted(signal);
     const sp = this.spiders.forSource(bean);
     const detail = requireOperation(sp, 'detailContent', bean.key);
     const budget = this.requestTimeout(timeoutMs);
-    const json = await this.withTimeout(
-      Promise.resolve(detail(ids)),
+    const json = await awaitWithAbort(this.withTimeout(
+      Promise.resolve(detail(ids, signal)),
       budget,
       `detailContent 超时（>${budget}ms）`,
-    );
+    ), signal);
     const reason = this.spiderReason(sp);
     if (reason && !this.normalizer.parseSpiderJson(json, bean.key)) throw new SourceProblemError('SPIDER_ERROR', reason);
     return this.normalizer.normalizeSpiderDetail(json);

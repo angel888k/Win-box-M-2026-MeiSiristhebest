@@ -43,8 +43,11 @@ export class SourceGateway implements SourceQueryGatewayPort {
     return awaitWithAbort(request, signal);
   }
 
-  async detail(bean: SourceBean, ids: string[], timeoutMs = 20000): Promise<VodDetail | null> {
-    return this.adapterFor(this.adapters.catalog, bean, 'detail').detail(bean, ids, sourceRequestTimeoutMs(bean, timeoutMs));
+  async detail(bean: SourceBean, ids: string[], timeoutMs = 20000, signal?: AbortSignal): Promise<VodDetail | null> {
+    throwIfAborted(signal);
+    const request = this.adapterFor(this.adapters.catalog, bean, 'detail')
+      .detail(bean, ids, sourceRequestTimeoutMs(bean, timeoutMs), signal);
+    return awaitWithAbort(request, signal);
   }
 
   async search(bean: SourceBean, wd: string, signal?: AbortSignal): Promise<VodItem[]>;

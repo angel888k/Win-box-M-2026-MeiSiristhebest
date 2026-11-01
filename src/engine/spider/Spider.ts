@@ -68,7 +68,8 @@ export abstract class Spider {
   }
 
   /** 详情：ids[0]=vod_id */
-  detailContent(_ids: string[]): Promise<string> | string {
+  detailContent(_ids: string[], _signal?: AbortSignal): Promise<string> | string {
+    void _signal;
     return '';
   }
 

@@ -154,7 +154,8 @@ declare global {
   cancelHome: (requestId: string) => void;
   category: (a: { key: string; tid: string; pg: string; extend?: Record<string, string>; profileId?: string; requestId?: string }) => Promise<IpcResult<HomeResult>>;
   cancelCategory: (requestId: string) => void;
-  detail: (a: { key: string; ids: string[]; profileId?: string }) => Promise<IpcResult<VodDetail | null>>;
+   detail: (a: { key: string; ids: string[]; profileId?: string; requestId?: string }) => Promise<IpcResult<VodDetail | null>>;
+   cancelDetail: (requestId: string) => void;
   search: (a: { key: string; wd: string; profileId?: string; requestId?: string }) => Promise<IpcResult<VodItem[]>>;
   cancelSearch: (requestId: string) => void;
         /** ★ 全源搜索：refresh=true 忽略本地缓存强制重搜（「重新搜索」按钮）；默认命中缓存即秒回 */

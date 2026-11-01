@@ -154,8 +154,8 @@ export class JsSpider extends Spider {
     return this.callStr(['categoryContent', 'category'], [tid, pg, filter, extend ?? {}], TIMEOUT_HOME, signal);
   }
 
-  override async detailContent(ids: string[]): Promise<string> {
-    return this.callStr(['detailContent', 'detail'], [ids?.[0] ?? ''], TIMEOUT_OTHER);
+  override async detailContent(ids: string[], signal?: AbortSignal): Promise<string> {
+    return this.callStr(['detailContent', 'detail'], [ids?.[0] ?? ''], TIMEOUT_OTHER, signal);
   }
 
   override async searchContent(key: string, quick: boolean, timeoutMs?: number, signal?: AbortSignal): Promise<string> {

@@ -177,9 +177,9 @@ export class CmsSource {
   }
 
   /** 详情：GET api?ac=...&ids=ID */
-  async detail(api: string, type: number, sourceKey: string, ids: string[], timeoutMs = 20000): Promise<VodDetail | null> {
+  async detail(api: string, type: number, sourceKey: string, ids: string[], timeoutMs = 20000, signal?: AbortSignal): Promise<VodDetail | null> {
     const url = withQuery(api, { ac: this.ac(type), ids: ids.join(',') });
-    const text = await this.fetchText(url, timeoutMs);
+    const text = await this.fetchText(url, timeoutMs, signal);
     const abs = this.parseBody(text, type, sourceKey);
     return movieToVodDetail(abs?.movie ?? null);
   }

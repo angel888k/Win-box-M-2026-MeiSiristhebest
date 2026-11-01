@@ -305,7 +305,7 @@ const ipcServices: MainIpcApplicationPorts = {
   vod: {
     home: (key, profileId, signal) => hostServices.sourceCatalog.home(key, profileId, signal),
     category: (key, tid, page, extend, profileId, signal) => hostServices.sourceCatalog.category(key, tid, page, extend, profileId, signal),
-    detail: (key, ids, profileId) => hostServices.sourceCatalog.detail(key, ids, profileId),
+    detail: (key, ids, profileId, signal) => hostServices.sourceCatalog.detail(key, ids, profileId, signal),
     search: (key, keyword, profileId, signal) => hostServices.sourceCatalog.search(key, keyword, profileId, signal),
     searchAll: (keyword, options, onProgress, signal) => hostServices.aggregateSearchRunner.run(keyword, options, onProgress, signal),
     play: (key, flag, id, profileId) => hostServices.playbackRequest.execute(key, flag, id, profileId),

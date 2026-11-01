@@ -7,7 +7,7 @@ export interface SpiderCatalogCapabilities {
   homeContent(filter: boolean, signal?: AbortSignal): SpiderJson;
   homeVideoContent(signal?: AbortSignal): SpiderJson;
   categoryContent(tid: string, page: string, filter: boolean, extend: Record<string, string>, signal?: AbortSignal): SpiderJson;
-  detailContent(ids: string[]): SpiderJson;
+  detailContent(ids: string[], signal?: AbortSignal): SpiderJson;
 }
 
 export interface SpiderSearchCapability {

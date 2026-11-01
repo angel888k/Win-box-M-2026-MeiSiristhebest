@@ -112,6 +112,20 @@ describe('VOD IPC adapter', () => {
     await expect(request).resolves.toMatchObject({ ok: false, error: { message: '搜索已由调用窗口取消' } });
   });
 
+  it('cancels in-flight detail lookups through sender-scoped IPC', async () => {
+    const { host } = register();
+    vi.mocked(host.detail).mockImplementationOnce((_key, _ids, _profileId, signal) => new Promise((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+    const request = invoke(IPC.VOD_DETAIL, { key: 'source-a', ids: ['movie-a'], requestId: 'detail-a' });
+    await vi.waitFor(() => expect(host.detail).toHaveBeenCalledTimes(1));
+    const signal = vi.mocked(host.detail).mock.calls[0][3];
+    send(IPC.VOD_DETAIL_CANCEL, 'detail-a');
+
+    expect(signal?.aborted).toBe(true);
+    await expect(request).resolves.toMatchObject({ ok: false, error: { message: '影片详情请求已取消' } });
+  });
+
   it('cancels home and category browse operations through sender-scoped IPC requests', async () => {
     const { host } = register();
     vi.mocked(host.home).mockImplementationOnce((_key, _profileId, signal) => new Promise((_resolve, reject) => {
