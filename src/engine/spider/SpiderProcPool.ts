@@ -68,6 +68,7 @@ interface QueuedEntry {
   resolve: (r: PoolResult) => void;
   timer: ReturnType<typeof setTimeout>;
   timeoutMs: number;
+  priority: number;
   signal?: AbortSignal;
   onAbort?: () => void;
 }
@@ -116,6 +117,14 @@ interface SpawnSpec {
 
 export interface SpawnFn {
   (spec: SpawnSpec): ChildProcess;
+}
+
+/** A pending playback URL is latency-sensitive; it must pass queued discovery/audit work. */
+function queuePriority(method: string): number {
+  const normalized = String(method || '').toLowerCase().replace(/[_-]/g, '');
+  if (normalized === 'playercontent') return 2;
+  if (normalized === 'detailcontent' || normalized === 'detail') return 1;
+  return 0;
 }
 
 /**
@@ -293,7 +302,9 @@ export class SpiderProcPool {
       }
       // 3) 额度用尽/同 key 已满 → 排队到组内队列最短的进程
       const live = group.filter((p) => !p.dead);
-      const head = live.sort((a, b) => a.queue.length - b.queue.length)[0];
+      const head = live.sort((a, b) => a.queue.length - b.queue.length
+        // If queue lengths tie, put a new foreground request behind the least urgent backlog.
+        || (b.queue[0]?.priority ?? 0) - (a.queue[0]?.priority ?? 0))[0];
       if (!head) {
         // 组内进程全死（竞态兜底）：额度允许才补一个。容量耗尽是明确的
         // backpressure 信号，调用方不能再以冷启动绕过同一全局进程预算。
@@ -403,7 +414,14 @@ export class SpiderProcPool {
       this.detachQueuedEntry(entry);
       resolve({ ok: false, data: '', reason: 'queue-timeout' }); // 排队超时 → 调用方回退一次性
     }, QUEUE_WAIT_MS);
-    entry = { req, resolve, timeoutMs, timer, signal };
+    entry = {
+      req,
+      resolve,
+      timeoutMs,
+      timer,
+      signal,
+      priority: queuePriority(req.method),
+    };
     entry.onAbort = () => {
       const index = proc.queue.indexOf(entry);
       if (index < 0) return;
@@ -411,7 +429,9 @@ export class SpiderProcPool {
       this.detachQueuedEntry(entry);
       resolve({ ok: false, data: '', reason: 'cancelled' });
     };
-    proc.queue.push(entry);
+    const insertionIndex = proc.queue.findIndex((queued) => queued.priority < entry.priority);
+    if (insertionIndex < 0) proc.queue.push(entry);
+    else proc.queue.splice(insertionIndex, 0, entry);
     signal?.addEventListener('abort', entry.onAbort, { once: true });
     if (signal?.aborted) entry.onAbort();
     this.drainQueue(proc);

@@ -141,15 +141,20 @@ describe('SpiderProcPool — 复用 / 并行 / 排队 / 失败语义', () => {
     const ownerBusy = Array.from({ length: MAX_INFLIGHT_PER_PROC }, (_, i) => pool.submit('k1', SPEC, REQ(`owner-${i}`), 20000, 20042));
     for (let i = 0; i < busy.length; i++) reply(spawned[0].child, `busy-${i}`, 'done');
     await Promise.all(busy);
+    const background = pool.submit('k1', SPEC, REQ('background', 'searchContent'), 20000, 20042);
     const player = pool.submit('k1', SPEC, REQ('player', 'playerContent'), 20000, 20042);
     expect(spawned[0].child.stdin.write.mock.calls.some(([s]) => s.includes('"id":"player"'))).toBe(false);
     expect(spawned[1].child.stdin.write.mock.calls.some(([s]) => s.includes('"id":"player"'))).toBe(false);
     reply(spawned[1].child, 'owner-0', 'done');
     expect(spawned[1].child.stdin.write.mock.calls.some(([s]) => s.includes('"id":"player"'))).toBe(true);
+    expect(spawned[1].child.stdin.write.mock.calls.some(([s]) => s.includes('"id":"background"'))).toBe(false);
     reply(spawned[1].child, 'player', 'video');
+    expect(spawned[1].child.stdin.write.mock.calls.some(([s]) => s.includes('"id":"background"'))).toBe(true);
+    reply(spawned[1].child, 'background', 'search-result');
     for (let i = 1; i < ownerBusy.length; i++) reply(spawned[1].child, `owner-${i}`, 'done');
     await Promise.all(ownerBusy);
     expect(await player).toMatchObject({ ok: true, data: 'video' });
+    expect(await background).toMatchObject({ ok: true, data: 'search-result' });
     pool.dispose();
   });
 
