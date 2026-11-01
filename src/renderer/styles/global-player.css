@@ -14,18 +14,22 @@
       播放器窗口链 = .main → .pwin-body → .pwin-stage → .vplayer，**每一层都必须允许收缩**。
    ② 画面区域：.vp-stage 绝对定位撑满并裁切溢出 → 画面本身不可能把控制条挤出可视区。 */
 .pwin-body { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-.pwin-stage { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; }
+.pwin-stage { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; background: #000; }
 .player-stage-notices {
   position: absolute;
   top: 8px;
   left: 12px;
   right: 12px;
+  box-sizing: border-box;
   z-index: 8;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: min(42vh, 360px);
-  overflow: auto;
+  max-height: min(38%, 360px);
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   pointer-events: none;
 }
 .player-stage-notices > * { pointer-events: auto; }
@@ -42,9 +46,7 @@
   overflow-wrap: anywhere;
 }
 .player-stage-notice--error { color: #ffd8d8; background: rgba(54, 25, 29, .98); border-color: #97525a; }
-.player-stage--mini .player-stage-notices { top: 8px; }
-/* The HTML player titlebar floats over the video at the top edge. Keep status notices below its hit targets. */
-:root:not([data-mpv]):not([data-player-fullscreen]) .pwin-stage:not(.pwin-stage--mini) .player-stage-notices { top: 54px; }
+.pwin-stage--mini .player-stage-notices { top: 8px; }
 /* MPV mini strip is also a floating layer and does not consume stage layout height. */
 :root[data-mpv] .pwin-stage--mini .player-stage-notices { top: 26px; }
 .player-source-fallback {
