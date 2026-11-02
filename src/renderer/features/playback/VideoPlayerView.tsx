@@ -21,7 +21,7 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
   mediaSessionPort?: PlayerMediaSessionPort | null;
 }) {
   const { identity, media, navigation, surface, playback, danmaku, contextMenu, episodes, technicalPanels, info, toast, status, controls } = model;
-  const { url, resourceName, mini } = identity;
+  const { url, resourceName, mini, onPlaybackStarted } = identity;
   const { canPrev, canNext, onPrev, onNext } = navigation;
   const { videoRef: ref, containerRef: wrapRef, controlsVisible: ui, full, fit, subFont, subBottom, onPointerActivity: poke, onPointerLeave: hideIfNoPanel, onDoubleClick: onSurfaceDoubleClick, onTogglePlayback: onSurfaceClick, onBoostMouseDown } = surface;
   const { kernel, mpvTimeRef, mpvSizeRef, paused, currentTime: cur, duration: dur, resolution: resText } = playback;
