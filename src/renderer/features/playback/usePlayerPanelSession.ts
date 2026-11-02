@@ -38,6 +38,7 @@ export function usePlayerPanelSession(options: PlayerPanelSessionOptions) {
   const [episodesOpen, setEpisodesOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
 
   const coordinator = usePlayerPanelCoordinator({
     visibility: {
@@ -50,6 +51,7 @@ export function usePlayerPanelSession(options: PlayerPanelSessionOptions) {
       episodes: episodesOpen,
       stats: statsOpen,
       keys: keysOpen,
+      capabilities: capabilitiesOpen,
     },
     setVisibility: {
       subtitle: subtitle.setOpen,
@@ -61,6 +63,7 @@ export function usePlayerPanelSession(options: PlayerPanelSessionOptions) {
       episodes: setEpisodesOpen,
       stats: setStatsOpen,
       keys: setKeysOpen,
+      capabilities: setCapabilitiesOpen,
     },
     setVolumeHovered: volume.setHovered,
     clearVolumeFlash: volume.clearFlash,
@@ -71,7 +74,7 @@ export function usePlayerPanelSession(options: PlayerPanelSessionOptions) {
   const volumeOpen = volume.isOpen(subtitle.open || danmakuOpen);
   const controls = usePlayerControlsVisibility({
     isPaused,
-    panelOpen: subtitle.open || danmakuOpen || fitOpen || skip.open || volumeOpen || audio.open || superResolution.open || episodesOpen || statsOpen || keysOpen,
+    panelOpen: subtitle.open || danmakuOpen || fitOpen || skip.open || volumeOpen || audio.open || superResolution.open || episodesOpen || statsOpen || keysOpen || capabilitiesOpen,
   });
   const subtitleHover = useHoverDelay(open => open ? coordinator.openPanel('subtitle') : subtitle.setOpen(false));
   const danmakuHover = useHoverDelay(open => open ? coordinator.openPanel('danmaku') : setDanmakuOpen(false));
@@ -98,6 +101,8 @@ export function usePlayerPanelSession(options: PlayerPanelSessionOptions) {
     setStatsOpen,
     keysOpen,
     setKeysOpen,
+    capabilitiesOpen,
+    setCapabilitiesOpen,
     volumeOpen,
     controls,
     coordinator,

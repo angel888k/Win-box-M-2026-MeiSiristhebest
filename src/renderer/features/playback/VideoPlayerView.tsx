@@ -25,10 +25,34 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
   const { position, menuRef, infoOpen, actions: contextActions } = contextMenu;
   const playerContextMenu = { position, menuRef, onContextMenu: surface.onContextMenu };
   const { items: episodeItems, current: episodeIndex, open: epPanel, title: episodeTitle, page: episodePage, onPageChange: setEpisodePage, onClose: closeEpisodes, onSelect: pickEpisode } = episodes;
-  const { audioTracks, subtitles, pluginKeys, active, statsOpen, keysOpen, mini: panelMini, mpvTech, formatNetworkSpeed, onStatsClose, onKeysClose } = technicalPanels;
+  const { audioTracks, subtitles, pluginKeys, active, statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini: panelMini, mpvTech, formatNetworkSpeed, onStatsClose, onKeysClose, onCapabilitiesClose } = technicalPanels;
   const { skip: skipToast, boost: boostTip, commandError } = toast;
   const statusProps = status;
   const playerControlsModel = controls;
+  usePlayerMediaSession({
+    port: mediaSessionPort,
+    active: kernel === 'html5' && media.kind === 'video' && Boolean(url),
+    videoRef: ref,
+    sourceKey: url,
+    metadata: { title: info.title || resourceName || '正在播放', artist: 'Win-Box', album: '视频播放' },
+    canSeek: !playback.isLive && Boolean(controls.progressBar),
+    canPrevious: Boolean(canPrev && onPrev),
+    canNext: Boolean(canNext && onNext),
+    actions: {
+      play: () => {
+        const video = ref.current;
+        if (video?.paused) void video.play().catch(() => undefined);
+      },
+      pause: () => { if (ref.current && !ref.current.paused) ref.current.pause(); },
+      seekBy: seconds => {
+        const video = ref.current;
+        if (video) controls.progressBar?.seekTo(Math.max(0, Math.min(dur || Infinity, video.currentTime + seconds)));
+      },
+      seekTo: seconds => controls.progressBar?.seekTo(seconds),
+      previous: onPrev,
+      next: onNext,
+    },
+  });
   /**
    * ★ 2026-09-30：图片 / 音频分流（所有 hooks 都在上方，早返回不破坏 hooks 顺序）。
    *   图集源把每张图当一「集」传进来 → 图片浏览器按「集」翻页；
@@ -124,7 +148,7 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
       {/* ★ 2026-10-08（用户要求）：跳过片头片尾的短暂提示（2.5s 淡出；不拦截鼠标） */}
       <PlayerContextMenu position={playerContextMenu.position} menuRef={playerContextMenu.menuRef} onInfo={contextActions.onInfo} onCopy={contextActions.onCopy} />
       {!mini && episodeItems?.length ? <PlayerEpisodePanel episodes={episodeItems} current={episodeIndex} open={epPanel} title={episodeTitle} page={episodePage} onPageChange={setEpisodePage} onClose={closeEpisodes} onSelect={pickEpisode} /> : null}
-      <PlayerTechnicalPanels audioTracks={audioTracks} subtitles={subtitles} pluginKeys={pluginKeys} active={active} statsOpen={statsOpen} keysOpen={keysOpen} mini={panelMini} mpvTech={mpvTech} fmtNet={formatNetworkSpeed} onStatsClose={onStatsClose} onKeysClose={onKeysClose} />
+      <PlayerTechnicalPanels audioTracks={audioTracks} subtitles={subtitles} pluginKeys={pluginKeys} active={active} statsOpen={statsOpen} keysOpen={keysOpen} capabilitiesOpen={capabilitiesOpen} capabilitySummary={capabilitySummary} mini={panelMini} mpvTech={mpvTech} fmtNet={formatNetworkSpeed} onStatsClose={onStatsClose} onKeysClose={onKeysClose} onCapabilitiesClose={onCapabilitiesClose} />
       <PlayerInfoOverlay open={infoOpen && !mini} title={info.title} currentTime={cur} duration={dur} resolution={resText} formatTime={formatPlaybackTime} />
       {(skipToast || boostTip > 0 || commandError) && (
         <div className={`vp-toast${commandError ? ' vp-command-error' : ''}`} role={commandError ? 'status' : undefined}>

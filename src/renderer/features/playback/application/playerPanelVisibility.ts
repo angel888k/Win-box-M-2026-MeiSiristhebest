@@ -8,6 +8,7 @@ export const PLAYER_PANEL_NAMES = [
   'episodes',
   'stats',
   'keys',
+  'capabilities',
 ] as const;
 
 export type PlayerPanelName = (typeof PLAYER_PANEL_NAMES)[number];

@@ -10,8 +10,15 @@ describe('useMpvTechnicalState chapter adapter', () => {
     const first = { id: 'mpv-0', title: 'Opening', startSeconds: 0 };
     const second = { id: 'mpv-1', title: 'Finale', startSeconds: 820 };
     act(() => result.current.onState({ ...emptyMpvKernelState(), loaded: true, chapters: [first] }));
+    expect(result.current.loaded).toBe(true);
     expect(result.current.chapters).toEqual([first]);
     act(() => result.current.onState({ ...emptyMpvKernelState(), loaded: true, chapters: [first, second] }));
     expect(result.current.chapters).toEqual([first, second]);
+  });
+
+  it('preserves the not-yet-loaded state instead of inferring readiness from MPV availability', () => {
+    const { result } = renderHook(() => useMpvTechnicalState('https://media.example/movie.mkv', 'mpv'));
+    act(() => result.current.onState(emptyMpvKernelState()));
+    expect(result.current.loaded).toBe(false);
   });
 });

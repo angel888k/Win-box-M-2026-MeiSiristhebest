@@ -37,6 +37,7 @@ export function PlayerControlsBar({
   rate,
   kernel,
   kernelTools,
+  capabilityPanel,
   superResolution,
   audio,
   fit,
@@ -126,6 +127,16 @@ export function PlayerControlsBar({
                   </button>
                 </>
               )}
+              <button
+                type="button"
+                className={'vp-ctl vp-ctl-label' + (capabilityPanel.open ? ' vp-on' : '')}
+                title="当前播放器能力"
+                aria-label="当前播放器能力"
+                aria-pressed={capabilityPanel.open}
+                onClick={capabilityPanel.onToggle}
+              >
+                <span className="vp-kernel-tag">能力</span>
+              </button>
               <PlayerSuperResolutionControl {...superResolution} />
             </fieldset>
             <div className="vp-bar-spacer" aria-hidden="true" />

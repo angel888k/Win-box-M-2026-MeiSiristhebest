@@ -44,6 +44,13 @@ import { usePlayerSurfaceGesture } from './usePlayerSurfaceGesture';
 import { usePlayerSurfaceAttributes } from './usePlayerSurfaceAttributes';
 import { usePlayerPlaybackPresentation } from './usePlayerPlaybackPresentation';
 import { usePlayerKernelSelection } from './usePlayerKernelSelection';
+import {
+  HTML5_PLAYER_CAPABILITIES,
+  MPV_PLAYER_CAPABILITIES,
+  observePlayerReadiness,
+  projectPlayerCapabilitySummary,
+  resolveSuperResolutionState,
+} from './application/playerCapabilitySummary';
 import { resolveProgressMenuPosition } from './application/playerWindow';
 import { usePlayerPluginCommands } from './usePlayerPluginCommands';
 import { formatDanmakuCandidateLabel } from './presentation/formatDanmakuCandidateLabel';
@@ -517,6 +524,8 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     setStatsOpen,
     keysOpen,
     setKeysOpen,
+    capabilitiesOpen,
+    setCapabilitiesOpen,
     volumeOpen: volOpen,
     controls,
     coordinator: panelCoordinator,
@@ -541,6 +550,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     flashVolume: coordinateVolumeFlash,
     toggleStats,
     toggleKeys,
+    toggleCapabilities,
   } = panelCoordinator;
   // 切换集时清除旧字幕内容；搜索候选与请求代际由 useSubtitleSearch 管理。
 
@@ -777,12 +787,13 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     },
     volume: { volume: vol, open: volOpen, hidden: subPanel || dmPanel, inputRef: volumeUi.inputRef, onFocusChange: volumeUi.setFocused, onPointerEnter: () => volumeHover.enter(), onPointerLeave: () => volumeHover.leave(), onChange: kSetVol, onPointerStart: volumeUi.beginDrag, onPointerEnd: volumeUi.endDrag, onToggleMute: () => { kSetVol(volRef.current > 0 ? 0 : vol || 1); flashVol(); } },
     dlna: { ...dlna.model, onToggle: dlna.actions.toggle, onRefresh: dlna.actions.searchDevices, onCast: dlna.actions.castTo },
-    subtitle: { embeddedTracks: technical.subtitles, sid: technical.sid, onSelectTrack: kernel !== 'html5' ? id => { void sendKernelCommandWithFeedback({ type: 'sid', value: id }); } : undefined, enabled: subEnabled, open: subPanel, activeSubtitle: subActive, fontSize: subFont, bottom: subBottom, offset: subOffset, query: subQuery, searching: subSearching, tokenHint: subTokenHint, message: subMsg, candidates: subCands, resourceName, panelRef: subPanelHost, onAnchorPointerEnter: () => subHover.enter(), onAnchorPointerLeave: () => subHover.leave(), onClose: () => { subHover.cancel(); setSubPanel(false); }, onPanelPointerEnter: () => subHover.enter(true), onPanelPointerLeave: () => subHover.leave(), onToggle: toggleSub, onAppearanceCommand: subtitleAppearanceCommand, onQueryChange: setSubQuery, onRestoreQuery: restoreSubtitleQuery, onSearch: () => { void doSearch(); }, onSelectCandidate: selectSub },
+    subtitle: { embeddedTracks: technical.subtitles, sid: technical.sid, onSelectTrack: kernel !== 'html5' ? selectPreferredSubtitleTrack : undefined, enabled: subEnabled, open: subPanel, activeSubtitle: subActive, fontSize: subFont, bottom: subBottom, offset: subOffset, syncCapability: subtitleSyncStatus, query: subQuery, searching: subSearching, tokenHint: subTokenHint, message: subMsg, candidates: subCands, resourceName, panelRef: subPanelHost, onAnchorPointerEnter: () => subHover.enter(), onAnchorPointerLeave: () => subHover.leave(), onClose: () => { subHover.cancel(); setSubPanel(false); }, onPanelPointerEnter: () => subHover.enter(true), onPanelPointerLeave: () => subHover.leave(), onToggle: toggleSub, onAppearanceCommand: subtitleAppearanceCommand, onQueryChange: setSubQuery, onRestoreQuery: restoreSubtitleQuery, onSearch: () => { void doSearch(); }, onSelectCandidate: selectSub },
     danmaku: { enabled: dmEnabled, enabledSourceCount: dmCfg.endpoints.filter((endpoint) => endpoint.enabled !== false).length, open: dmPanel, activeEpisodeId: dmActiveEp, message: dmMsg, settings: dmCfg, candidates: dmCands, searching: dmSearching, query: dmQuery, episode: dmEp, sourcesOpen: dmSrcPanel, customText: dmCustomText, panelRef: dmPanelHost, onAnchorPointerEnter: () => dmHover.enter(), onAnchorPointerLeave: () => dmHover.leave(), onClose: () => { dmHover.cancel(); setDmPanel(false); }, onPanelPointerEnter: () => dmHover.enter(true), onPanelPointerLeave: () => dmHover.leave(), onToggle: toggleDanmaku, onSettingsCommand: dispatchDanmakuSettings, onQueryChange: setDmQuery, onEpisodeChange: setDmEp, onToggleSources: toggleDanmakuSources, onCustomEndpointsTextChange: setDmCustomText, onSearch: () => { void matchDanmaku(dmQuery, dmEp, { fresh: true }); }, onCandidateSelect: applyDanmaku },
     skipSegments: controlAvailability.skipSegmentsVisible ? { segments: skipSeg, hasSegments: skipSeg.intro > 0 || skipSeg.outro > 0, inheritedFrom: skipInheritFrom, draft: skipDraft, open: skipPanel, onDraftCommand: dispatchSkipDraftCommand, onToggle: toggleSkipPanel, onSave: saveSkipDraft, onClear: () => { clearSkipSegments(); showSkipToast('已清除本集跳过点'); } } : null,
     rate: { rate, onRateChange: kSetRate },
     kernel: controlAvailability.kernelSelectorVisible ? { kernel, preference: kernelPref, choices: engines.choices, containerRef: wrapRef, onSelect: preference => switchKernel(resolvePreference(preference), true, preference), onOpen: openKernelPanel } : null,
     kernelTools: controlAvailability.kernelToolsVisible ? { statsOpen, onToggleStats: toggleStats, keysOpen, onToggleKeys: toggleKeys } : null,
+    capabilityPanel: { open: capabilitiesOpen, onToggle: toggleCapabilities },
     superResolution: {
       visible: controlAvailability.superResolutionVisible,
       active: controlAvailability.superResolutionActive,
@@ -823,6 +834,47 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     else dependencies.playerWindowReload.reload();
   }, [dependencies.playerWindowReload, onRetryPlayback]);
   const retryLabel = props.onRetryPlayback ? '重试当前播放' : '刷新重试';
+  const activeEngineChoice = engines.choices.find(choice => choice.id === kernel);
+  const declaredCapabilities = kernel === 'html5'
+    ? HTML5_PLAYER_CAPABILITIES
+    : kernel === 'mpv' ? MPV_PLAYER_CAPABILITIES : activeEngineChoice?.capabilities;
+  const superResolutionState = resolveSuperResolutionState({
+    kernel,
+    pluginAvailable: kernel === 'mpv' ? superResolution.info?.available : false,
+    renderState: superResolution.renderStatus?.state,
+  });
+  const superResolutionDetail = kernel !== 'mpv'
+    ? '当前播放内核不是 MPV；已集成的超分着色器只作用于 MPV 渲染管线'
+    : superResolution.renderStatus?.state === 'observed'
+      ? `已在 MPV 渲染 pass 中观察到：${(superResolution.renderStatus.matchingPasses ?? []).slice(0, 2).join('、')}`
+      : superResolution.renderStatus?.state === 'not-observed'
+        ? 'MPV 当前渲染 pass 未发现所选超分着色器'
+        : superResolution.info?.available === false
+          ? '未检测到可用的超分插件或渲染后端'
+          : superResolution.mode === 'off'
+            ? '超分插件可用，但当前档位为关闭'
+            : '尚未取得当前渲染 pass 回执，无法确认超分是否生效';
+  const mpvTracksObserved = kernel === 'mpv' && technical.trackInventoryObserved;
+  const audioTracksObserved = mpvTracksObserved || audio.tracks.length > 0;
+  const subtitleTracksObserved = mpvTracksObserved || technical.subtitles.length > 0;
+  const capabilitySummary = projectPlayerCapabilitySummary({
+    engineLabel: activeEngineChoice?.label ?? (kernel === 'html5' ? '标准播放' : kernel === 'mpv' ? '兼容播放' : '插件播放器'),
+    // Built-in adaptive audio enumeration is source-dependent, so it remains unknown until reported.
+    capabilityOverrides: kernel === 'html5' ? { tracks: 'unknown' } : undefined,
+    declaredCapabilities,
+    // Only report readiness after the active HTML media element has current data or
+    // MPV has emitted file-loaded. Plugin declarations alone are not session evidence.
+    engineReady: observePlayerReadiness({
+      kernel,
+      htmlReadyState: kernel === 'html5' ? ref.current?.readyState : undefined,
+      mpvLoaded: kernel === 'mpv' ? technical.loaded : undefined,
+    }),
+    superResolution: superResolutionState,
+    superResolutionDetail,
+    audioTrackCount: audioTracksObserved ? audio.tracks.length : null,
+    subtitleTrackCount: subtitleTracksObserved ? technical.subtitles.length : null,
+    resolution: resText || null,
+  });
   return {
     identity: { url, resourceName, danmakuTitle, playTitle, mini },
     media: {
@@ -855,7 +907,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       onClose: episodePanel.close,
       onSelect: episodePanel.selectEpisode,
     },
-    technicalPanels: { audioTracks: audio.tracks, subtitles: technical.subtitles, pluginKeys, active: kernel === 'mpv', statsOpen, keysOpen, mini, mpvTech: technical.tech, formatNetworkSpeed, onStatsClose: () => setStatsOpen(false), onKeysClose: () => setKeysOpen(false) },
+    technicalPanels: { audioTracks: audio.tracks, subtitles: technical.subtitles, pluginKeys, active: kernel === 'mpv', statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini, mpvTech: technical.tech, formatNetworkSpeed, onStatsClose: () => setStatsOpen(false), onKeysClose: () => setKeysOpen(false), onCapabilitiesClose: () => setCapabilitiesOpen(false) },
     info: { title: playTitle, currentTime: cur, duration: dur, resolution: resText },
     toast: { skip: skipToast, boost: boost.tip, commandError },
     status: {

@@ -14,6 +14,7 @@ type PanelState = {
   episodes: boolean;
   stats: boolean;
   keys: boolean;
+  capabilities: boolean;
   volumeHovered: boolean;
 };
 
@@ -27,6 +28,7 @@ const defaults: PanelState = {
   episodes: false,
   stats: false,
   keys: false,
+  capabilities: false,
   volumeHovered: false,
 };
 
@@ -40,11 +42,12 @@ function useCoordinatorHarness(overrides: Partial<PanelState> = {}) {
   const [episodes, setEpisodes] = useState(overrides.episodes ?? defaults.episodes);
   const [stats, setStats] = useState(overrides.stats ?? defaults.stats);
   const [keys, setKeys] = useState(overrides.keys ?? defaults.keys);
+  const [capabilities, setCapabilities] = useState(overrides.capabilities ?? defaults.capabilities);
   const [volumeHovered, setVolumeHovered] = useState(overrides.volumeHovered ?? defaults.volumeHovered);
   const clearVolumeFlash = useMemo(() => vi.fn(), []);
   const revealControls = useMemo(() => vi.fn(), []);
   const coordinator = usePlayerPanelCoordinator({
-    visibility: { subtitle, danmaku, fit, audio, superResolution, skip, episodes, stats, keys },
+    visibility: { subtitle, danmaku, fit, audio, superResolution, skip, episodes, stats, keys, capabilities },
     setVisibility: {
       subtitle: setSubtitle,
       danmaku: setDanmaku,
@@ -55,13 +58,14 @@ function useCoordinatorHarness(overrides: Partial<PanelState> = {}) {
       episodes: setEpisodes,
       stats: setStats,
       keys: setKeys,
+      capabilities: setCapabilities,
     },
     setVolumeHovered,
     clearVolumeFlash,
     revealControls,
   });
   return {
-    state: { subtitle, danmaku, fit, audio, superResolution, skip, episodes, stats, keys, volumeHovered },
+    state: { subtitle, danmaku, fit, audio, superResolution, skip, episodes, stats, keys, capabilities, volumeHovered },
     coordinator,
     clearVolumeFlash,
     revealControls,
@@ -84,6 +88,7 @@ describe('usePlayerPanelCoordinator', () => {
       episodes: true,
       stats: true,
       keys: true,
+      capabilities: true,
       volumeHovered: true,
     }));
     const cancelSubtitle = vi.fn();
@@ -107,6 +112,7 @@ describe('usePlayerPanelCoordinator', () => {
       episodes: false,
       stats: false,
       keys: false,
+      capabilities: false,
       volumeHovered: false,
     });
     expect(cancelSubtitle).toHaveBeenCalledOnce();
@@ -147,5 +153,15 @@ describe('usePlayerPanelCoordinator', () => {
     expect(result.current.state).toMatchObject({ stats: true, keys: false, volumeHovered: false });
     act(() => result.current.coordinator.toggleKeys());
     expect(result.current.state).toMatchObject({ stats: false, keys: true });
+  });
+
+  it('toggles the capability summary as an exclusive technical panel', () => {
+    const { result } = renderHook(() => useCoordinatorHarness({ stats: true, keys: true }));
+
+    act(() => result.current.coordinator.toggleCapabilities());
+    expect(result.current.state).toMatchObject({ stats: false, keys: false, capabilities: true });
+
+    act(() => result.current.coordinator.toggleCapabilities());
+    expect(result.current.state).toMatchObject({ capabilities: false });
   });
 });

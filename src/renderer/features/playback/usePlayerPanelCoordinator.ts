@@ -7,7 +7,7 @@ import {
   type PlayerPanelVisibilityEvent,
 } from './application/playerPanelVisibility';
 
-export type PlayerSettingsPanel = 'subtitle' | 'danmaku' | 'fit' | 'audio' | 'superResolution';
+export type PlayerSettingsPanel = 'subtitle' | 'danmaku' | 'fit' | 'audio' | 'superResolution' | 'capabilities';
 export type PlayerPanelVisibilitySetters = Record<PlayerPanelName, (open: boolean) => void>;
 
 export interface PlayerPanelHoverCancellers {
@@ -114,6 +114,12 @@ export function usePlayerPanelCoordinator(options: PlayerPanelCoordinatorOptions
     revealControls();
   }, [prepareForExclusivePanel, applyVisibilityEvent, revealControls]);
 
+  const toggleCapabilities = useCallback(() => {
+    prepareForExclusivePanel();
+    applyVisibilityEvent({ type: 'toggle', panel: 'capabilities' });
+    revealControls();
+  }, [prepareForExclusivePanel, applyVisibilityEvent, revealControls]);
+
   return {
     openPanel,
     toggleSkipPanel,
@@ -123,6 +129,7 @@ export function usePlayerPanelCoordinator(options: PlayerPanelCoordinatorOptions
     flashVolume,
     toggleStats,
     toggleKeys,
+    toggleCapabilities,
     cancelSubtitleDanmakuHover,
     registerHoverCancellers,
   };

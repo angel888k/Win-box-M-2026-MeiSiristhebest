@@ -34,6 +34,7 @@ export function useMpvTechnicalState(url: string, kernel: Kernel) {
     subtitles: current?.state.subtitles ?? [],
     sid: current?.state.sid ?? null,
     chapters: current?.state.chapters ?? null,
+    loaded: current?.state.loaded,
     trackInventoryObserved: current?.state.loaded ?? false,
     badges: badgeSignature && expiredBadges !== badgeScope ? badgeSignature.split('\u0000') : [],
   };

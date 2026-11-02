@@ -14,6 +14,7 @@ const empty: PlayerPanelVisibility = {
   episodes: false,
   stats: false,
   keys: false,
+  capabilities: false,
 };
 
 describe('player panel visibility policy', () => {
@@ -29,5 +30,10 @@ describe('player panel visibility policy', () => {
 
     expect(transitionPlayerPanelVisibility(prior, { type: 'toggle', panel: 'stats' })).toEqual({ ...empty, stats: true });
     expect(transitionPlayerPanelVisibility(prior, { type: 'close-all' })).toEqual(empty);
+  });
+
+  it('opens the capability panel exclusively with other technical panels', () => {
+    expect(transitionPlayerPanelVisibility({ ...empty, stats: true }, { type: 'open', panel: 'capabilities' }))
+      .toEqual({ ...empty, capabilities: true });
   });
 });

@@ -1,6 +1,7 @@
 import type { DanmakuCandidate, DanmakuSettings } from '../../../../shared/danmaku';
 import type { MpvAudioTrack, MpvShaderRenderStatus, MpvSubtitleTrack, SrMode } from '../../../../shared/player';
 import type { SrState } from '../../../../shared/plugin';
+import type { PlayerEngineCapability } from '../../../../shared/plugin/playerEngine';
 import type { SubtitleCandidate } from '../../../../shared/subtitle';
 import type { PlayerFit } from '../application/playerPreferences';
 import type { SuperResolutionFeedback } from '../application/superResolutionPort';
@@ -28,6 +29,8 @@ export interface KernelChoice {
   id: Kernel;
   label: string;
   note?: string;
+  /** Declared by a plugin engine; absent means the engine has no capability report. */
+  capabilities?: readonly PlayerEngineCapability[];
 }
 
 export interface PlayerTransportModel {

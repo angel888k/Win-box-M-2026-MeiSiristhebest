@@ -2,6 +2,8 @@ import type { MpvAudioTrack, MpvSubtitleTrack } from '../../../shared/player';
 import type { KeymapView } from '../../../shared/plugin';
 import { spdifLabel } from '../../../shared/player';
 import type { MpvTechnicalState } from './useMpvTechnicalState';
+import type { PlayerCapabilitySummary } from './application/playerCapabilitySummary';
+import { PlayerCapabilitySummaryView } from './PlayerCapabilitySummaryView';
 
 const KEY_SHORTCUTS: ReadonlyArray<{ keys: string; desc: string }> = [
   { keys: '空格', desc: '播放 / 暂停' },
@@ -16,7 +18,7 @@ const KEY_SHORTCUTS: ReadonlyArray<{ keys: string; desc: string }> = [
   { keys: '右键画面', desc: '播放器菜单（详情信息 / 复制地址）' },
 ];
 
-export function PlayerTechnicalPanels({ active, statsOpen, keysOpen, mini, mpvTech, audioTracks, subtitles, pluginKeys, fmtNet, onStatsClose, onKeysClose }: { audioTracks: MpvAudioTrack[]; subtitles: MpvSubtitleTrack[]; pluginKeys: KeymapView[]; active: boolean; statsOpen: boolean; keysOpen: boolean; mini: boolean; mpvTech: MpvTechnicalState | null; fmtNet(value: number): string; onStatsClose(): void; onKeysClose(): void }) {
+export function PlayerTechnicalPanels({ active, statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini, mpvTech, audioTracks, subtitles, pluginKeys, fmtNet, onStatsClose, onKeysClose, onCapabilitiesClose }: { audioTracks: MpvAudioTrack[]; subtitles: MpvSubtitleTrack[]; pluginKeys: KeymapView[]; active: boolean; statsOpen: boolean; keysOpen: boolean; capabilitiesOpen: boolean; capabilitySummary: PlayerCapabilitySummary; mini: boolean; mpvTech: MpvTechnicalState | null; fmtNet(value: number): string; onStatsClose(): void; onKeysClose(): void; onCapabilitiesClose(): void }) {
   return <>
       {active && statsOpen && !mini && (
         <div className="vp-stats" onDoubleClick={(e) => e.stopPropagation()}>
@@ -83,6 +85,11 @@ export function PlayerTechnicalPanels({ active, statsOpen, keysOpen, mini, mpvTe
               </div>
             ))}
           </div>
+        </div>
+      )}
+      {capabilitiesOpen && !mini && (
+        <div className="vp-stats vp-capability-panel" onDoubleClick={(e) => e.stopPropagation()}>
+          <PlayerCapabilitySummaryView summary={capabilitySummary} onClose={onCapabilitiesClose} />
         </div>
       )}
 

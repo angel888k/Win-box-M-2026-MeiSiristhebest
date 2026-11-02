@@ -50,6 +50,7 @@ export interface PlayerControlsViewModel {
   rate: PlaybackRateControlModel;
   kernel: KernelControlModel | null;
   kernelTools: KernelToolsControlModel | null;
+  capabilityPanel: { open: boolean; onToggle: () => void };
   superResolution: SuperResolutionControlModel;
   audio: AudioTrackControlModel;
   fit: FitControlModel;
