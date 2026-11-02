@@ -20,14 +20,16 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
   const [provider, setProvider] = useState(normalizedInitial || 'quark');
   const [cookieDrafts, setCookieDrafts] = useState<Record<string, string>>({});
   const [credentials, setCredentials] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [activeOperation, setActiveOperation] = useState<{ provider: string; kind: 'probe' | 'save' | 'unbind' } | null>(null);
+  const [messages, setMessages] = useState<Record<string, string>>({});
   const [probeResults, setProbeResults] = useState<Record<string, DriveCredentialProbeResult | null>>({});
   const alive = useRef(false);
   const requestSequence = useRef(0);
   const operationInProgress = useRef(false);
   const cookie = cookieDrafts[provider] || '';
   const probeResult = probeResults[provider] || null;
+  const busy = activeOperation !== null;
+  const message = messages[provider] || '';
 
   const refresh = useCallback(async () => {
     const request = ++requestSequence.current;
@@ -52,20 +54,21 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
 
   const selectProvider = useCallback((value: string) => {
     setProvider(value);
-    setMessage('');
   }, []);
   const changeCookie = useCallback((value: string) => {
     setCookieDrafts(current => ({ ...current, [provider]: value }));
     setProbeResults(current => ({ ...current, [provider]: null }));
   }, [provider]);
-  const clearMessage = useCallback(() => setMessage(''), []);
+  const clearMessage = useCallback(() => {
+    setMessages(current => ({ ...current, [provider]: '' }));
+  }, [provider]);
 
   const probe = useCallback(async () => {
     if (operationInProgress.current) return false;
     operationInProgress.current = true;
-    setBusy(true);
-    setMessage('');
     const checkedProvider = provider;
+    setActiveOperation({ provider: checkedProvider, kind: 'probe' });
+    setMessages(current => ({ ...current, [checkedProvider]: '' }));
     setProbeResults(current => ({ ...current, [checkedProvider]: null }));
     try {
       const result = await port.probe(checkedProvider);
@@ -74,12 +77,12 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
     } catch (cause) {
       if (alive.current) {
         setProbeResults(current => ({ ...current, [checkedProvider]: { state: 'unknown', checkedAt: Date.now() } }));
-        setMessage(`无法检查登录状态：${describeFailure(cause)}`);
+        setMessages(current => ({ ...current, [checkedProvider]: `无法检查登录状态：${describeFailure(cause)}` }));
       }
       return false;
     } finally {
       operationInProgress.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) setActiveOperation(null);
     }
   }, [port, provider]);
 
@@ -87,52 +90,52 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
     if (operationInProgress.current) return false;
     const normalizedCookie = cookie.trim();
     if (!normalizedCookie) {
-      setMessage('请先粘贴 Cookie');
+      setMessages(current => ({ ...current, [provider]: '请先粘贴 Cookie' }));
       return false;
     }
     operationInProgress.current = true;
-    setBusy(true);
-    setMessage('');
     const savedProvider = provider;
+    setActiveOperation({ provider: savedProvider, kind: 'save' });
+    setMessages(current => ({ ...current, [savedProvider]: '' }));
     try {
       await port.save(savedProvider, normalizedCookie);
       if (!alive.current) return true;
       setCookieDrafts(current => ({ ...current, [savedProvider]: '' }));
       setProbeResults(current => ({ ...current, [savedProvider]: null }));
       await refresh();
-      setMessage(`已保存「${driveProviderLabel(savedProvider)}」的全局凭据，所有支持该网盘的子仓和源均可复用。凭据有效性会在实际播放请求时确认；如果是在播放中打开绑定窗口，当前集会自动重新解析。`);
+      setMessages(current => ({ ...current, [savedProvider]: `已保存「${driveProviderLabel(savedProvider)}」的全局凭据，所有支持该网盘的子仓和源均可复用。凭据有效性会在实际播放请求时确认；如果是在播放中打开绑定窗口，当前集会自动重新解析。` }));
       onSaved();
       return true;
     } catch (cause) {
-      if (alive.current) setMessage(`保存失败：${describeFailure(cause)}`);
+      if (alive.current) setMessages(current => ({ ...current, [savedProvider]: `保存失败：${describeFailure(cause)}` }));
       return false;
     } finally {
       operationInProgress.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) setActiveOperation(null);
     }
   }, [cookie, onSaved, port, provider, refresh]);
 
   const unbind = useCallback(async () => {
     if (operationInProgress.current) return false;
     operationInProgress.current = true;
-    setBusy(true);
-    setMessage('');
     const removedProvider = provider;
+    setActiveOperation({ provider: removedProvider, kind: 'unbind' });
+    setMessages(current => ({ ...current, [removedProvider]: '' }));
     try {
       await port.remove(removedProvider);
       if (!alive.current) return true;
       await refresh();
       setCookieDrafts(current => ({ ...current, [removedProvider]: '' }));
       setProbeResults(current => ({ ...current, [removedProvider]: null }));
-      setMessage(`已解绑「${driveProviderLabel(removedProvider)}」`);
+      setMessages(current => ({ ...current, [removedProvider]: `已解绑「${driveProviderLabel(removedProvider)}」` }));
       onSaved();
       return true;
     } catch (cause) {
-      if (alive.current) setMessage(`解绑失败：${describeFailure(cause)}`);
+      if (alive.current) setMessages(current => ({ ...current, [removedProvider]: `解绑失败：${describeFailure(cause)}` }));
       return false;
     } finally {
       operationInProgress.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) setActiveOperation(null);
     }
   }, [onSaved, port, provider, refresh]);
 
@@ -148,6 +151,7 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
       cookie,
       credentials,
       busy,
+      activeOperation,
       message,
       validation: checkDriveCookie(provider, cookie),
       isBound: !!credentials[provider],

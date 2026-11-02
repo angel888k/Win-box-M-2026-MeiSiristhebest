@@ -48,7 +48,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
   const initProv = (initialProvider || '').trim().toLowerCase();
   const selectedInitialProvider = PROVIDERS.some((item) => item.key === initProv) ? initProv : 'quark';
   const { model, actions } = useDriveCredentialManagement({ port: ports.credentials, initialProvider: selectedInitialProvider, onSaved });
-  const { provider, cookie, credentials: tokens, busy, message: msg, validation: check, isBound: bound, credentialStatus } = model;
+  const { provider, cookie, credentials: tokens, busy, activeOperation, message: msg, validation: check, isBound: bound, credentialStatus } = model;
 
   return (
     <AppModal
@@ -84,7 +84,6 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
               id={`drive-provider-${p.key}`}
               aria-controls="drive-provider-panel"
               value={p.key}
-              disabled={busy}
               icon={<Circle20Regular className={tokens[p.key] ? 'drive-provider-bound-icon' : 'drive-provider-unbound-icon'} />}
               className="drive-provider-tab"
             >
@@ -95,6 +94,12 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
             </FluentTab>
           ))}
         </FluentTabList>
+
+        {activeOperation && activeOperation.provider !== provider && (
+          <div className="muted" role="status" aria-live="polite" style={{ fontSize: 12, marginBottom: 8 }}>
+            {driveProviderLabel(activeOperation.provider)}正在{activeOperation.kind === 'probe' ? '检查' : activeOperation.kind === 'save' ? '保存' : '解绑'}；可以继续切换和查看其他网盘，当前操作完成前暂不能启动另一项操作。
+          </div>
+        )}
 
         <section
           id="drive-provider-panel"
@@ -120,7 +125,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
         {bound && (
           <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <button type="button" disabled={busy || !!cookie.trim()} onClick={() => void actions.probe()}>
-              {busy ? '检查中…' : '检查已保存凭据'}
+              {busy ? activeOperation?.provider === provider && activeOperation.kind === 'probe' ? '检查中…' : '等待当前操作完成…' : '检查已保存凭据'}
             </button>
             {!!cookie.trim() && <span className="muted" style={{ fontSize: 12 }}>请先保存或清空未保存的编辑内容</span>}
           </div>
@@ -147,7 +152,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
 
         <div className="row" style={{ gap: 10, marginTop: 12, alignItems: 'center' }}>
           <button className="primary" disabled={busy || !cookie.trim()} onClick={() => void actions.save()}>
-            {busy ? '保存中…' : '保存绑定'}
+            {busy ? activeOperation?.provider === provider && activeOperation.kind === 'save' ? '保存中…' : '等待当前操作完成…' : '保存绑定'}
           </button>
           <span className="muted" style={{ fontSize: 12 }}>不知道去哪拿 Cookie？用下面的「扫码登录」自动抓取完整 Cookie</span>
         </div>

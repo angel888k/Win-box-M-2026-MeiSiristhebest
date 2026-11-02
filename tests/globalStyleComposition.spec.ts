@@ -20,6 +20,8 @@ describe('global stylesheet composition', () => {
       'global-layouts.css',
       'player-rate-cascade.css',
       'drive-account-cascade.css',
+      'player-capability.css',
+      'player-chapters.css',
       'player-feedback.css',
       'player-toolbar-cascade.css',
     ]);

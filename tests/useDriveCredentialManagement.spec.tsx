@@ -89,6 +89,30 @@ describe('useDriveCredentialManagement', () => {
     expect(result.current.model.probeResult).toEqual({ state: 'valid', checkedAt: 42 });
   });
 
+  it('keeps operation feedback scoped to the provider while its tab stays navigable', async () => {
+    vi.mocked(port.load).mockResolvedValueOnce({ quark: 'cookie-value' });
+    let finishProbe!: (result: { state: 'valid'; checkedAt: number }) => void;
+    vi.mocked(port.probe).mockImplementationOnce(() => new Promise(resolve => { finishProbe = resolve; }));
+    const { result } = renderHook(() => useDriveCredentialManagement({ port, onSaved }));
+    await act(async () => { await Promise.resolve(); });
+
+    let pendingProbe!: Promise<boolean>;
+    act(() => { pendingProbe = result.current.actions.probe(); });
+    act(() => result.current.actions.selectProvider('uc'));
+    expect(result.current.model.busy).toBe(true);
+    expect(result.current.model.activeOperation).toMatchObject({ provider: 'quark', kind: 'probe' });
+    expect(result.current.model.message).toBe('');
+
+    await act(async () => {
+      finishProbe({ state: 'valid', checkedAt: 50 });
+      await pendingProbe;
+    });
+    expect(result.current.model.busy).toBe(false);
+    expect(result.current.model.message).toBe('');
+    act(() => result.current.actions.selectProvider('quark'));
+    expect(result.current.model.credentialStatus).toMatchObject({ kind: 'valid', label: '服务端确认有效' });
+  });
+
   it('removes the selected provider and refreshes global credential state', async () => {
     const { result } = renderHook(() => useDriveCredentialManagement({ port, onSaved }));
     await act(async () => { await result.current.actions.unbind(); });
