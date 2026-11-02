@@ -8,17 +8,21 @@
 //     弹幕设置（主进程 danmakuSet → danmaku.json），二者已是跨窗口持久的。
 import {
   DEFAULT_PLAYER_PREFS,
+  normalizePlayerWorkPrefs,
   normalizePlayerPrefs,
   type PlayerPrefs,
+  type PlayerWorkPrefs,
 } from '../features/playback/application/playerPreferences';
 
 export {
   DEFAULT_PLAYER_PREFS,
   normalizeFit,
   normalizeKernelPref,
+  normalizePlayerWorkPrefs,
   PLAYER_FITS,
   type PlayerFit,
   type PlayerPrefs,
+  type PlayerWorkPrefs,
 } from '../features/playback/application/playerPreferences';
 
 const KEY = 'winbox-player-prefs';
@@ -39,5 +43,50 @@ export function savePlayerPrefs(patch: Partial<PlayerPrefs>): void {
     localStorage.setItem(KEY, JSON.stringify({ ...loadPlayerPrefs(), ...patch }));
   } catch {
     /* 隐私模式/配额满 → 静默忽略（记忆失效不影响播放） */
+  }
+}
+
+const WORK_KEY = 'winbox-player-work-prefs-v1';
+const MAX_WORK_PREFERENCES = 100;
+
+function readWorkStore(): Record<string, { prefs: PlayerWorkPrefs; updatedAt: number }> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(WORK_KEY) || '{}');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const store: Record<string, { prefs: PlayerWorkPrefs; updatedAt: number }> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (!/^work-[a-z0-9]+$/.test(key) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const record = entry as { prefs?: unknown; updatedAt?: unknown };
+      const prefs = normalizePlayerWorkPrefs(record.prefs);
+      if (Object.keys(prefs).length === 0) continue;
+      store[key] = { prefs, updatedAt: Number.isFinite(record.updatedAt) ? Number(record.updatedAt) : 0 };
+    }
+    return store;
+  } catch {
+    return {};
+  }
+}
+
+export function loadPlayerWorkPrefs(workKey: string): PlayerWorkPrefs | null {
+  if (!/^work-[a-z0-9]+$/.test(workKey)) return null;
+  return readWorkStore()[workKey]?.prefs ?? null;
+}
+
+/** Persist only bounded, validated playback preferences, never media addresses or credentials. */
+export function savePlayerWorkPrefs(workKey: string, patch: Partial<PlayerWorkPrefs>): void {
+  if (!/^work-[a-z0-9]+$/.test(workKey)) return;
+  try {
+    const store = readWorkStore();
+    const previous = store[workKey]?.prefs ?? {};
+    const prefs = normalizePlayerWorkPrefs({ ...previous, ...patch });
+    if (Object.keys(prefs).length === 0) return;
+    const mostRecentUpdate = Object.values(store).reduce((latest, entry) => Math.max(latest, entry.updatedAt), 0);
+    store[workKey] = { prefs, updatedAt: Math.max(Date.now(), mostRecentUpdate + 1) };
+    const retained = Object.entries(store)
+      .sort((left, right) => right[1].updatedAt - left[1].updatedAt)
+      .slice(0, MAX_WORK_PREFERENCES);
+    localStorage.setItem(WORK_KEY, JSON.stringify(Object.fromEntries(retained)));
+  } catch {
+    /* Storage limits or privacy mode must not interfere with playback. */
   }
 }

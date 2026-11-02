@@ -11,11 +11,22 @@ export interface PlayerPrefs {
   spdif: string;
 }
 
+/** Per-work overrides only; credentials, URLs and playback positions never belong here. */
+export interface PlayerWorkPrefs {
+  rate?: number;
+  subOffset?: number;
+  fit?: PlayerFit;
+  audioTrackKey?: string;
+  subtitleTrackKey?: string;
+}
+
 export type PlayerFit = 'contain' | 'fill' | 'cover' | 'r169' | 'r43' | 'none';
 
 export interface PlayerPreferencesPort {
   load(): PlayerPrefs;
   save(patch: Partial<PlayerPrefs>): void;
+  loadForWork?(workKey: string): PlayerWorkPrefs | null;
+  saveForWork?(workKey: string, patch: Partial<PlayerWorkPrefs>): void;
 }
 
 export const PLAYER_FITS: ReadonlyArray<{ value: PlayerFit; label: string }> = [
@@ -62,4 +73,16 @@ export function normalizePlayerPrefs(value: unknown): PlayerPrefs {
     kernel: normalizeKernelPref(prefs.kernel),
     spdif: normalizeSpdif(prefs.spdif),
   };
+}
+
+/** Validate per-work overrides without turning missing or corrupt fields into defaults. */
+export function normalizePlayerWorkPrefs(value: unknown): PlayerWorkPrefs {
+  const prefs = value && typeof value === 'object' ? value as Partial<PlayerWorkPrefs> : {};
+  const result: PlayerWorkPrefs = {};
+  if (typeof prefs.rate === 'number' && Number.isFinite(prefs.rate)) result.rate = numberInRange(prefs.rate, DEFAULT_PLAYER_PREFS.rate, 0.25, 4);
+  if (typeof prefs.subOffset === 'number' && Number.isFinite(prefs.subOffset)) result.subOffset = numberInRange(prefs.subOffset, DEFAULT_PLAYER_PREFS.subOffset, -60, 60);
+  if (PLAYER_FITS.some(({ value: fit }) => fit === prefs.fit)) result.fit = prefs.fit as PlayerFit;
+  if (typeof prefs.audioTrackKey === 'string' && /^track-[a-z0-9]{1,32}$/i.test(prefs.audioTrackKey.trim())) result.audioTrackKey = prefs.audioTrackKey.trim();
+  if (typeof prefs.subtitleTrackKey === 'string' && /^track-[a-z0-9]{1,32}$/i.test(prefs.subtitleTrackKey.trim())) result.subtitleTrackKey = prefs.subtitleTrackKey.trim();
+  return result;
 }
