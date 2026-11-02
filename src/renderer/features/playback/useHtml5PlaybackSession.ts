@@ -248,6 +248,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
       revealControls();
     };
     const onPause = () => {
+      if (hlsOffline) resumeAfterNetworkRecovery = false;
       updatePlaybackStatus({ paused: true });
       clearFirstFrameTimer();
       playbackFrameAttempt += 1;
