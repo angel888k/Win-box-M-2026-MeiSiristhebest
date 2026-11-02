@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   progressHoverOffset,
   progressTimeAtPointer,
@@ -30,6 +30,38 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
   });
   const seeking = useRef(false);
   const [hover, setHover] = useState<ProgressHover | null>(null);
+  const [undo, setUndo] = useState<{ from: number; label: string } | null>(null);
+  const pendingSeek = useRef<{ from: number; to: number } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const identity = useRef(model.identity);
+
+  const clearUndo = useCallback(() => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+    setUndo(null);
+  }, []);
+
+  const offerUndo = useCallback((from: number, to: number, threshold = 2) => {
+    if (!Number.isFinite(from) || !Number.isFinite(to) || Math.abs(to - from) < threshold) return;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo({ from, label: latest.current.formatTime(from) });
+    undoTimer.current = setTimeout(() => {
+      undoTimer.current = null;
+      setUndo(null);
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    if (identity.current === model.identity) return;
+    identity.current = model.identity;
+    pendingSeek.current = null;
+    clearUndo();
+  }, [clearUndo, model.identity]);
+
+  useEffect(() => () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+  }, []);
 
   const timeAtPointer = useCallback(({ clientX, bounds }: ProgressPointerSample): number | null => (
     progressTimeAtPointer(clientX, bounds, latest.current.duration)
@@ -50,6 +82,11 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
 
   const onPointerDown = useCallback((sample: ProgressPointerDownSample): boolean => {
     if (sample.button !== 0) return false;
+    const state = latest.current;
+    const time = timeAtPointer(sample);
+    if (time == null || !state.canSeek()) return false;
+    const from = state.getCurrentTime();
+    pendingSeek.current = Number.isFinite(from) ? { from, to: time } : null;
     seeking.current = true;
     updateHover(sample);
     seekAtPointer(sample);
@@ -58,17 +95,25 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
 
   const onPointerMove = useCallback((sample: ProgressPointerSample) => {
     updateHover(sample);
-    if (seeking.current) seekAtPointer(sample);
-  }, [seekAtPointer, updateHover]);
+    if (seeking.current) {
+      const time = timeAtPointer(sample);
+      if (time != null && pendingSeek.current) pendingSeek.current.to = time;
+      seekAtPointer(sample);
+    }
+  }, [seekAtPointer, timeAtPointer, updateHover]);
 
   const onPointerUp = useCallback((): boolean => {
     const wasSeeking = seeking.current;
     seeking.current = false;
+    const pending = pendingSeek.current;
+    pendingSeek.current = null;
+    if (wasSeeking && pending) offerUndo(pending.from, pending.to);
     return wasSeeking;
-  }, []);
+  }, [offerUndo]);
 
   const onPointerCancel = useCallback(() => {
     seeking.current = false;
+    pendingSeek.current = null;
   }, []);
 
   const onPointerLeave = useCallback(() => {
@@ -78,9 +123,17 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
   const onWheel = useCallback((deltaY: number) => {
     const state = latest.current;
     if (!state.duration || !state.canSeek()) return;
-    const next = Math.round(state.getCurrentTime()) + (deltaY < 0 ? 1 : -1);
-    state.seekTo(Math.min(state.duration, Math.max(0, next)));
-  }, []);
+    const from = state.getCurrentTime();
+    const next = Math.min(state.duration, Math.max(0, Math.round(from) + (deltaY < 0 ? 1 : -1)));
+    state.seekTo(next);
+    offerUndo(from, next, 0.5);
+  }, [offerUndo]);
+
+  const onUndo = useCallback(() => {
+    if (!undo || !latest.current.canSeek()) return;
+    latest.current.seekTo(undo.from);
+    clearUndo();
+  }, [clearUndo, undo]);
 
   const onContextMenu = useCallback((position: PointerCoordinates, sample: ProgressPointerSample): boolean => {
     const handled = latest.current.onContextMenu(position, timeAtPointer(sample));
@@ -91,6 +144,8 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
   return {
     progress: projectProgressPercentages(model.currentTime, model.buffered, model.duration),
     hover,
+    undo,
+    onUndo,
     onPointerDown,
     onPointerMove,
     onPointerUp,

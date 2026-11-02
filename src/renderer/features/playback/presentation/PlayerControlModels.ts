@@ -46,6 +46,7 @@ export interface PlayerTechnicalBarModel {
 }
 
 export interface PlayerProgressBarModel {
+  identity: string;
   currentTime: number;
   duration: number;
   buffered: number;
@@ -161,6 +162,21 @@ export interface SkipSegmentsControlModel {
   onDraftCommand: (command: SkipSegmentsDraftCommand) => void;
   onToggle: () => void;
   onSave: () => void;
+  onClear: () => void;
+}
+
+export interface PlayerSegmentLoopControlModel {
+  available: boolean;
+  active: boolean;
+  open: boolean;
+  start: number | null;
+  end: number | null;
+  currentTime: number;
+  formatTime: (seconds: number) => string;
+  onToggle: () => void;
+  onClose: () => void;
+  onSetStart: () => boolean;
+  onSetEnd: () => boolean;
   onClear: () => void;
 }
 

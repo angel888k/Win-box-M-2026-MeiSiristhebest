@@ -6,6 +6,7 @@ import type { PointerCoordinates } from '../src/renderer/features/playback/prese
 
 function makeProps() {
   return {
+    identity: 'work-episode-1',
     currentTime: 10,
     duration: 60,
     buffered: 30,
@@ -78,6 +79,37 @@ describe('PlayerProgressBar', () => {
     fireEvent.contextMenu(progress, { clientX: 110, clientY: 20 });
     expect(props.onContextMenu).toHaveBeenCalledOnce();
     expect(props.onContextMenu).toHaveBeenLastCalledWith({ clientX: 110, clientY: 20 }, 60);
+  });
+
+  it('offers a temporary undo for a manual seek and returns to the original position', () => {
+    const props = makeProps();
+    const { container } = render(<PlayerProgressBar {...props} />);
+    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    setProgressBounds(progress);
+
+    fireEvent.pointerDown(progress, { button: 0, clientX: 60, pointerId: 1 });
+    fireEvent.pointerUp(progress, { pointerId: 1 });
+
+    const undo = container.querySelector('.vp-seek-undo') as HTMLButtonElement;
+    expect(undo.textContent).toContain('撤销跳转');
+    fireEvent.click(undo);
+    expect(props.seekTo).toHaveBeenLastCalledWith(10);
+    expect(container.querySelector('.vp-seek-undo')).toBeNull();
+  });
+
+  it('clears an undo action when a different media item replaces the current one', () => {
+    const first = makeProps();
+    const { container, rerender } = render(<PlayerProgressBar {...first} />);
+    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    setProgressBounds(progress);
+
+    fireEvent.pointerDown(progress, { button: 0, clientX: 60, pointerId: 1 });
+    fireEvent.pointerUp(progress, { pointerId: 1 });
+    expect(container.querySelector('.vp-seek-undo')).not.toBeNull();
+
+    const next = { ...makeProps(), identity: 'work-episode-2' };
+    rerender(<PlayerProgressBar {...next} />);
+    expect(container.querySelector('.vp-seek-undo')).toBeNull();
   });
 
   it('uses the latest presenter model after the player switches media', () => {

@@ -22,6 +22,7 @@ import { createPlayerKernelAdapter } from './playerKernelAdapter';
 import { usePlayerFullscreen } from './usePlayerFullscreen';
 import { useSkipSegmentsController } from './useSkipSegmentsController';
 import { usePlayerVolumeController } from './usePlayerVolumeController';
+import { usePlayerSegmentLoop } from './usePlayerSegmentLoop';
 import { usePlayerPlaybackSessions } from './usePlayerPlaybackSessions';
 import { useDriveBindingPrompt } from './useDriveBindingPrompt';
 import { useHtmlMediaSource } from './useHtmlMediaSource';
@@ -304,9 +305,42 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     setRate: kSetRate,
     setTemporaryRate,
   } = playbackKernel;
+  const segmentLoop = usePlayerSegmentLoop({
+    identity: progressKey,
+    currentTime: cur,
+    duration: dur,
+    available: !isLive && dur > 0 && !isAudio && !isImage
+      && (kernel === 'html5' || kernel === 'mpv' || engines.choices.find(choice => choice.id === kernel)?.capabilities?.includes('seek') === true),
+    seekTo: kSeek,
+    formatTime: formatPlaybackTime,
+  });
   const sendKernelCommandWithFeedback = useCallback((command: MpvCommand) => (
     runPlayerKernelCommandWithFeedback(command, kCmd, reportCommandError)
   ), [kCmd, reportCommandError]);
+  const selectPreferredSubtitleTrack = useCallback((id: number) => {
+    const track = technical.subtitles.find(candidate => candidate.id === id);
+    const trackKey = track ? subtitlePreferenceKey(track) : '';
+    if (workPreferenceKey && trackKey) {
+      subtitleTrackPreferenceRef.current = { workKey: workPreferenceKey, trackKey };
+      dependencies.playerPreferences.saveForWork?.(workPreferenceKey, { subtitleTrackKey: trackKey });
+      subtitlePreferenceAppliedRef.current = `${workPreferenceKey}\u0000${url}`;
+    }
+    void sendKernelCommandWithFeedback({ type: 'sid', value: id });
+  }, [technical.subtitles, workPreferenceKey, dependencies.playerPreferences, url, sendKernelCommandWithFeedback]);
+
+  useEffect(() => {
+    if (!workPreferenceKey || kernel !== 'mpv' || !technical.subtitles.length) return;
+    const attemptKey = `${workPreferenceKey}\u0000${url}`;
+    if (subtitlePreferenceAppliedRef.current === attemptKey) return;
+    const preferredKey = subtitleTrackPreferenceRef.current.workKey === workPreferenceKey
+      ? subtitleTrackPreferenceRef.current.trackKey
+      : '';
+    if (!preferredKey) return;
+    const match = technical.subtitles.find(track => subtitlePreferenceKey(track) === preferredKey);
+    if (!match) return; // Track list may arrive later; retry when the engine publishes it.
+    subtitlePreferenceAppliedRef.current = attemptKey;
+    if (technical.sid !== match.id) void sendKernelCommandWithFeedback({ type: 'sid', value: match.id });
+  }, [workPreferenceKey, kernel, technical.subtitles, technical.sid, url, sendKernelCommandWithFeedback]);
 
   const boost = usePlaybackBoost(rate, setTemporaryRate, mini, url);
 
@@ -711,6 +745,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     transport: { paused, canPrev, canNext, onPrev: handlePrev, onNext: handleNext, onToggle: togglePlay },
     technicalBar: { active: kernel === 'mpv', error: mpvErr, mpvTech: technical.tech, fmtNet: formatNetworkSpeed },
     progressBar: controlAvailability.progressVisible ? {
+      identity: `${progressKey}\u0000${url}`,
       currentTime: cur, duration: dur, buffered, canSeek: () => !!ref.current || kIsChild(), getCurrentTime: kTime, seekTo: kSeek, formatTime: formatPlaybackTime,
       onContextMenu: (position, time) => {
         if (!skipUsable || !dur || time == null) return false;
@@ -719,6 +754,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
         return true;
       },
     } : null,
+    segmentLoop: segmentLoop.model.available ? segmentLoop.model : null,
     skipMenu, skipMenuRef, hasSkipSegments: skipSeg.intro > 0 || skipSeg.outro > 0,
     skipMenuActions: {
       setIntro: () => { const intro = captureIntroFromMenu(); if (intro !== undefined) showSkipToast('片头结束点设为 ' + formatPlaybackTime(intro)); },

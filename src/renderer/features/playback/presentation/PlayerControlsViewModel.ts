@@ -10,6 +10,7 @@ import type {
   KernelToolsControlModel,
   PlaybackRateControlModel,
   PlayerProgressBarModel,
+  PlayerSegmentLoopControlModel,
   PlayerSkipMenuActions,
   PlayerSkipMenuModel,
   PlayerTechnicalBarModel,
@@ -36,6 +37,7 @@ export interface PlayerControlsViewModel {
   transport: PlayerTransportModel;
   technicalBar: PlayerTechnicalBarModel;
   progressBar: PlayerProgressBarModel | null;
+  segmentLoop: PlayerSegmentLoopControlModel | null;
   skipMenu: PlayerSkipMenuModel | null;
   skipMenuRef: ElementHandle<HTMLDivElement>;
   hasSkipSegments: boolean;

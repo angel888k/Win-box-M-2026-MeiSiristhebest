@@ -5,6 +5,7 @@ import { usePlayerProgressBarPresenter } from './usePlayerProgressBarPresenter';
 type PlayerProgressBarProps = PlayerProgressBarModel;
 
 export function PlayerProgressBar({
+  identity,
   currentTime,
   duration,
   buffered,
@@ -15,7 +16,7 @@ export function PlayerProgressBar({
   onContextMenu,
 }: PlayerProgressBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
-  const presenter = usePlayerProgressBarPresenter({ currentTime, duration, buffered, canSeek, getCurrentTime, seekTo, formatTime, onContextMenu });
+  const presenter = usePlayerProgressBarPresenter({ identity, currentTime, duration, buffered, canSeek, getCurrentTime, seekTo, formatTime, onContextMenu });
   const onWheelSeek = presenter.onWheel;
   const readBounds = (element: HTMLDivElement) => {
     const rect = element.getBoundingClientRect();
@@ -74,6 +75,18 @@ export function PlayerProgressBar({
           <div className="vp-hline" style={{ left: presenter.hover.x }} />
           <div className="vp-htip" style={{ left: presenter.hover.x }}>{presenter.hover.label}</div>
         </>
+      )}
+      {presenter.undo && (
+        <button
+          type="button"
+          className="vp-seek-undo"
+          aria-label={`撤销跳转，回到 ${presenter.undo.label}`}
+          disabled={!canSeek()}
+          onPointerDown={event => event.stopPropagation()}
+          onClick={presenter.onUndo}
+        >
+          撤销跳转 · {presenter.undo.label}
+        </button>
       )}
       <div className="vp-thumb" style={{ left: `${presenter.progress.played}%` }} />
     </div>

@@ -12,6 +12,7 @@ import { PlayerVolumeControl } from './PlayerVolumeControl';
 import { SkipSegmentsControl } from './SkipSegmentsControl';
 import { SubtitlePanel } from './SubtitlePanel';
 import { PlayerKernelControl } from './PlayerKernelControl';
+import { PlayerSegmentLoopControl } from './PlayerSegmentLoopControl';
 
 /** Stateless playback controls. The player owns state and effects; this component renders its model. */
 export function PlayerControlsBar({
@@ -23,6 +24,7 @@ export function PlayerControlsBar({
   transport,
   technicalBar,
   progressBar,
+  segmentLoop,
   skipMenu,
   skipMenuRef,
   hasSkipSegments,
@@ -95,6 +97,7 @@ export function PlayerControlsBar({
               <SubtitlePanel {...subtitle} />
               <DanmakuPanel {...danmaku} />
               {skipSegments && <SkipSegmentsControl {...skipSegments} />}
+              {segmentLoop && <PlayerSegmentLoopControl {...segmentLoop} />}
             </fieldset>
             <fieldset className="vp-bar-group" aria-label="播放选项">
               <PlayerRateControl {...rate} />
