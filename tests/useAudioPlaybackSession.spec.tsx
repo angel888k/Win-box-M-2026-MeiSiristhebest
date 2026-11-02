@@ -9,6 +9,7 @@ import type {
   AudioPlayerShortcutGuardPort,
 } from '../src/renderer/features/playback/application/audioPlayerPorts';
 import type { PlaybackPositionMemoryPort } from '../src/renderer/features/playback/application/playbackSessionPorts';
+import type { PlayerMediaSessionAction, PlayerMediaSessionActionHandler, PlayerMediaSessionPort } from '../src/renderer/features/playback/application/playerMediaSession';
 import { useAudioPlaybackSession } from '../src/renderer/features/playback/useAudioPlaybackSession';
 
 const resourceUrl = 'https://media.example/audio.mp3';
@@ -39,20 +40,23 @@ function AudioHarness({
   media,
   guard,
   keyboardEvents,
+  mediaSession,
 }: {
   input: AudioPlayerInput;
   memory: PlaybackPositionMemoryPort;
   media: AudioPlaybackMediaPort;
   guard: AudioPlayerShortcutGuardPort;
   keyboardEvents: AudioPlayerKeyboardEventsPort;
+  mediaSession?: PlayerMediaSessionPort | null;
 }) {
-  const model = useAudioPlaybackSession(input, memory, media, guard, keyboardEvents);
+  const model = useAudioPlaybackSession(input, memory, media, guard, keyboardEvents, mediaSession);
   return (
     <audio
       ref={model.actions.attachAudioElement}
       data-testid="audio"
       loop={model.playback.loop}
       onLoadedMetadata={model.actions.onLoadedMetadata}
+      onCanPlay={model.actions.onCanPlay}
       onTimeUpdate={model.actions.onTimeUpdate}
       onPlay={model.actions.onPlay}
       onPause={model.actions.onPause}
@@ -160,5 +164,59 @@ describe('useAudioPlaybackSession', () => {
     unmount();
     expect(keyboardEvents.hasKeyboardListener()).toBe(false);
     expect(pauseMedia).toHaveBeenCalledTimes(2); // stop the current audio on session cleanup
+  });
+
+  it('binds OS media controls and reports audio state from playback events', () => {
+    const memory = makeMemory(vi.fn(() => 0));
+    const media = makeMediaPort();
+    const keyboardEvents = makeKeyboardEvents();
+    const handlers = new Map<PlayerMediaSessionAction, PlayerMediaSessionActionHandler>();
+    const session: PlayerMediaSessionPort = {
+      setMetadata: vi.fn(),
+      setPlaybackState: vi.fn(),
+      setActionHandler: vi.fn((action, handler) => {
+        if (handler) handlers.set(action, handler);
+        else handlers.delete(action);
+      }),
+    };
+    const previous = vi.fn();
+    const next = vi.fn();
+    const { unmount } = render(
+      <AudioHarness
+        input={makeInput({ name: '片尾曲', canPrev: true, canNext: true, onPrev: previous, onNext: next })}
+        memory={memory}
+        media={media.port}
+        guard={{ shouldIgnoreAudioPlaybackShortcuts: () => false }}
+        keyboardEvents={keyboardEvents.port}
+        mediaSession={session}
+      />,
+    );
+    const audio = screen.getByTestId('audio') as HTMLAudioElement;
+
+    expect(session.setMetadata).toHaveBeenCalledWith({ title: '片尾曲' });
+    expect(session.setPlaybackState).toHaveBeenLastCalledWith('unknown');
+    media.state.paused = true; // model the viewer pausing after the initial autoplay request
+    handlers.get('play')?.();
+    expect(playMedia).toHaveBeenCalledTimes(2); // initial autoplay and the OS play action
+    fireEvent.canPlay(audio);
+    fireEvent.play(audio);
+    expect(session.setPlaybackState).toHaveBeenLastCalledWith('playing');
+    media.state.duration = 120;
+    fireEvent.loadedMetadata(audio);
+    handlers.get('seekto')?.({ seekTime: 32 });
+    expect(media.state.currentTime).toBe(32);
+    handlers.get('previoustrack')?.();
+    handlers.get('nexttrack')?.();
+    expect(previous).toHaveBeenCalledOnce();
+    expect(next).toHaveBeenCalledOnce();
+    handlers.get('pause')?.();
+    expect(pauseMedia).toHaveBeenCalledOnce();
+    fireEvent.pause(audio);
+    expect(session.setPlaybackState).toHaveBeenLastCalledWith('paused');
+
+    unmount();
+    expect(handlers.size).toBe(0);
+    expect(session.setMetadata).toHaveBeenLastCalledWith(null);
+    expect(session.setPlaybackState).toHaveBeenLastCalledWith('none');
   });
 });

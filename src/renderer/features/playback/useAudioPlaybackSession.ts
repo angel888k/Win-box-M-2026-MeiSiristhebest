@@ -11,6 +11,8 @@ import type {
 import { audioRestorePosition, audioSeekByPosition } from './application/audioPlayback';
 import type { AudioPlayerModel } from './presentation/AudioPlayerModel';
 import { formatAudioPlaybackTime } from './presentation/formatAudioPlaybackTime';
+import { attachPlayerMediaSession } from './application/playerMediaSession';
+import type { PlayerMediaSessionActions, PlayerMediaSessionPlaybackState, PlayerMediaSessionPort } from './application/playerMediaSession';
 
 export function useAudioPlaybackSession(
   input: AudioPlayerInput,
@@ -18,9 +20,11 @@ export function useAudioPlaybackSession(
   mediaPort: AudioPlaybackMediaPort,
   shortcutGuard: AudioPlayerShortcutGuardPort,
   keyboardEvents: AudioPlayerKeyboardEventsPort,
+  mediaSessionPort: PlayerMediaSessionPort | null = null,
 ): AudioPlayerModel {
   const {
     url,
+    name,
     playbackSource,
     canPrev,
     canNext,
@@ -140,6 +144,53 @@ export function useAudioPlaybackSession(
   const onEnded = useCallback(() => {
     if (canNext) onNext?.();
   }, [canNext, onNext]);
+
+  const mediaSessionActionsRef = useRef<PlayerMediaSessionActions>({
+    play: () => undefined,
+    pause: () => undefined,
+    seekBy: () => undefined,
+    seekTo: () => undefined,
+  });
+  const playFromMediaSession = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && mediaPort.isPaused(audio)) void mediaPort.play(audio).catch(() => undefined);
+  }, [mediaPort]);
+  const pauseFromMediaSession = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && !mediaPort.isPaused(audio)) mediaPort.pause(audio);
+  }, [mediaPort]);
+  mediaSessionActionsRef.current = {
+    play: playFromMediaSession,
+    pause: pauseFromMediaSession,
+    seekBy: seconds => seekTo((audioRef.current ? mediaPort.currentTime(audioRef.current) : 0) + seconds),
+    seekTo,
+    ...(canPrev && onPrev ? { previous: onPrev } : {}),
+    ...(canNext && onNext ? { next: onNext } : {}),
+  };
+
+  const mediaSessionPlaybackState: PlayerMediaSessionPlaybackState = error
+    ? 'none'
+    : loading
+      ? 'unknown'
+      : paused
+        ? 'paused'
+        : 'playing';
+  useEffect(() => {
+    if (!mediaSessionPort || !url) return;
+    const detach = attachPlayerMediaSession(mediaSessionPort, { title: String(name || '音频') }, {
+      play: () => mediaSessionActionsRef.current.play(),
+      pause: () => mediaSessionActionsRef.current.pause(),
+      seekBy: seconds => mediaSessionActionsRef.current.seekBy(seconds),
+      seekTo: seconds => mediaSessionActionsRef.current.seekTo(seconds),
+      ...(canPrev && onPrev ? { previous: () => mediaSessionActionsRef.current.previous?.() } : {}),
+      ...(canNext && onNext ? { next: () => mediaSessionActionsRef.current.next?.() } : {}),
+    }, { canSeek: duration > 0, canPrevious: !!canPrev && !!onPrev, canNext: !!canNext && !!onNext });
+    return detach;
+  }, [canNext, canPrev, duration, mediaSessionPort, name, onNext, onPrev, url]);
+  useEffect(() => {
+    if (!mediaSessionPort || !url) return;
+    try { mediaSessionPort.setPlaybackState(mediaSessionPlaybackState); } catch { /* System media controls are optional. */ }
+  }, [mediaSessionPlaybackState, mediaSessionPort, url]);
 
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   return {

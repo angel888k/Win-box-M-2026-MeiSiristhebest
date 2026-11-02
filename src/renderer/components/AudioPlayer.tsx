@@ -3,6 +3,7 @@ import { audioPlayerKeyboardEventsAdapter } from '../features/playback/adapters/
 import { audioPlaybackMediaAdapter } from '../features/playback/adapters/audioPlaybackMediaAdapter';
 import { audioPlayerShortcutGuardAdapter } from '../features/playback/adapters/audioPlayerShortcutGuardAdapter';
 import { playerPlaybackPositionAdapter } from '../features/playback/adapters/playerPlaybackPositionAdapter';
+import { playerMediaSessionAdapter } from '../features/playback/adapters/playerMediaSessionAdapter';
 import { AudioPlayerView } from '../features/playback/AudioPlayerView';
 import { useAudioPlaybackSession } from '../features/playback/useAudioPlaybackSession';
 
@@ -15,6 +16,7 @@ export default function AudioPlayer(props: AudioPlayerProps) {
     audioPlaybackMediaAdapter,
     audioPlayerShortcutGuardAdapter,
     audioPlayerKeyboardEventsAdapter,
+    playerMediaSessionAdapter,
   );
   return <AudioPlayerView model={model} />;
 }
