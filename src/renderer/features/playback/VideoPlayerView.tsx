@@ -33,26 +33,42 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
   const { skip: skipToast, boost: boostTip, commandError } = toast;
   const statusProps = status;
   const playerControlsModel = controls;
+  const mpvMediaSessionState = kernel === 'mpv'
+    ? readMpvMediaSessionPlaybackState({
+      readiness: capabilitySummary.readiness,
+      loading: playback.loading,
+      paused,
+      hasError: Boolean(playback.error || playback.mpvError),
+    })
+    : undefined;
   usePlayerMediaSession({
     port: mediaSessionPort,
-    active: kernel === 'html5' && media.kind === 'video' && Boolean(url),
+    active: (kernel === 'html5' || kernel === 'mpv') && media.kind === 'video' && Boolean(url),
     videoRef: ref,
     sourceKey: url,
     metadata: { title: info.title || resourceName || '正在播放', artist: 'Win-Box', album: '视频播放' },
     canSeek: !playback.isLive && Boolean(controls.progressBar),
     canPrevious: Boolean(canPrev && onPrev),
     canNext: Boolean(canNext && onNext),
+    runtimePlaybackState: mpvMediaSessionState,
     actions: {
       play: () => {
+        if (kernel === 'mpv') {
+          if (paused) onSurfaceClick();
+          return;
+        }
         const video = ref.current;
         if (video?.paused) void video.play().catch(() => undefined);
       },
-      pause: () => { if (ref.current && !ref.current.paused) ref.current.pause(); },
-      seekBy: seconds => {
-        const video = ref.current;
-        if (video) controls.progressBar?.seekTo(Math.max(0, Math.min(dur || Infinity, video.currentTime + seconds)));
+      pause: () => {
+        if (kernel === 'mpv') {
+          if (!paused) onSurfaceClick();
+          return;
+        }
+        if (ref.current && !ref.current.paused) ref.current.pause();
       },
-      seekTo: seconds => controls.progressBar?.seekTo(seconds),
+      seekBy: seconds => controls.progressBar?.seekTo(Math.max(0, Math.min(dur || Infinity, cur + seconds))),
+      seekTo: seconds => controls.progressBar?.seekTo(Math.max(0, Math.min(dur || Infinity, seconds))),
       previous: onPrev,
       next: onNext,
     },
