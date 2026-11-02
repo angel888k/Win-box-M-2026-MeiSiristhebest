@@ -9,6 +9,7 @@
 //     observe_property 全通）；属性事件以 JSON 行推送。
 import type { MpvAudioParams, MpvAudioTrack, MpvCommand, MpvKernelState, MpvShaderRenderStatus, MpvSubtitleTrack, MpvVideoParams } from '../../shared/player';
 import { mpvFontSize } from '../../shared/player';
+import { extractMpvChapters, samePlayerChapters } from '../../shared/playerChapters';
 import { playerCandidates } from '../torrent/externalPlayer';
 
 /** 初始状态（每次会话重置） */
@@ -33,6 +34,7 @@ export function initialKernelState(live = false): MpvKernelState {
     // ★ 2026-10-17（阶段2）：能力面
     subtitles: [],
     sid: null,
+    chapters: null,
     video: null,
     audio: null,
     vCodec: '',
@@ -78,6 +80,7 @@ export const MPV_OBSERVED: ReadonlyArray<{ id: number; name: string }> = [
   { id: 21, name: 'demuxer-cache-duration' },
   { id: 22, name: 'audio-spdif' },
   { id: 23, name: 'sid' },
+  { id: 24, name: 'chapter-list' },
 ];
 
 /** 归一：任意值 → 非空字符串（数字转字符串；空/其它 → undefined） */
@@ -391,6 +394,12 @@ export function reduceMpvMessage(state: MpvKernelState, msg: unknown): boolean {
         if (!sameAudioTracks(state.audioTracks, audio)) { state.audioTracks = audio; changed = true; }
         if (!sameSubtitleTracks(state.subtitles, subs)) { state.subtitles = subs; changed = true; }
         return changed;
+      }
+      case 'chapter-list': {
+        const chapters = extractMpvChapters(m.data);
+        if (chapters === null || samePlayerChapters(state.chapters, chapters)) return false;
+        state.chapters = chapters;
+        return true;
       }
       case 'aid': {
         const v = num(m.data);

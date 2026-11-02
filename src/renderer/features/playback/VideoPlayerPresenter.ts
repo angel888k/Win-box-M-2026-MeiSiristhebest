@@ -23,6 +23,7 @@ import { usePlayerFullscreen } from './usePlayerFullscreen';
 import { useSkipSegmentsController } from './useSkipSegmentsController';
 import { usePlayerVolumeController } from './usePlayerVolumeController';
 import { usePlayerSegmentLoop } from './usePlayerSegmentLoop';
+import { useHtmlMediaChapters } from './useHtmlMediaChapters';
 import { usePlayerPlaybackSessions } from './usePlayerPlaybackSessions';
 import { useDriveBindingPrompt } from './useDriveBindingPrompt';
 import { useHtmlMediaSource } from './useHtmlMediaSource';
@@ -314,6 +315,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     seekTo: kSeek,
     formatTime: formatPlaybackTime,
   });
+  const htmlMediaChapters = useHtmlMediaChapters(ref, progressKey, kernel === 'html5');
   const sendKernelCommandWithFeedback = useCallback((command: MpvCommand) => (
     runPlayerKernelCommandWithFeedback(command, kCmd, reportCommandError)
   ), [kCmd, reportCommandError]);
@@ -751,6 +753,9 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
         ...(skipSeg.outro > 0 ? [{ id: 'outro-start', time: dur - skipSeg.outro, kind: 'outro-start' as const, label: '片尾开始' }] : []),
         ...(segmentLoop.model.start != null ? [{ id: 'segment-start', time: segmentLoop.model.start, kind: 'segment-start' as const, label: '循环 A 点' }] : []),
         ...(segmentLoop.model.end != null ? [{ id: 'segment-end', time: segmentLoop.model.end, kind: 'segment-end' as const, label: '循环 B 点' }] : []),
+        ...((kernel === 'mpv' ? technical.chapters : htmlMediaChapters) ?? [])
+          .filter(chapter => chapter.startSeconds > 0 && chapter.startSeconds < dur)
+          .map(chapter => ({ id: 'chapter-' + chapter.id, time: chapter.startSeconds, kind: 'chapter' as const, label: chapter.title })),
       ],
       currentTime: cur, duration: dur, buffered, canSeek: () => !!ref.current || kIsChild(), getCurrentTime: kTime, seekTo: kSeek, formatTime: formatPlaybackTime,
       onContextMenu: (position, time) => {

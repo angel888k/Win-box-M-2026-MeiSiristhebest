@@ -2,6 +2,8 @@
 // 播放相关的本地偏好 —— 主进程（本地中继 `/play`）与渲染层配置页共用。
 // 落在 <userData>/player-settings.json（见 src/main/player/playerSettings.ts）。
 
+import type { PlayerChapter } from './playerChapters';
+
 // ---------- ★ 超分插件（M1）：用户可见档位（见 docs/design/插件系统_设计方案.md §8） ----------
 //
 // 档位 id 与插件 manifest 的 `contributes[type='mpv.shaders'].modes[].id` 一一对应；
@@ -416,6 +418,8 @@ export interface MpvKernelState {
   subtitles: MpvSubtitleTrack[];
   /** 当前字幕轨 id（sid）；无字幕/未选 null */
   sid: number | null;
+  /** Null until MPV reports chapter-list; an empty list means known to have no chapters. */
+  chapters: PlayerChapter[] | null;
   /** 视频参数（画面尺寸/HDR 标准判定）；无视频 null */
   video: MpvVideoParams | null;
   /** 音频参数（采样率/声道）；无音频 null */
@@ -497,5 +501,5 @@ export function mpvSubPos(bottomPx: number, winHeight: number): number {
 
 /** Shared initial state for built-in and plugin-managed playback sessions. */
 export function emptyMpvKernelState(live = false): MpvKernelState {
-  return { time: null, duration: null, paused: false, buffering: false, eof: false, loaded: false, live, playbackStarted: false, error: null, videoW: 0, videoH: 0, cacheKbps: 0, cacheTime: null, exited: false, audioTracks: [], aid: null, subtitles: [], sid: null, video: null, audio: null, vCodec: '', aCodec: '', hwdec: '', vBitrateKbps: 0, aBitrateKbps: 0, fps: 0, dropped: 0, cacheDuration: null, spdif: '' };
+  return { time: null, duration: null, paused: false, buffering: false, eof: false, loaded: false, live, playbackStarted: false, error: null, videoW: 0, videoH: 0, cacheKbps: 0, cacheTime: null, exited: false, audioTracks: [], aid: null, subtitles: [], sid: null, chapters: null, video: null, audio: null, vCodec: '', aCodec: '', hwdec: '', vBitrateKbps: 0, aBitrateKbps: 0, fps: 0, dropped: 0, cacheDuration: null, spdif: '' };
 }

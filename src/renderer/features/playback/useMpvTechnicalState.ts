@@ -14,7 +14,7 @@ export function useMpvTechnicalState(url: string, kernel: Kernel) {
   const onState = useCallback((state: MpvKernelState) => {
     const tech = technicalState(state);
     const rounded = { ...tech, vKbps: Math.round(tech.vKbps / 50), aKbps: Math.round(tech.aKbps / 5), fps: Math.round(tech.fps), cacheSec: Math.round(tech.cacheSec ?? -1), speedKbps: Math.round(tech.speedKbps / 50) };
-    const next = JSON.stringify([key, state.subtitles, state.sid, state.loaded, state.error, rounded]);
+    const next = JSON.stringify([key, state.subtitles, state.sid, state.chapters, state.loaded, state.error, rounded]);
     if (signature.current === next) return;
     signature.current = next;
     setView({ key, state, tech });
@@ -28,5 +28,13 @@ export function useMpvTechnicalState(url: string, kernel: Kernel) {
     return () => clearTimeout(timer);
   }, [badgeScope, badgeSignature]);
 
-  return { onState, tech: current?.tech ?? null, subtitles: current?.state.subtitles ?? [], sid: current?.state.sid ?? null, badges: badgeSignature && expiredBadges !== badgeScope ? badgeSignature.split('\u0000') : [] };
+  return {
+    onState,
+    tech: current?.tech ?? null,
+    subtitles: current?.state.subtitles ?? [],
+    sid: current?.state.sid ?? null,
+    chapters: current?.state.chapters ?? null,
+    trackInventoryObserved: current?.state.loaded ?? false,
+    badges: badgeSignature && expiredBadges !== badgeScope ? badgeSignature.split('\u0000') : [],
+  };
 }
