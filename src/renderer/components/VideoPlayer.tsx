@@ -26,6 +26,7 @@ import { playerPlaybackPositionAdapter } from '../features/playback/adapters/pla
 import { playerPlaybackRuntimeAdapter } from '../features/playback/adapters/playerPlaybackRuntimeAdapter';
 import { playerKeyboardShortcutsAdapter } from '../features/playback/adapters/playerKeyboardShortcutsAdapter';
 import { skipSegmentsControllerAdapter } from '../features/playback/adapters/skipSegmentsControllerAdapter';
+import { playerMediaSessionAdapter } from '../features/playback/adapters/playerMediaSessionAdapter';
 
 const playerDependencies: VideoPlayerPresenterDependencies = {
   subtitleSearch: { service: subtitleSearchServiceAdapter, queryMemory: subtitleQueryMemoryAdapter },
@@ -64,5 +65,6 @@ export default function VideoPlayer(props: VideoPlayerProps) {
     model={model}
     statusOverlay={props.statusOverlay}
     suppressPlaybackFailure={props.suppressPlaybackFailure}
+    mediaSessionPort={playerMediaSessionAdapter}
   />;
 }

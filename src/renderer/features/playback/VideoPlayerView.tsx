@@ -10,11 +10,15 @@ import { PlayerTechnicalPanels } from './PlayerTechnicalPanels';
 import { PlayerStatusOverlays } from './PlayerStatusOverlays';
 import { PlayerControlsBar } from './PlayerControlsBar';
 import type { VideoPlayerPresenterModel } from './VideoPlayerPresenter';
+import type { PlayerMediaSessionPort } from './application/playerMediaSession';
+import { readMpvMediaSessionPlaybackState } from './application/playerMediaSession';
+import { usePlayerMediaSession } from './usePlayerMediaSession';
 
-export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure = false }: {
+export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure = false, mediaSessionPort = null }: {
   model: VideoPlayerPresenterModel;
   statusOverlay?: ReactNode;
   suppressPlaybackFailure?: boolean;
+  mediaSessionPort?: PlayerMediaSessionPort | null;
 }) {
   const { identity, media, navigation, surface, playback, danmaku, contextMenu, episodes, technicalPanels, info, toast, status, controls } = model;
   const { url, resourceName, mini } = identity;
