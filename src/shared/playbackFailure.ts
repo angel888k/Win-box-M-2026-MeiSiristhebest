@@ -82,3 +82,38 @@ export function playbackFailureSummary(failure: PlaybackFailureContext): string 
     default: return '播放器未能确认失败阶段';
   }
 }
+
+export function playbackFailureStageLabel(stage: PlaybackFailureStage): string {
+  switch (stage) {
+    case 'startup': return '首帧启动';
+    case 'authorization': return '访问权限';
+    case 'missing-media': return '媒体地址';
+    case 'network': return '网络传输';
+    case 'demux': return '媒体格式解析';
+    case 'decode': return '视频解码';
+    case 'engine': return '播放器内核';
+    default: return '暂无法确认';
+  }
+}
+
+/** Provide conservative next steps without claiming a cause the engine did not report. */
+export function playbackFailureNextStep(failure: PlaybackFailureContext): string {
+  switch (failure.stage) {
+    case 'startup':
+      return '首帧等待已超时；重新解析当前集，或选择已核验的同集来源。';
+    case 'authorization':
+      return '源站拒绝了当前访问；检查该来源的登录、Cookie、Referer 或访问权限，再尝试同集其他来源。';
+    case 'missing-media':
+      return '媒体地址可能失效；重新解析当前集，若仍返回 404/410，再切换同集来源。';
+    case 'network':
+      return '网络传输中断；可重试一次，持续失败时检查网络或切换来源。';
+    case 'demux':
+      return '检查源站是否返回了网页或错误页；也可改用支持该协议的播放器内核。';
+    case 'decode':
+      return '当前内核可能不支持该编码；尝试 MPV 或其他可用播放器，并确认来源返回的是媒体数据。';
+    case 'engine':
+      return '播放器内核报告运行失败；尝试其他可用内核，或重新解析后再播放。';
+    default:
+      return '目前没有足够的内核信息确定故障阶段；可尝试同集其他来源，并复制脱敏诊断摘要反馈。';
+  }
+}
