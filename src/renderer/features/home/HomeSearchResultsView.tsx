@@ -1,7 +1,8 @@
 import { memo } from 'react';
 import type { AggVodItem, SearchAllReport } from '../../../shared/types';
-import { sourceIdentityKey } from '../../../shared/sourceIdentity';
 import { SearchResultFilters } from '../search/SearchResultFilters';
+import { groupSearchResultsByExactWork } from '../search/application/searchResultWorkGroups';
+import { sourceIdentityKey } from '../../../shared/sourceIdentity';
 import { HomeMediaCardView } from './HomeMediaCardView';
 import { formatSearchCacheTime } from './homePageModel';
 import type { HomeSearchResultsModel, HomeSearchScope } from './homePageViewModel';
@@ -19,6 +20,7 @@ export function HomeSearchResultsView({
   sourceFilter,
   profileFilter,
   matchMode,
+  groupByWork,
   visibleLimit,
   picOf,
   onImageError,
@@ -27,6 +29,7 @@ export function HomeSearchResultsView({
   onProfileFilter,
   onSourceFilter,
   onMatchMode,
+  onGroupByWork,
   onShowMore,
 }: HomeSearchResultsModel) {
   const wideSearch = scope === 'all' || scope === 'all-profiles';
@@ -87,8 +90,17 @@ export function HomeSearchResultsView({
         onMode={onMatchMode}
       />
 
+      {wideSearch && view.items.length > 1 && (
+        <div className="search-result-view-options" role="group" aria-label="搜索结果展示方式">
+          <span>展示方式</span>
+          <button type="button" aria-pressed={!groupByWork} onClick={() => onGroupByWork(false)}>逐条显示</button>
+          <button type="button" aria-pressed={groupByWork} onClick={() => onGroupByWork(true)}>同名跨源聚合</button>
+          {groupByWork && <small>仅合并规范化后完全同名、年份明确且一致的跨源结果；同源重复和不同版本仍分开。</small>}
+        </div>
+      )}
+
       {view.items.length > 0 ? (
-        <ResultGrid items={view.items} visibleLimit={visibleLimit} defaultProfileId={defaultProfileId} picOf={picOf} onImageError={onImageError} onOpenItem={onOpenItem} onShowMore={onShowMore} />
+        <ResultGrid items={view.items} visibleLimit={visibleLimit} defaultProfileId={defaultProfileId} picOf={picOf} onImageError={onImageError} onOpenItem={onOpenItem} onShowMore={onShowMore} groupByWork={wideSearch && groupByWork} />
       ) : (
         <div className="empty">
           {sourceFilter
@@ -117,6 +129,7 @@ function ResultGrid({
   onImageError,
   onOpenItem,
   onShowMore,
+  groupByWork = false,
 }: {
   items: AggVodItem[];
   visibleLimit: number;
@@ -125,20 +138,57 @@ function ResultGrid({
   onImageError: HomeSearchResultsModel['onImageError'];
   onOpenItem: HomeSearchResultsModel['onOpenItem'];
   onShowMore?: HomeSearchResultsModel['onShowMore'];
+  groupByWork?: boolean;
 }) {
+  const groups = groupByWork
+    ? groupSearchResultsByExactWork(items, defaultProfileId)
+    : items.map((item, index) => ({ key: `item:${index}`, items: [item], grouped: false }));
   return (
     <>
       <div className="grid search-result-grid">
-        {items.slice(0, visibleLimit).map((item) => (
-          <AggregateMediaCard key={`${sourceIdentityKey(item.sourceRef?.profileId ?? defaultProfileId, item.sourceKey)}-${item.id}`} item={item} pic={picOf(item)} onImageError={onImageError} onOpen={onOpenItem} />
+        {groups.slice(0, visibleLimit).map(group => group.grouped ? (
+          <GroupedAggregateMediaCard key={group.key} items={group.items} defaultProfileId={defaultProfileId} picOf={picOf} onImageError={onImageError} onOpen={onOpenItem} />
+        ) : (
+          <AggregateMediaCard key={group.key} item={group.items[0]} pic={picOf(group.items[0])} onImageError={onImageError} onOpen={onOpenItem} />
         ))}
       </div>
-      {onShowMore && items.length > visibleLimit && (
+      {onShowMore && groups.length > visibleLimit && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
-          <button onClick={onShowMore}>显示更多（还有 {items.length - visibleLimit} 条）</button>
+          <button onClick={onShowMore}>显示更多（还有 {groups.length - visibleLimit} 条）</button>
         </div>
       )}
     </>
+  );
+}
+
+function GroupedAggregateMediaCard({ items, defaultProfileId, picOf, onImageError, onOpen }: {
+  items: AggVodItem[];
+  defaultProfileId: string;
+  picOf: (item: AggVodItem) => string;
+  onImageError: HomeSearchResultsModel['onImageError'];
+  onOpen: HomeSearchResultsModel['onOpenItem'];
+}) {
+  const first = items[0];
+  const sourceCount = new Set(items.map(item => sourceIdentityKey(item.sourceRef?.profileId || defaultProfileId, item.sourceKey))).size;
+  const sourcesLabel = sourceCount > 1 ? `${sourceCount} 个来源` : `${items.length} 个同源版本`;
+  return (
+    <div className="search-result-work-card">
+      <AggregateMediaCard item={first} pic={picOf(first)} sourceLabel={sourcesLabel} onImageError={onImageError} onOpen={onOpen} />
+      <details className="search-result-work-sources">
+        <summary>选择播放版本 · {items.length}</summary>
+        <div className="search-result-work-source-list">
+          {items.map((item, index) => {
+            const source = [item.sourceProfileName, item.sourceName || item.sourceKey].filter(Boolean).join(' / ');
+            return (
+              <button key={`${item.sourceRef?.profileId || ''}:${item.sourceKey}:${item.id}:${index}`} type="button" onClick={() => onOpen(item)}>
+                <span>{source || '未命名来源'}</span>
+                <small>{item.name}</small>
+              </button>
+            );
+          })}
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -161,13 +211,14 @@ function SourceFailures({ report, scope }: { report: SearchAllReport; scope: Hom
   );
 }
 
-const AggregateMediaCard = memo(function AggregateMediaCard({ item, pic, onOpen, onImageError }: {
+const AggregateMediaCard = memo(function AggregateMediaCard({ item, pic, onOpen, onImageError, sourceLabel: sourceLabelOverride }: {
   item: AggVodItem;
   pic: string;
   onOpen: HomeSearchResultsModel['onOpenItem'];
   onImageError: HomeSearchResultsModel['onImageError'];
+  sourceLabel?: string;
 }) {
-  const sourceLabel = [item.sourceProfileName, item.sourceName || item.sourceKey].filter(Boolean).join(' / ');
+  const sourceLabel = sourceLabelOverride || [item.sourceProfileName, item.sourceName || item.sourceKey].filter(Boolean).join(' / ');
   return (
     <HomeMediaCardView
       title={item.name}

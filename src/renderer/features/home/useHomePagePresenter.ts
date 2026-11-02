@@ -49,6 +49,7 @@ export function useHomePagePresenter({ onOpenDetail, route, filterPanel, waterfa
    */
   const [sites, setSites] = useState<SourceBean[]>([]);
   const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>([]);
+  const [groupSearchByWork, setGroupSearchByWork] = useState(true);
   const profileIdRef = useRef('');
   const [activeProfileId, setActiveProfileId] = useState('');
   const [key, setKey] = useState('');
@@ -307,6 +308,7 @@ export function useHomePagePresenter({ onOpenDetail, route, filterPanel, waterfa
         sourceFilter: aggSrc,
         profileFilter: aggProfileFilter,
         matchMode: aggMatchMode,
+        groupByWork: groupSearchByWork,
         visibleLimit: aggCap,
         picOf: coverSessions.searchPicOf,
         onImageError: coverSessions.onSearchImageError,
@@ -315,6 +317,7 @@ export function useHomePagePresenter({ onOpenDetail, route, filterPanel, waterfa
         onProfileFilter: (id: string) => dispatchHomeSearch({ type: "profile-filter-selected", profileId: id }),
         onSourceFilter: pickAggSrc,
         onMatchMode: (mode: typeof aggMatchMode) => dispatchHomeSearch({ type: "match-mode-selected", mode }),
+        onGroupByWork: setGroupSearchByWork,
         onShowMore: () => dispatchHomeSearch({ type: "more-results-requested" }),
       } : null,
     },

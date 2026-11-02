@@ -59,6 +59,7 @@ export type HomeSearchResultsModel = {
   sourceFilter: string;
   profileFilter: string;
   matchMode: SearchMatchMode;
+  groupByWork: boolean;
   visibleLimit: number;
   picOf: (item: AggVodItem) => string;
   onImageError: (item: AggVodItem, failedSource: string) => void;
@@ -67,6 +68,7 @@ export type HomeSearchResultsModel = {
   onProfileFilter: (profileId: string) => void;
   onSourceFilter: (sourceId: string) => void;
   onMatchMode: (mode: SearchMatchMode) => void;
+  onGroupByWork: (group: boolean) => void;
   onShowMore: () => void;
 };
 
