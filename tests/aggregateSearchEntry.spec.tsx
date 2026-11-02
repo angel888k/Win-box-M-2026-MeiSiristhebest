@@ -46,7 +46,7 @@ describe('real inline aggregate entry', () => {
     render(<MemoryRouter initialEntries={['/home']}><Routes><Route path="/home" element={<HomePage onOpenDetail={openDetail} />} /><Route path="/movie" element={<DiscoverDetailPage />} /></Routes></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: '打开条目：跨仓影片' }));
     await screen.findByText('这是影片简介', {}, { timeout: 5000 });
-    expect(client.searchAll).toHaveBeenCalledWith('跨仓影片', { profileIds: ['A'], refresh: false });
+    expect(client.searchAll).toHaveBeenCalledWith('跨仓影片', { profileIds: ['A'], refresh: false }, expect.any(AbortSignal));
     expect(openDetail).not.toHaveBeenCalled();
     expect(openSearchWindow).not.toHaveBeenCalled();
   }, 10000);
@@ -70,7 +70,7 @@ describe('real inline aggregate entry', () => {
     await screen.findByText('这是影片简介');
     const result = await screen.findByRole('button', { name: /跨仓影片.*B 片源/ });
     fireEvent.click(result);
-    expect(client.searchAll).toHaveBeenCalledWith('跨仓影片', { profileIds: ['A', 'B'], refresh: false });
+    expect(client.searchAll).toHaveBeenCalledWith('跨仓影片', { profileIds: ['A', 'B'], refresh: false }, expect.any(AbortSignal));
     expect(openDetailRoute).toHaveBeenCalledWith(expect.any(Function), 'same-key', 'film-b', expect.stringContaining('profileId=B'));
   });
 

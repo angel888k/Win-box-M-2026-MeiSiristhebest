@@ -67,8 +67,9 @@ describe('detail episode playback intent', () => {
     expect(play).toContain('onPlay(outcome.url,');
     expect(play).not.toContain('result.url || target.url');
     expect(playerResolutionUseCaseSource).toContain('playbackResultError(result)');
-    expect(playerResolutionUseCaseSource).toContain('recordOpenedPlayerEpisode(');
+    expect(playerResolutionUseCaseSource).not.toContain('recordOpenedPlayerEpisode(');
     expect(playerSessionWorkflowSource).toContain('resolvePlayerPageEpisode(');
+    expect(playerSessionWorkflowSource).toContain('recordOpenedPlayerEpisode(');
     expect(playerSessionSource).toContain('createPlayerPageSessionWorkflow(');
     expect(playerSessionSource).not.toContain('resolvePlayerPageEpisode(');
     expect(playerSessionSource).not.toContain('playbackResultError(result)');
@@ -129,9 +130,9 @@ describe('detail episode playback intent', () => {
   });
 
   it('player-local previous/next switching updates init.epIndex before resolving', () => {
-    expect(playerSessionWorkflowSource).toContain('const next = { ...current, startTime: 0, lastUrl: \'\', epIndex: index };');
+    expect(playerSessionWorkflowSource).toContain('const next = { ...current, startTime: 0, lastUrl: \'\', epIndex: index, deferHistoryUntilPlayback: true };');
     expect(playerSessionWorkflowSource).toContain('updateInit(next);');
-    expect(playerSessionWorkflowSource).toContain('void resolveWithRecovery(next, index);');
+    expect(playerSessionWorkflowSource).toMatch(/void resolveWithRecovery\(next,\s*index/);
     expect(playerSessionWorkflowSource).toContain('index >= current.episodes.length');
     expect(playerSessionWorkflowSource).toContain('!Number.isInteger(index)');
   });

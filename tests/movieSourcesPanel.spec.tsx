@@ -40,7 +40,7 @@ describe('movie source posters and filters', () => {
     expect(await screen.findByRole('img', { name: /^嫁金钗$/ })).toHaveProperty('src', 'https://images.test/a.jpg');
     expect(screen.queryByRole('button', { name: /火影忍者/ })).toBeNull();
     expect(screen.getByText(/已隐藏 1 条片名不符/)).toBeTruthy();
-    expect(client.searchAll).toHaveBeenCalledWith('嫁金钗', { profileIds: ['A', 'B'], refresh: false });
+    expect(client.searchAll).toHaveBeenCalledWith('嫁金钗', { profileIds: ['A', 'B'], refresh: false }, expect.any(AbortSignal));
   });
 
   it('filters by child and by the producing source without starting another network search', async () => {

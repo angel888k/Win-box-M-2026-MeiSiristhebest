@@ -34,7 +34,7 @@ describe('movie source application use cases', () => {
       source: { profileId: 'B', profileName: '乙仓', key: 'cloud', name: '云盘', status: 'ok', items: [item('目标')] } });
 
     const result = await search;
-    expect(port.searchAll).toHaveBeenCalledWith('目标', { profileIds: ['A', 'B'], refresh: false });
+    expect(port.searchAll).toHaveBeenCalledWith('目标', { profileIds: ['A', 'B'], refresh: false }, undefined);
     expect(progress).toHaveBeenCalledTimes(1);
     expect(progress.mock.calls[0][0].report.items[0]).toMatchObject({ name: '目标', sourceRef: { profileId: 'B', key: 'cloud' } });
     expect(result.progress).toEqual({ done: 2, total: 3 });
@@ -48,7 +48,7 @@ describe('movie source application use cases', () => {
       searchAll: vi.fn(async () => emptyReport),
     };
     await searchMovieSources('目标', true, port, () => undefined);
-    expect(port.searchAll).toHaveBeenCalledWith('目标', { profileId: 'legacy', refresh: true });
+    expect(port.searchAll).toHaveBeenCalledWith('目标', { profileId: 'legacy', refresh: true }, undefined);
   });
 
   it('explains the missing-search-scope error before subscribing or searching', async () => {
