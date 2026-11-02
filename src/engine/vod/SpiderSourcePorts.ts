@@ -15,7 +15,7 @@ export interface SpiderSearchCapability {
 }
 
 export interface SpiderPlaybackCapability {
-  playerContent(flag: string, id: string, vipFlags: string[]): SpiderJson;
+  playerContent(flag: string, id: string, vipFlags: string[], signal?: AbortSignal): SpiderJson;
 }
 
 export interface SpiderProxyCapability {

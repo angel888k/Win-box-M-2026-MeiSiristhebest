@@ -35,7 +35,8 @@ export class CmsSourceAdapter implements SourceCatalogPort, SourcePlaybackPort {
     return awaitWithAbort(this.catalog.search(bean.api, bean.type, bean.key, wd, timeoutMs, signal), signal);
   }
 
-  async play(bean: SourceBean, flag: string, id: string, vipFlags: string[], _timeoutMs: number): Promise<PlayResult> {
+  async play(bean: SourceBean, flag: string, id: string, vipFlags: string[], _timeoutMs: number, signal?: AbortSignal): Promise<PlayResult> {
+    throwIfAborted(signal);
     const playUrl = bean.playUrl || '';
     const url = playUrl.includes('{playUrl}') ? playUrl.replace('{playUrl}', id) : id;
     const needParse = vipFlags.includes(flag) || isPlaybackPageUrl(url) ? 1 : 0;

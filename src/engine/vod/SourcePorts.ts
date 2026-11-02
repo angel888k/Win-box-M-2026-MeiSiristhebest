@@ -45,7 +45,7 @@ export interface SourceQueryGatewayPort {
 }
 
 export interface SourcePlaybackPort extends SourceAdapterIdentity {
-  play(bean: SourceBean, flag: string, id: string, vipFlags: string[], timeoutMs: number): Promise<PlayResult>;
+  play(bean: SourceBean, flag: string, id: string, vipFlags: string[], timeoutMs: number, signal?: AbortSignal): Promise<PlayResult>;
 }
 
 export interface SourceProxyPort extends SourceAdapterIdentity {

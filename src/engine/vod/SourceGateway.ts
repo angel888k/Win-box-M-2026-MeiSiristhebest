@@ -72,7 +72,8 @@ export class SourceGateway implements SourceQueryGatewayPort {
     return adapter?.proxyPortFor(bean) ?? null;
   }
 
-  async play(bean: SourceBean, flag: string, id: string, vipFlags: string[], timeoutMs = 20000): Promise<PlayResult> {
-    return this.adapterFor(this.adapters.playback, bean, 'play').play(bean, flag, id, vipFlags, timeoutMs);
+  async play(bean: SourceBean, flag: string, id: string, vipFlags: string[], timeoutMs = 20000, signal?: AbortSignal): Promise<PlayResult> {
+    throwIfAborted(signal);
+    return awaitWithAbort(this.adapterFor(this.adapters.playback, bean, 'play').play(bean, flag, id, vipFlags, timeoutMs, signal), signal);
   }
 }

@@ -210,7 +210,10 @@ export function createSpiderHostServices(
   selfResolveMediaProbe = playbackServices.mediaProbe;
   const playbackRequest = new SpiderPlaybackRequestService({
     execution: sourceExecutionContext,
-    playback: playbackServices.playback,
+    playback: {
+      execute: (...args) => playbackServices.playback.execute(...args),
+      prewarm: (source, flag, id, vipFlags, signal) => sourceServices.gateway.play(source, flag, id, vipFlags, undefined, signal),
+    },
     startTimer: () => diagTimer(),
     episodeFingerprint: shortHash,
     safeUrlSummary: redactUrl,

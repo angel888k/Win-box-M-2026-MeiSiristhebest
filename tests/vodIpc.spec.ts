@@ -35,6 +35,7 @@ function register() {
       return { results: [], checkedSources: 1 };
     }),
     play: vi.fn(async (): Promise<PlayResult> => ({ url: '', parse: 1, playUrl: '', flag: 'line', externalLink: 'magnet:?xt=urn:btih:test' })),
+    prewarm: vi.fn(async (): Promise<PlayResult | null> => null),
   };
   const send = vi.fn();
   const writeClipboard = vi.fn();
@@ -77,6 +78,20 @@ describe('VOD IPC adapter', () => {
 
     await expect(invoke(IPC.VOD_PLAY, { key: 'source-a', flag: 'line-a', id: 'episode-a' }))
       .resolves.toMatchObject({ ok: true, data: { externalLink: 'magnet:?xt=urn:btih:test' } });
+  });
+
+  it('forwards cancellation to bounded next-episode prewarming', async () => {
+    const { host } = register();
+    vi.mocked(host.prewarm).mockImplementationOnce((_key, _flag, _id, _profileId, signal) => new Promise((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+    const request = invoke(IPC.VOD_PLAY_PREWARM, { key: 'source-a', flag: 'line-a', id: 'episode-b', requestId: 'prewarm-a' });
+    await vi.waitFor(() => expect(host.prewarm).toHaveBeenCalledTimes(1));
+    const signal = vi.mocked(host.prewarm).mock.calls[0][4];
+    send(IPC.VOD_PLAY_PREWARM_CANCEL, 'prewarm-a');
+
+    expect(signal?.aborted).toBe(true);
+    await expect(request).resolves.toMatchObject({ ok: false, error: { message: '下一集预解析已取消' } });
   });
 
   it('forwards caller cancellation through IPC and scopes it to the initiating renderer', async () => {

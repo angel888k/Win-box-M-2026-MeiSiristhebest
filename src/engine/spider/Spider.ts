@@ -88,7 +88,7 @@ export abstract class Spider {
   }
 
   /** 播放信息：flag=播放源标识, id=剧集id, vipFlags=需解析的flag列表 */
-  playerContent(_flag: string, _id: string, _vipFlags: string[]): Promise<string> | string {
+  playerContent(_flag: string, _id: string, _vipFlags: string[], _signal?: AbortSignal): Promise<string> | string {
     return '';
   }
 

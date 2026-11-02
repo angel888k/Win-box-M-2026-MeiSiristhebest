@@ -16,6 +16,7 @@ export interface VodIpcPort {
     signal?: AbortSignal,
   ): Promise<unknown>;
   play(key: string, flag: string, id: string, profileId?: string, parseOffset?: number): Promise<PlayResult>;
+  prewarm(key: string, flag: string, id: string, profileId?: string, signal?: AbortSignal): Promise<PlayResult | null>;
 }
 interface ProgressWindow {
   webContents: { send(channel: string, payload: unknown): void };
@@ -64,6 +65,7 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
   ipcMain.on(IPC.VOD_SEARCH_CANCEL, (event, requestId) => cancelRequest(event, requestId, '搜索已由调用窗口取消'));
   ipcMain.on(IPC.VOD_SEARCH_ALL_CANCEL, (event, requestId) => cancelRequest(event, requestId, '搜索已由调用窗口取消'));
   ipcMain.on(IPC.VOD_DETAIL_CANCEL, (event, requestId) => cancelRequest(event, requestId, '影片详情请求已取消'));
+  ipcMain.on(IPC.VOD_PLAY_PREWARM_CANCEL, (event, requestId) => cancelRequest(event, requestId, '下一集预解析已取消'));
 
   registerHandler(IPC.VOD_HOME, (event, args: { key: string; profileId?: string; requestId?: string }) =>
     withRequestCancellation(event, args.requestId, '首页浏览', (signal) =>
@@ -121,4 +123,12 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
     }
     return result;
   }, logger);
+  registerHandler(IPC.VOD_PLAY_PREWARM, (event, args: {
+    key: string;
+    flag: string;
+    id: string;
+    profileId?: string;
+    requestId?: string;
+  }) => withRequestCancellation(event, args.requestId, '下一集预解析', (signal) =>
+    host.prewarm(args.key, args.flag, args.id, args.profileId, signal)), logger);
 }

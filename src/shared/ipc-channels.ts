@@ -191,6 +191,8 @@ export const IPC = {
    *  （每次启动重新生成）—— 渲染层据此判定「新一次启动」并丢掉页面状态类记忆（见 uiMemory）。 */
   SYSTEM_SESSION_ID: 'system:sessionId',
   VOD_PLAY: 'vod:play',
+  VOD_PLAY_PREWARM: 'vod:play:prewarm',
+  VOD_PLAY_PREWARM_CANCEL: 'vod:play:prewarm:cancel',
   VOD_DEBUG: 'vod:debug',
   LIVE_LOAD: 'live:load',
   LIVE_GROUPS: 'live:groups',

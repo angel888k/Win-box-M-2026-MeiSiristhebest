@@ -47,7 +47,7 @@ export class UnsupportedSpider extends Spider {
   searchContentPage(_key: string, _quick: boolean, _pg: string): never {
     return this.unsupported('searchContentPage');
   }
-  playerContent(_flag: string, _id: string, _vipFlags: string[]): never {
+  playerContent(_flag: string, _id: string, _vipFlags: string[], _signal?: AbortSignal): never {
     return this.unsupported('playerContent');
   }
   liveContent(_url: string): never {

@@ -262,6 +262,9 @@ export const client = {
       (requestId) => window.api.vod.cancelSearchAll(requestId)),
   onSearchAllProgress: (cb: (ev: SearchAllProgressEvent) => void) => window.api.vod.onSearchAllProgress(cb as (ev: unknown) => void),
   play: (a: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number }) => unwrap(window.api.vod.play(a)),
+  prewarmPlay: (a: { key: string; flag: string; id: string; profileId?: string }, signal?: AbortSignal) =>
+    invokeVodRequestWithCancellation(signal, (requestId) => window.api.vod.prewarmPlay({ ...a, requestId }),
+      (requestId) => window.api.vod.cancelPrewarmPlay(requestId)),
   loadLive: (index: number) => unwrap(window.api.live.load(index)),
   liveMeta: () => unwrap(window.api.live.meta()),
   liveEpg: (index: number, channels: EpgChannelRef[]) => unwrap(window.api.live.epg(index, channels)),

@@ -210,9 +210,9 @@ export class PySpider extends Spider {
   searchContentPage(key: string, quick: boolean, pg: string, timeoutMs?: number, signal?: AbortSignal): Promise<string> {
     return this.call('searchContent', [key, String(quick), pg], timeoutMs, signal);
   }
-  playerContent(flag: string, id: string, vipFlags: string[]): Promise<string> {
+  playerContent(flag: string, id: string, vipFlags: string[], signal?: AbortSignal): Promise<string> {
     // A2：vipFlags 以 JSON 数组传入，runner.py 解析成 list 交给 python 蜘蛛
-    return this.call('playerContent', [flag, id, JSON.stringify(vipFlags || [])]);
+    return this.call('playerContent', [flag, id, JSON.stringify(vipFlags || [])], undefined, signal);
   }
   liveContent(url: string): Promise<string> {
     return this.call('liveContent', [url]);

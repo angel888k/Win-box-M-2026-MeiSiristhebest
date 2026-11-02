@@ -19,7 +19,10 @@ function createService() {
       forProfile: vi.fn((_profileId?: string) => context),
       forSource: vi.fn((_context, key) => key === source.key ? source : null),
     },
-    playback: { execute: vi.fn(async () => playableResult) },
+    playback: {
+      execute: vi.fn(async () => playableResult),
+      prewarm: vi.fn(async () => playableResult),
+    },
     startTimer: vi.fn(() => ({ ms: () => 17 })),
     episodeFingerprint: vi.fn(() => 'episode-hash'),
     safeUrlSummary: vi.fn(() => 'media.example/video.m3u8'),
@@ -55,6 +58,49 @@ describe('SpiderPlaybackRequestService', () => {
     expect(dependencies.recordDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'play', stage: 'done', ok: false, parse: 1, msg: '源站没有返回可播放地址',
     }));
+  });
+
+  it('prewarms only direct remote media and preserves required request headers', async () => {
+    const { service, dependencies } = createService();
+    const controller = new AbortController();
+    const directResult = {
+      ...playableResult,
+      header: { Referer: 'https://source.example/watch' },
+    };
+    dependencies.playback.prewarm = vi.fn(async () => directResult);
+
+    const result = await service.prewarm(source.key, 'HD', 'episode-id', context.profileId, controller.signal);
+
+    expect(dependencies.playback.prewarm).toHaveBeenCalledWith(source, 'HD', 'episode-id', [], expect.any(AbortSignal));
+    const requestSignal = vi.mocked(dependencies.playback.prewarm).mock.calls[0]?.[4];
+    expect(requestSignal?.aborted).toBe(false);
+    controller.abort();
+    expect(requestSignal?.aborted).toBe(true);
+    expect(result?.url).toContain('127.0.0.1:9978/play?');
+    expect(result?.url).toContain(encodeURIComponent(directResult.url));
+    expect(result?.url).toContain(encodeURIComponent('https://source.example/watch'));
+    expect(dependencies.recordDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it('does not prewarm parser results, proxied URLs or failed results', async () => {
+    const { service, dependencies } = createService();
+    dependencies.playback.prewarm = vi.fn()
+      .mockResolvedValueOnce({ ...playableResult, jx: 1 })
+      .mockResolvedValueOnce({ ...playableResult, url: 'http://media.example/proxy?id=1' })
+      .mockResolvedValueOnce({ ...playableResult, parse: 1 });
+
+    await expect(service.prewarm(source.key, 'HD', 'episode-1')).resolves.toBeNull();
+    await expect(service.prewarm(source.key, 'HD', 'episode-2')).resolves.toBeNull();
+    await expect(service.prewarm(source.key, 'HD', 'episode-3')).resolves.toBeNull();
+  });
+
+  it('honors cancellation before and after resolving the source player content', async () => {
+    const { service, dependencies } = createService();
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled'));
+    await expect(service.prewarm(source.key, 'HD', 'episode-id', context.profileId, controller.signal))
+      .rejects.toThrow('cancelled');
+    expect(dependencies.playback.prewarm).not.toHaveBeenCalled();
   });
 
   it('rethrows the original playback error even if diagnostic storage fails', async () => {

@@ -58,8 +58,8 @@ class PluginBackedSpider extends Spider {
       this.invoke('searchContent', { key, quick }, signal, timeoutMs);
     const searchContentPage = (key: string, quick: boolean, pg: string, timeoutMs?: number, signal?: AbortSignal): Promise<string> =>
       this.invoke('searchContentPage', { key, quick, pg }, signal, timeoutMs);
-    const playerContent = (flag: string, id: string, vipFlags: string[]): Promise<string> =>
-      this.invoke('playerContent', { flag, id, vipFlags });
+    const playerContent = (flag: string, id: string, vipFlags: string[], signal?: AbortSignal): Promise<string> =>
+      this.invoke('playerContent', { flag, id, vipFlags }, signal);
     const liveContent = (url: string): Promise<string> => this.invoke('liveContent', { url });
 
     this.bindCapability('homeContent', homeContent);

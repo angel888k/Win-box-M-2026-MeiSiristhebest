@@ -74,11 +74,16 @@ export class SpiderSourceAdapter implements SpiderSourcePort {
     return this.spiders.forSource(bean).proxyPort?.() ?? null;
   }
 
-  async play(bean: SourceBean, flag: string, id: string, vipFlags: string[], timeoutMs: number): Promise<PlayResult> {
+  async play(bean: SourceBean, flag: string, id: string, vipFlags: string[], timeoutMs: number, signal?: AbortSignal): Promise<PlayResult> {
+    throwIfAborted(signal);
     const sp = this.spiders.forSource(bean);
     const play = requireOperation(sp, 'playerContent', bean.key);
     const budget = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 20000;
-    const json = await this.withTimeout(Promise.resolve(play(flag, id, vipFlags)), budget, 'playerContent 超时（' + budget + 'ms）');
+    const json = await awaitWithAbort(
+      this.withTimeout(Promise.resolve(play(flag, id, vipFlags, signal)), budget, 'playerContent 超时（' + budget + 'ms）'),
+      signal,
+    );
+    throwIfAborted(signal);
     const result = this.normalizer.normalizeSpiderPlay(json, flag, bean.playUrl);
     const reason = !result.url && !result.message ? this.spiderReason(sp) : '';
     return reason ? { ...result, parse: 1, message: reason } : result;

@@ -176,8 +176,8 @@ export class JsSpider extends Spider {
    * 播放信息：返回安卓契约 JSON：{parse, url, playUrl, flag, header, jx, msg}。
    * 蜘蛛返回什么就透传什么（归一化由上层 SourceViewModel/CmsSource 处理）。
    */
-  override async playerContent(flag: string, id: string, vipFlags: string[]): Promise<string> {
-    return this.callStr(['playerContent', 'play'], [flag, id, vipFlags ?? []], TIMEOUT_OTHER);
+  override async playerContent(flag: string, id: string, vipFlags: string[], signal?: AbortSignal): Promise<string> {
+    return this.callStr(['playerContent', 'play'], [flag, id, vipFlags ?? []], TIMEOUT_OTHER, signal);
   }
 
   override async liveContent(url: string): Promise<string> {

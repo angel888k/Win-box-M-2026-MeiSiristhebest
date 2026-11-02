@@ -308,9 +308,9 @@ export class JarSpider extends Spider {
   searchContentPage(key: string, quick: boolean, pg: string, timeoutMs?: number, signal?: AbortSignal): Promise<string> {
     return this.call('searchContent', [key, String(quick), pg], timeoutMs, signal);
   }
-  playerContent(flag: string, id: string, vipFlags: string[]): Promise<string> {
+  playerContent(flag: string, id: string, vipFlags: string[], signal?: AbortSignal): Promise<string> {
     // A2：vipFlags 透传给 SpiderRunner（拼逗号串，Java 侧还原成 List），供蜘蛛判断是否需解析
-    return this.call('playerContent', [flag, id, (vipFlags || []).join(',')]);
+    return this.call('playerContent', [flag, id, (vipFlags || []).join(',')], undefined, signal);
   }
   liveContent(url: string): Promise<string> {
     return this.call('liveContent', [url]);
