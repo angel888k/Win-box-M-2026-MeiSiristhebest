@@ -6,8 +6,9 @@ export async function resolvePlayerPlayback(
   index: number,
   preparedUrl: string,
   port: PlayerPlaybackResolutionPort,
-  options?: { parseOffset?: number },
+  options?: { parseOffset?: number; preparedResult?: PlayResult },
 ): Promise<PlayResult> {
+  if (options?.preparedResult) return options.preparedResult;
   if (preparedUrl) return { url: preparedUrl, parse: 0, flag: data.flag, playUrl: '' };
   const episode = data.episodes[index];
   if (!episode) throw new RangeError('播放集数超出当前剧集列表');

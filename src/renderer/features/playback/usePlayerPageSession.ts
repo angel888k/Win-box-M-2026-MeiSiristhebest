@@ -16,6 +16,7 @@ export interface PlayerPageSession extends PlayerPageSessionPresentation {
   canPrev: boolean;
   canNext: boolean;
   selectEpisode(index: number): void;
+  prepareNextEpisode(): Promise<boolean>;
   retryCurrent(): void;
   autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause, failure?: PlaybackFailureContext): Promise<boolean>;
   retryAlternativeSearch(currentPosition?: number): Promise<boolean>;
@@ -31,7 +32,7 @@ export function usePlayerPageSession(
   sourceMemory: PlayerSourceMemoryPort,
 ): PlayerPageSession {
   const [state, dispatch] = useReducer(reducePlayerPageSession, initialPlayerPageSessionState);
-  const { init, epIndex, activeUrl, curName, resolving, driveBind, parseMsg, playName, parseName, sourceFallback } = presentPlayerPageSession(state);
+  const { init, epIndex, activeUrl, curName, resolving, driveBind, parseMsg, playName, parseName, sourceFallback, playbackFailure } = presentPlayerPageSession(state);
   const workflow = useMemo(() => createPlayerPageSessionWorkflow({
     session: sessionPort,
     history: historyPort,
@@ -77,10 +78,12 @@ export function usePlayerPageSession(
     parseMsg,
     parseName,
     sourceFallback,
+    playbackFailure,
     episodes,
     canPrev,
     canNext,
     selectEpisode: workflow.selectEpisode,
+    prepareNextEpisode: workflow.prepareNextEpisode,
     retryCurrent,
     autoChangeParse: workflow.autoChangeParse,
     retryAlternativeSearch: workflow.retryAlternativeSearch,

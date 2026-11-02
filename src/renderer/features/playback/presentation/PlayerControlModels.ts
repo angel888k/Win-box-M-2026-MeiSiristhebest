@@ -10,6 +10,7 @@ import type { Kernel, KernelPref } from '../../../lib/kernel';
 import type { MpvTechnicalState } from './playerTechnicalState';
 import type { DanmakuSettingsCommand } from '../application/danmakuSettings';
 import type { SubtitleAppearanceCommand } from '../application/subtitleAppearance';
+import type { SubtitleSyncCapability } from '../application/subtitleSyncCapability';
 import type { SkipSegmentsDraft, SkipSegmentsDraftCommand } from '../application/skipSegmentsDraft';
 import type { DlnaDevice } from '../../../../shared/dlna';
 import type { ProgressMarker } from '../application/playerProgressGeometry';
@@ -110,6 +111,7 @@ export interface SubtitlePanelModel {
   fontSize: number;
   bottom: number;
   offset: number;
+  syncCapability: SubtitleSyncCapability;
   query: string;
   searching: boolean;
   tokenHint: boolean;

@@ -20,6 +20,7 @@ export interface PlaybackAlternativeDiscoveryPort {
 /** Capability required when resolving a selected episode to a playable URL. */
 export interface PlayerPlaybackResolutionPort {
   play(input: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number }): Promise<PlayResult>;
+  prewarm?(input: { key: string; flag: string; id: string; profileId?: string }, signal: AbortSignal): Promise<PlayResult | null>;
 }
 
 /** Capabilities required when restoring source identity and an episode list from history. */

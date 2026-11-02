@@ -83,22 +83,28 @@ export function PlayerStatusOverlays(props: PlayerStatusOverlaysProps) {
         />
       )}
       {error && (
-        <div className="vp-err" onDoubleClick={(event) => event.stopPropagation()}>
-          <div>{error}</div>
-          <div className="row" style={{ gap: 10, justifyContent: 'center' }}>
-            {allowMpv && mpvAvailable && kernel === 'html5' && (
-              <button className="primary" onClick={() => onSwitchKernel('mpv')}>用 MPV 内核重试</button>
-            )}
-            <button className={allowMpv && mpvAvailable && kernel === 'html5' ? '' : 'primary'} onClick={onRetry}>{retryLabel}</button>
-          </div>
+        <div className="vp-err" role="alert" onDoubleClick={(event) => event.stopPropagation()}>
+          <section className="vp-err-card">
+            <h2 className="vp-err-title">无法播放当前视频</h2>
+            <p className="vp-err-message">{error}</p>
+            <div className="row vp-err-actions">
+              {allowMpv && mpvAvailable && kernel === 'html5' && (
+                <button type="button" className="player-recovery-action" onClick={() => onSwitchKernel('mpv')}>用 MPV 内核重试</button>
+              )}
+              <button type="button" className="player-recovery-action player-recovery-action--primary" onClick={onRetry}>{retryLabel}</button>
+            </div>
+          </section>
         </div>
       )}
       {mpvError && kernel === 'mpv' && (
-        <div className="vp-err" onDoubleClick={(event) => event.stopPropagation()}>
-          <div>{mpvError}</div>
-          <div className="row" style={{ gap: 10, justifyContent: 'center' }}>
-            <button className="primary" onClick={() => onSwitchKernel('html5')}>切回内置内核</button>
-          </div>
+        <div className="vp-err" role="alert" onDoubleClick={(event) => event.stopPropagation()}>
+          <section className="vp-err-card">
+            <h2 className="vp-err-title">MPV 内核无法播放</h2>
+            <p className="vp-err-message">{mpvError}</p>
+            <div className="row vp-err-actions">
+              <button type="button" className="player-recovery-action player-recovery-action--primary" onClick={() => onSwitchKernel('html5')}>切回内置内核</button>
+            </div>
+          </section>
         </div>
       )}
       {endAll && <div className="vp-next"><span>已播完全部剧集</span></div>}

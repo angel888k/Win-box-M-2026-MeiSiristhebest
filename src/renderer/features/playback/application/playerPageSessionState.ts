@@ -1,11 +1,24 @@
 import type { PlayerInitData } from './playerPageSession';
+import type { PlaybackFailureContext } from '../../../../shared/playbackFailure';
+
+export interface PlayerSourceFallbackCandidate {
+  id: string;
+  sourceName: string;
+  profileName: string;
+}
+
+interface PlayerSourceFallbackEvidence {
+  candidates?: PlayerSourceFallbackCandidate[];
+  incompleteSources?: number;
+  searchIncomplete?: boolean;
+  truncated?: boolean;
+}
 
 export type PlayerSourceFallbackState =
   | { kind: 'idle' }
-  | { kind: 'searching' }
-  | { kind: 'switching'; sourceName: string }
-  | { kind: 'choices'; candidates: Array<{ id: string; sourceName: string; profileName: string }>; incompleteSources: number; truncated: boolean }
-  | { kind: 'unavailable'; message: string };
+  | ({ kind: 'searching' } & PlayerSourceFallbackEvidence)
+  | ({ kind: 'switching'; sourceName: string; candidateId?: string } & PlayerSourceFallbackEvidence)
+  | ({ kind: 'unavailable'; message: string } & PlayerSourceFallbackEvidence);
 
 export type PlayerPageResolutionState =
   | { kind: 'idle' }
@@ -22,6 +35,7 @@ export interface PlayerPageSessionState {
   playName: string;
   resolution: PlayerPageResolutionState;
   sourceFallback: PlayerSourceFallbackState;
+  playbackFailure?: PlaybackFailureContext;
 }
 
 export type PlayerPageSessionAction =
@@ -33,9 +47,17 @@ export type PlayerPageSessionAction =
   | { type: 'resolution-succeeded'; url: string; parseName?: string }
   | { type: 'drive-bind-required'; provider: string }
   | { type: 'resolution-failed'; message: string }
+  | { type: 'playback-failure-reported'; failure: PlaybackFailureContext }
   | { type: 'source-fallback-searching' }
-  | { type: 'source-fallback-switching'; sourceName: string }
-  | { type: 'source-fallback-choices'; candidates: Array<{ id: string; sourceName: string; profileName: string }>; incompleteSources: number; truncated: boolean }
+  | { type: 'source-fallback-candidate-found'; candidate: PlayerSourceFallbackCandidate }
+  | {
+      type: 'source-fallback-candidates-updated';
+      candidates: PlayerSourceFallbackCandidate[];
+      incompleteSources: number;
+      searchIncomplete: boolean;
+      truncated: boolean;
+    }
+  | { type: 'source-fallback-switching'; sourceName: string; candidateId?: string }
   | { type: 'source-fallback-unavailable'; message: string }
   | { type: 'source-fallback-cleared' }
   | { type: 'drive-bind-dismissed' };
@@ -51,6 +73,7 @@ export interface PlayerPageSessionPresentation {
   parseMsg: string;
   parseName?: string;
   sourceFallback: PlayerSourceFallbackState;
+  playbackFailure?: PlaybackFailureContext;
 }
 
 export const initialPlayerPageSessionState: PlayerPageSessionState = {
@@ -60,6 +83,7 @@ export const initialPlayerPageSessionState: PlayerPageSessionState = {
   playName: '',
   resolution: { kind: 'idle' },
   sourceFallback: { kind: 'idle' },
+  playbackFailure: undefined,
 };
 
 export function reducePlayerPageSession(
@@ -76,6 +100,7 @@ export function reducePlayerPageSession(
         playName: '',
         resolution: { kind: 'hydrating' },
         sourceFallback: { kind: 'idle' },
+        playbackFailure: undefined,
       };
     case 'hydration-completed':
       return {
@@ -97,29 +122,76 @@ export function reducePlayerPageSession(
         resolution: { kind: 'resolving' },
       };
     case 'resolution-succeeded':
-      return { ...state, resolution: { kind: 'ready', url: action.url, parseName: action.parseName } };
+      return { ...state, resolution: { kind: 'ready', url: action.url, parseName: action.parseName }, playbackFailure: undefined };
     case 'drive-bind-required':
       return { ...state, resolution: { kind: 'drive-bind-required', provider: action.provider } };
     case 'resolution-failed':
       return { ...state, resolution: { kind: 'failed', message: action.message } };
+    case 'playback-failure-reported':
+      return { ...state, playbackFailure: action.failure };
     case 'source-fallback-searching':
-      return { ...state, sourceFallback: { kind: 'searching' } };
-    case 'source-fallback-switching':
-      return { ...state, sourceFallback: { kind: 'switching', sourceName: action.sourceName } };
-    case 'source-fallback-choices':
       return {
         ...state,
         sourceFallback: {
-          kind: 'choices',
+          kind: 'searching',
+          candidates: [],
+          incompleteSources: 0,
+          searchIncomplete: false,
+          truncated: false,
+        },
+      };
+    case 'source-fallback-candidate-found': {
+      const current = state.sourceFallback;
+      if (current.kind === 'idle') return state;
+      const candidates = current.candidates || [];
+      return {
+        ...state,
+        sourceFallback: {
+          ...current,
+          candidates: candidates.some(candidate => candidate.id === action.candidate.id)
+            ? candidates.map(candidate => candidate.id === action.candidate.id ? action.candidate : candidate)
+            : [...candidates, action.candidate],
+        },
+      };
+    }
+    case 'source-fallback-candidates-updated': {
+      const current = state.sourceFallback;
+      if (current.kind === 'idle') return state;
+      return {
+        ...state,
+        sourceFallback: {
+          ...current,
           candidates: action.candidates,
           incompleteSources: action.incompleteSources,
+          searchIncomplete: action.searchIncomplete,
           truncated: action.truncated,
         },
       };
+    }
+    case 'source-fallback-switching': {
+      const current = state.sourceFallback;
+      const evidence = current.kind === 'idle' ? {} : current;
+      return {
+        ...state,
+        sourceFallback: {
+          ...evidence,
+          kind: 'switching',
+          sourceName: action.sourceName,
+          candidateId: action.candidateId,
+        },
+      };
+    }
     case 'source-fallback-unavailable':
-      return { ...state, sourceFallback: { kind: 'unavailable', message: action.message } };
+      return {
+        ...state,
+        sourceFallback: {
+          ...(state.sourceFallback.kind === 'idle' ? {} : state.sourceFallback),
+          kind: 'unavailable',
+          message: action.message,
+        },
+      };
     case 'source-fallback-cleared':
-      return { ...state, sourceFallback: { kind: 'idle' } };
+      return { ...state, sourceFallback: { kind: 'idle' }, playbackFailure: undefined };
     case 'drive-bind-dismissed':
       return state.resolution.kind === 'drive-bind-required'
         ? { ...state, resolution: { kind: 'idle' } }
@@ -140,5 +212,6 @@ export function presentPlayerPageSession(state: PlayerPageSessionState): PlayerP
     parseMsg: resolution.kind === 'failed' ? resolution.message : '',
     parseName: resolution.kind === 'ready' ? resolution.parseName : undefined,
     sourceFallback: state.sourceFallback,
+    playbackFailure: state.playbackFailure,
   };
 }

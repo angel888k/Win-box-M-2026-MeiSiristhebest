@@ -64,3 +64,493 @@
   outline-offset: 3px;
   box-shadow: none;
 }
+
+/* Status belongs to the video surface. This layer fills that surface and
+   reserves the titlebar and transport controls as safe areas. */
+:root[data-theme] .player-recovery-overlay {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  padding: clamp(44px, 7vh, 72px) 20px clamp(84px, 13vh, 120px);
+  pointer-events: none;
+}
+
+:root[data-theme] .pwin-stage--mini .player-recovery-overlay,
+:root[data-theme] .vplayer.vp-mini .player-recovery-overlay {
+  padding: 28px 8px 50px;
+}
+
+:root[data-theme] .pwin-stage--mini .player-recovery-card,
+:root[data-theme] .vplayer.vp-mini .player-recovery-card {
+  width: min(420px, 100%);
+  padding: 12px;
+  gap: 7px;
+}
+
+:root[data-theme][data-player-fullscreen] .player-recovery-overlay {
+  padding-top: 20px;
+}
+
+/* Before a media element exists the stage already starts below the titlebar and
+   has no transport bar. Do not reserve those areas a second time. */
+:root[data-theme] .player-recovery-overlay--stage {
+  padding: clamp(12px, 2vh, 24px);
+}
+
+:root[data-theme] .player-recovery-card,
+:root[data-theme] .vp-err-card {
+  box-sizing: border-box;
+  width: min(640px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #f3f6fb;
+  background: #171c24;
+  border: 1px solid #697a91;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .42);
+  text-align: center;
+  pointer-events: auto;
+}
+
+:root[data-theme] .player-recovery-live {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+:root[data-theme] .player-recovery-card {
+  animation: player-recovery-enter .16s ease-out both;
+}
+
+@keyframes player-recovery-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .player-recovery-card { animation: none; }
+  :root[data-theme] .player-recovery-candidate { transition: none; }
+}
+
+:root[data-theme] .player-recovery-title,
+:root[data-theme] .vp-err-title {
+  margin: 0;
+  color: #fff;
+  font: 650 16px/1.4 var(--font-ui, system-ui, sans-serif);
+}
+
+:root[data-theme] .player-recovery-message,
+:root[data-theme] .vp-err-message {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: min(190px, 28vh);
+  margin: 0;
+  overflow: auto;
+  color: #d6dfec;
+  font: 400 13px/1.55 var(--font-ui, system-ui, sans-serif);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+:root[data-theme] .player-recovery-details {
+  box-sizing: border-box;
+  width: 100%;
+  color: #c5cfdd;
+  text-align: left;
+  border-top: 1px solid #4f5d70;
+  padding-top: 8px;
+}
+
+:root[data-theme] .player-recovery-details summary {
+  width: fit-content;
+  color: #a9c8ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:root[data-theme] .player-recovery-details summary:focus-visible {
+  outline: 2px solid #a9c8ff;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+:root[data-theme] .player-recovery-details pre {
+  box-sizing: border-box;
+  max-height: min(180px, 24vh);
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  color: #d6dfec;
+  background: #10141b;
+  border: 1px solid #4f5d70;
+  border-radius: 8px;
+  font: 400 12px/1.5 var(--font-mono, ui-monospace, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme] .player-recovery-diagnostic-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: #d6dfec;
+  font: 400 12px/1.5 var(--font-ui, system-ui, sans-serif);
+}
+
+:root[data-theme] .player-recovery-diagnostic-summary strong {
+  color: #fff;
+  font-weight: 650;
+}
+
+:root[data-theme] .player-recovery-diagnostic-summary small,
+:root[data-theme] .player-recovery-diagnostic-actions > span {
+  color: #b8c5d6;
+  font-size: 11px;
+}
+
+:root[data-theme] .player-recovery-diagnostic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+:root[data-theme] .player-recovery-diagnostic-actions .player-recovery-action {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+:root[data-theme] .player-recovery-history {
+  max-height: min(220px, 28vh);
+  margin-top: 12px;
+  padding-top: 10px;
+  overflow: auto;
+  border-top: 1px solid #4f5d70;
+  color: #d6dfec;
+  font: 400 12px/1.45 var(--font-ui, system-ui, sans-serif);
+  text-align: left;
+}
+
+:root[data-theme] .player-recovery-history-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+:root[data-theme] .player-recovery-history-heading strong {
+  color: #fff;
+}
+
+:root[data-theme] .player-recovery-history-heading > span,
+:root[data-theme] .player-recovery-history-time {
+  color: #b8c5d6;
+}
+
+:root[data-theme] .player-recovery-history-clear {
+  min-height: 30px;
+  padding: 2px 8px;
+  border: 1px solid #687990;
+  border-radius: 6px;
+  color: #d6dfec;
+  background: #202833;
+  cursor: pointer;
+}
+
+:root[data-theme] .player-recovery-history-clear:focus-visible {
+  outline: 2px solid #a9c8ff;
+  outline-offset: 2px;
+}
+
+:root[data-theme] .player-recovery-history ol {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+
+:root[data-theme] .player-recovery-history li {
+  padding: 7px 9px;
+  border: 1px solid #4f5d70;
+  border-radius: 7px;
+  background: #171d25;
+}
+
+:root[data-theme] .player-recovery-history li > span,
+:root[data-theme] .player-recovery-history li > strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme] .player-recovery-history li > strong {
+  color: #fff;
+}
+
+:root[data-theme] .player-recovery-history li p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme] .player-recovery-candidates {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 8px;
+  border-top: 1px solid #4f5d70;
+  text-align: left;
+}
+
+:root[data-theme] .player-recovery-candidates-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f3f6fb;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+:root[data-theme] .player-recovery-candidates-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  color: #dce8fb;
+  background: #303d50;
+  border: 1px solid #687b96;
+  border-radius: 999px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+:root[data-theme] .player-recovery-candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: min(176px, 22vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #687b96 #202733;
+}
+
+:root[data-theme] .player-recovery-candidate {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #f3f6fb;
+  background: #202733;
+  border: 1px solid #657389;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color .14s ease, border-color .14s ease;
+}
+
+:root[data-theme] .player-recovery-candidate:hover:not(:disabled):not([aria-disabled='true']) {
+  background: #2a3442;
+  border-color: #a8bad3;
+}
+
+:root[data-theme] .player-recovery-candidate:focus-visible {
+  outline: 2px solid #a8c8ff;
+  outline-offset: 2px;
+}
+
+:root[data-theme] .player-recovery-candidate[aria-disabled='true'] {
+  color: #fff;
+  background: #253b58;
+  border-color: #a8c8ff;
+  cursor: wait;
+}
+
+:root[data-theme] .player-recovery-candidate-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:root[data-theme] .player-recovery-candidate-name strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .player-recovery-candidate-name small {
+  overflow: hidden;
+  color: #c5cfdd;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme] .player-recovery-candidate-action {
+  flex: none;
+  color: #a9c8ff;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+:root[data-theme] .player-recovery-candidate[aria-disabled='true'] .player-recovery-candidate-action {
+  color: #e2edff;
+}
+
+:root[data-theme] .player-recovery-candidates-note {
+  margin: 0;
+  color: #c5cfdd;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Keep transient engine notices inside the media surface and below the
+   floating player titlebar used by transparent MPV windows. */
+:root[data-theme] .vplayer .vp-kernel-notice {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 50%;
+  right: auto;
+  width: max-content;
+  max-width: min(640px, calc(100% - 24px));
+  padding: 8px 12px;
+  color: #f3f6fb;
+  background: #171c24;
+  border: 1px solid #8493a8;
+  border-radius: 10px;
+  font: 500 13px/1.45 var(--font-ui, system-ui, sans-serif);
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+}
+
+:root[data-theme] .app.pwin .vplayer .vp-kernel-notice {
+  top: 54px;
+}
+
+:root[data-theme] .player-recovery-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #46566d;
+  border-top-color: #a9c8ff;
+  border-radius: 50%;
+  animation: vspin .8s linear infinite;
+}
+
+:root[data-theme] .player-recovery-actions,
+:root[data-theme] .vp-err-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+:root[data-theme] .player-recovery-action {
+  all: unset;
+  box-sizing: border-box;
+  min-width: 116px;
+  min-height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f3f6fb;
+  background: #2a3442;
+  border: 1px solid #718199;
+  border-radius: 8px;
+  font: 600 13px/1.3 var(--font-ui, system-ui, sans-serif);
+  cursor: pointer;
+  transition: background-color .14s ease, border-color .14s ease;
+}
+
+:root[data-theme] .player-recovery-action:hover {
+  color: #fff;
+  background: #39485c;
+  border-color: #a8bad3;
+}
+
+:root[data-theme] .player-recovery-action--primary {
+  color: #fff;
+  background: #245ebd;
+  border-color: #6f9ce8;
+}
+
+:root[data-theme] .player-recovery-action--primary:hover {
+  color: #fff;
+  background: #3474d6;
+  border-color: #a5c2fb;
+}
+
+:root[data-theme] .player-recovery-action:focus-visible {
+  outline: 2px solid #a9c8ff;
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  :root[data-theme] .player-recovery-overlay--video {
+    padding: max(28px, 5vh) 10px max(64px, 10vh);
+  }
+
+  :root[data-theme] .player-recovery-card {
+    width: 100%;
+    padding: 14px;
+    gap: 8px;
+  }
+
+  :root[data-theme] .player-recovery-candidate {
+    gap: 8px;
+    padding-inline: 8px;
+  }
+
+  :root[data-theme] .player-recovery-candidate-action {
+    max-width: 96px;
+    white-space: normal;
+    text-align: right;
+  }
+}
+
+@media (max-height: 420px) {
+  :root[data-theme] .player-recovery-overlay--video {
+    padding: 28px 20px 64px;
+  }
+
+  :root[data-theme] .player-recovery-candidate-list {
+    max-height: min(112px, 18vh);
+  }
+}
+
+:root[data-theme] .vplayer > .vp-err {
+  z-index: 4;
+  padding: max(58px, 8vh) 20px max(104px, 12vh);
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, .44);
+}
+
+:root[data-theme] .vplayer .vp-err-card {
+  pointer-events: auto;
+}
+
+

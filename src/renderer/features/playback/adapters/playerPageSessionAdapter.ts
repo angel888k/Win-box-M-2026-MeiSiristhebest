@@ -7,6 +7,7 @@ import type { PlayerInitData, PlayerPageSessionPort } from '../application/playe
 
 export const playerPageSessionAdapter: PlayerPageSessionPort = {
   play: (input) => client.play(input),
+  prewarm: (input, signal) => client.prewarmPlay(input, signal),
   resolveHistorySource: ({ profileId, sourceKey, sourceName }) => resolveHistorySource(client, {
     profileId,
     sourceKey,

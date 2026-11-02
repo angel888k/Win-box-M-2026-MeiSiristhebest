@@ -31,7 +31,14 @@ export function usePluginPlaybackEngines(active: boolean, url: string, mpv: MpvS
   const choices = useMemo<KernelChoice[]>(() => [
     { id: 'html5', label: '标准播放', note: '适合常见视频，直接在应用内播放' },
     ...(mpv?.available ? [{ id: 'mpv' as const, label: '兼容播放', note: '标准播放有声无画或格式不支持时尝试；使用 MPV' }] : []),
-    ...engines.filter(item => usable.includes(item.id)).map(item => ({ id: item.id as Kernel, label: item.label, note: item.note })),
+    ...engines.filter(item => usable.includes(item.id)).map(item => ({
+      id: item.id as Kernel,
+      label: item.label,
+      note: item.note,
+      // An empty normalized view means the source descriptor omitted its optional declaration.
+      // Preserve that distinction so the capability panel can show "unknown", not "unsupported".
+      ...(item.capabilities?.length ? { capabilities: item.capabilities } : {}),
+    })),
   ], [mpv, engines, usable]);
   const markFailure = useCallback((id: Kernel, reason: string) => setFailure({ url, id, reason }), [url]);
   const retry = useCallback(() => setFailure({ url: '', id: '', reason: '' }), []);

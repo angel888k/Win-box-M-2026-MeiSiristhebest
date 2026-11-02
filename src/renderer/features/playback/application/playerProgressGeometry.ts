@@ -11,7 +11,7 @@ export interface ProgressPercentages {
 export interface ProgressMarker {
   id: string;
   time: number;
-  kind: 'intro-end' | 'outro-start' | 'segment-start' | 'segment-end';
+  kind: 'intro-end' | 'outro-start' | 'segment-start' | 'segment-end' | 'chapter';
   label: string;
 }
 

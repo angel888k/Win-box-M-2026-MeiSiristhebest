@@ -72,7 +72,8 @@ describe('player control style architecture', () => {
     expect(responsiveToolbar).toMatch(/overflow:\s*visible/);
     expect(css).not.toMatch(/\.vplayer \.vp-bar\s*\{[^}]*overflow-x:\s*auto/);
     expect(kernelControl).toContain("className={'vp-ctl vp-kernel'");
-    expect(toolbar.match(/className=\{'vp-ctl vp-ctl-label/g) ?? []).toHaveLength(2);
+    expect(toolbar.match(/className=\{'vp-ctl vp-ctl-label/g) ?? []).toHaveLength(3);
+    expect(toolbar).toContain('title="当前播放器能力"');
   });
 
   it('keeps player titlebar icons visible and playback hit targets stable when selected', async () => {

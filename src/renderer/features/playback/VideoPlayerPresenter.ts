@@ -61,6 +61,7 @@ import type { PlayerPreferencesPort } from './application/playerPreferences';
 import type { PlayerAudioTracksPort } from './application/playerAudioTracks';
 import type { AdaptiveAudioTrackController } from './application/playerAudioTracks';
 import type { SessionAudioPreferencePort } from './application/sessionAudioPreference';
+import { createWorkScopedAudioPreference, subtitlePreferenceKey } from './application/playerWorkPreferences';
 import type { HtmlMediaSourcePort } from './application/htmlMediaSource';
 import type { PlayerKernelCommandPort } from './application/playerKernelCommandPort';
 import type { BossKeyPlaybackEventsPort, RelaySpeedEventsPort } from './application/playerRuntimeEventsPorts';
@@ -85,6 +86,7 @@ import { cyclePlayerFit } from './application/playerFitCycle';
 import { reportPlaybackFailure } from './application/reportPlaybackFailure';
 import type { PlaybackFailureContext } from '../../../shared/playbackFailure';
 import type { PlayerPlaybackKind } from '../../../shared/playerInit';
+import type { LiveLatencyMode } from './application/livePlaybackPolicy';
 
 export interface VideoPlayerProps {
   url: string;
@@ -96,6 +98,14 @@ export interface VideoPlayerProps {
   playbackSource?: PlaybackSourceRef;
   /** Explicitly preserve live, catch-up and storage semantics across player surfaces. */
   playbackKind?: PlayerPlaybackKind;
+  /** Prepares only the next VOD episode after playback reaches its final 30 seconds. */
+  onPrepareNextEpisode?: () => void | Promise<boolean>;
+  /** Live HLS buffer target. Ignored for VOD, catch-up, storage, and non-HLS streams. */
+  liveLatencyMode?: LiveLatencyMode;
+  /** Reports measured HLS live-edge distance and whether LL-HLS parts were advertised. */
+  onLivePlaybackTelemetry?: (telemetry: { isLive: boolean | null; latencySeconds: number | null; lowLatencySupported: boolean | null }) => void;
+  /** Stable URL-free identity of the current VOD work; omitted for non-VOD surfaces. */
+  workPreferenceKey?: string;
   canPrev?: boolean;
   canNext?: boolean;
   onPrev?: () => void;
@@ -198,6 +208,9 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     ? isLikelyLive(url)
     : props.playbackKind === 'live';
   const progressKey = playbackProgressKey(url, props.playbackSource);
+  const workPreferenceKey = props.playbackKind === 'live' || props.playbackKind === 'live-catchup' || props.playbackKind === 'storage'
+    ? ''
+    : props.workPreferenceKey || '';
   const ref = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const adaptiveAudioTracksRef = useRef<AdaptiveAudioTrackController | null>(null);
@@ -222,10 +235,46 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     rememberKernelPreference,
     spdif,
     setSpdif,
-  } = usePlayerPreferences(dependencies.playerPreferences);
+  } = usePlayerPreferences(dependencies.playerPreferences, workPreferenceKey);
 
   const { state: playbackStatus, update: updatePlaybackStatus } = usePlayerPlaybackPresentation();
   const { paused, currentTime: cur, duration: dur, buffered, error: err, mpvError: mpvErr, loading, isLive, netSpeed, relaySpeed, buffering } = playbackStatus;
+  const prewarmEpisodeKeyRef = useRef('');
+  const prewarmRetryAfterRef = useRef<{ key: string; time: number } | null>(null);
+  useEffect(() => {
+    // Legacy VOD player init payloads omit playbackKind; live, catch-up and storage
+    // surfaces carry an explicit non-VOD kind and stay excluded.
+    if ((props.playbackKind !== undefined && props.playbackKind !== 'vod')
+      || !props.onPrepareNextEpisode || !props.canNext || isLive
+      || isAudio || isImage || !Number.isFinite(dur) || dur <= 0) return;
+    const remainingSeconds = dur - cur;
+    const episodeKey = `${progressKey}:${props.epIndex ?? 0}`;
+    const retryCoolingDown = prewarmRetryAfterRef.current?.key === episodeKey
+      && Date.now() < prewarmRetryAfterRef.current.time;
+    if (remainingSeconds <= 30 && remainingSeconds >= 0 && cur > 0
+      && prewarmEpisodeKeyRef.current !== episodeKey && !retryCoolingDown) {
+      prewarmEpisodeKeyRef.current = episodeKey;
+      const pending = props.onPrepareNextEpisode();
+      if (pending && typeof pending.then === 'function') {
+        void pending.then(prepared => {
+          if (prepared) {
+            if (prewarmRetryAfterRef.current?.key === episodeKey) prewarmRetryAfterRef.current = null;
+          } else if (prewarmEpisodeKeyRef.current === episodeKey) {
+            prewarmEpisodeKeyRef.current = '';
+            prewarmRetryAfterRef.current = { key: episodeKey, time: Date.now() + 10_000 };
+          }
+        }).catch(() => {
+          if (prewarmEpisodeKeyRef.current === episodeKey) {
+            prewarmEpisodeKeyRef.current = '';
+            prewarmRetryAfterRef.current = { key: episodeKey, time: Date.now() + 10_000 };
+          }
+        });
+      }
+    } else if (remainingSeconds > 40 && prewarmEpisodeKeyRef.current === episodeKey) {
+      prewarmEpisodeKeyRef.current = '';
+      if (prewarmRetryAfterRef.current?.key === episodeKey) prewarmRetryAfterRef.current = null;
+    }
+  }, [cur, dur, isAudio, isImage, isLive, progressKey, props.canNext, props.epIndex, props.onPrepareNextEpisode, props.playbackKind]);
   const { message: commandError, report: reportCommandError } = usePlayerCommandFeedback();
   const updateCurrentTime = useCallback((currentTime: number) => updatePlaybackStatus({ currentTime }), [updatePlaybackStatus]);
   /**
@@ -245,10 +294,26 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
   );
   const { mpvInfo, kernel, setKernel, kernelRef, engines, htmlPlaybackReady: htmlKernelReady, resolvePreference, setCompatibilitySource } = kernelSelection;
   const technical = useMpvTechnicalState(url, kernel);
+  const subtitleTrackPreferenceRef = useRef({
+    workKey: workPreferenceKey,
+    trackKey: workPreferenceKey ? dependencies.playerPreferences.loadForWork?.(workPreferenceKey)?.subtitleTrackKey || '' : '',
+  });
+  if (subtitleTrackPreferenceRef.current.workKey !== workPreferenceKey) {
+    subtitleTrackPreferenceRef.current = {
+      workKey: workPreferenceKey,
+      trackKey: workPreferenceKey ? dependencies.playerPreferences.loadForWork?.(workPreferenceKey)?.subtitleTrackKey || '' : '',
+    };
+  }
+  const subtitlePreferenceAppliedRef = useRef('');
   const createAudioTracksPort = dependencies.createAudioTracksPort;
   // oxlint-disable-next-line react/refs -- The adapter reads the current session's narrow audio-track capability only when a user action runs.
   const audioPort = useMemo(() => createAudioTracksPort(adaptiveAudioTracksRef), [adaptiveAudioTracksRef, createAudioTracksPort]);
-  const audio = usePlayerAudioTracks(url, kernel, audioPort, dependencies.sessionAudioPreference);
+  const scopedAudioPreference = useMemo(() => createWorkScopedAudioPreference(
+    dependencies.sessionAudioPreference,
+    workPreferenceKey,
+    dependencies.playerPreferences,
+  ), [dependencies.sessionAudioPreference, dependencies.playerPreferences, workPreferenceKey]);
+  const audio = usePlayerAudioTracks(url, kernel, audioPort, scopedAudioPreference);
   const superResolution = useSuperResolution(allowMpv, `${url}\u0000${progressKey}`, dependencies.superResolution, kernel === 'mpv');
   const controlsRevealRef = useRef<() => void>(() => undefined);
   const revealControls = useCallback(() => controlsRevealRef.current(), []);
@@ -455,6 +520,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
   const {
     enabled: subEnabled,
     offset: subOffset,
+    syncCapability: subtitleSyncStatus,
     fontSize: subFont,
     bottom: subBottom,
     onAppearanceCommand: subtitleAppearanceCommand,

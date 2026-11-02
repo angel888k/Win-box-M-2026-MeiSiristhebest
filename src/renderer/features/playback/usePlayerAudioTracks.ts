@@ -3,8 +3,9 @@ import type { MpvAudioTrack } from '../../../shared/player';
 import { isEngineKernel, type Kernel } from '../../lib/kernel';
 import type { SessionAudioPreferencePort } from './application/sessionAudioPreference';
 import type { PlayerAudioTracksPort } from './application/playerAudioTracks';
+import { audioPreferenceKey } from './application/playerWorkPreferences';
 
-export function audioTrackKey(track: MpvAudioTrack): string { return (track.lang || track.title || 'id:' + track.id).trim(); }
+export function audioTrackKey(track: MpvAudioTrack): string { return audioPreferenceKey(track) || 'id:' + track.id; }
 export function audioTrackLabel(track: MpvAudioTrack, index: number): string {
   const parts = [track.lang, track.title, track.codec, track.channels ? track.channels + '声道' : ''].filter(Boolean);
   return parts.length ? parts.join(' · ') : '音轨 ' + (index + 1);

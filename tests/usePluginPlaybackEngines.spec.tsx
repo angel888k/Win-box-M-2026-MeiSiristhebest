@@ -7,8 +7,8 @@ import { usePluginPlaybackEngines } from '../src/renderer/features/playback/useP
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function engine(id: string, label: string, ready = true): PlayerEngineView {
-  return { id, pluginId: 'plugin', pluginName: 'Playback plugin', label, capabilities: [], ready };
+function engine(id: string, label: string, ready = true, capabilities: PlayerEngineView['capabilities'] = []): PlayerEngineView {
+  return { id, pluginId: 'plugin', pluginName: 'Playback plugin', label, capabilities, ready };
 }
 
 function snapshot(engines: readonly PlayerEngineView[], enabledEngineIds: Record<string, boolean>): PluginPlaybackEnginesSnapshot {
@@ -38,7 +38,7 @@ beforeEach(() => {
 describe('usePluginPlaybackEngines', () => {
   it('shows only ready and enabled plugin engines alongside the built-in choice', async () => {
     vi.mocked(port.loadSnapshot).mockResolvedValue(snapshot([
-      engine('engine:ready', 'Ready'),
+      engine('engine:ready', 'Ready', true, ['seek', 'rate']),
       engine('engine:disabled', 'Disabled'),
       engine('engine:missing', 'Missing', false),
       engine('html5', 'Invalid extension'),
@@ -48,7 +48,17 @@ describe('usePluginPlaybackEngines', () => {
     await waitFor(() => expect(result.current.usable).toEqual(['engine:ready']));
 
     expect(result.current.choices.map(choice => choice.id)).toEqual(['html5', 'engine:ready']);
+    expect(result.current.choices.find(choice => choice.id === 'engine:ready')?.capabilities).toEqual(['seek', 'rate']);
     expect(port.loadSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it('preserves an omitted plugin capability contract as unknown', async () => {
+    vi.mocked(port.loadSnapshot).mockResolvedValue(snapshot([engine('engine:ready', 'Ready')], { 'engine:ready': true }));
+    const { result } = renderHook(() => usePluginPlaybackEngines(true, 'movie-url', null, port));
+
+    await waitFor(() => expect(result.current.usable).toEqual(['engine:ready']));
+
+    expect(result.current.choices.find(choice => choice.id === 'engine:ready')).not.toHaveProperty('capabilities');
   });
 
   it('refreshes when the adapter signals an engine or preference change and unsubscribes', async () => {

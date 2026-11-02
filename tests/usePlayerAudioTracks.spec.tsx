@@ -4,7 +4,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import type { MpvAudioTrack } from '../src/shared/player';
 import type { PlayerAudioTracksPort } from '../src/renderer/features/playback/application/playerAudioTracks';
 import type { SessionAudioPreferencePort } from '../src/renderer/features/playback/application/sessionAudioPreference';
-import { usePlayerAudioTracks } from '../src/renderer/features/playback/usePlayerAudioTracks';
+import { audioTrackKey, usePlayerAudioTracks } from '../src/renderer/features/playback/usePlayerAudioTracks';
 
 function createPort() {
   let adaptiveSnapshot: { tracks: MpvAudioTrack[]; selectedTrackId: number | null } | null = null;
@@ -44,7 +44,7 @@ describe('usePlayerAudioTracks', () => {
 
     expect(port.selectEngineTrack).toHaveBeenCalledWith(7);
     expect(port.selectMpvTrack).not.toHaveBeenCalled();
-    expect(preference.readPreferredTrackKey()).toBe('en');
+    expect(preference.readPreferredTrackKey()).toBe(audioTrackKey({ id: 7, lang: 'en', title: 'English' }));
   });
 
   it('routes MPV selection and synchronizes adaptive tracks through the same port', () => {
@@ -63,7 +63,7 @@ describe('usePlayerAudioTracks', () => {
   });
 
   it('applies a remembered track when the current source exposes it', () => {
-    const preference = createPreferencePort('English');
+    const preference = createPreferencePort(audioTrackKey({ id: 1, lang: 'English' }));
     const { port } = createPort();
     const { result } = renderHook(() => usePlayerAudioTracks('https://media.test/video', 'html5', port, preference));
 

@@ -1,6 +1,9 @@
 import VideoPlayer from '../components/VideoPlayer';
 import TitleBarView from '../components/TitleBarView';
 import { DriveBindingDialog } from '../features/driveBinding/DriveBindingDialog';
+import { PlayerRecoveryOverlay } from '../features/playback/PlayerRecoveryOverlay';
+import { playerWorkPreferenceKey } from '../features/playback/application/playerWorkPreferences';
+import type { PlayerDiagnosticRecord } from '../features/playback/application/playerDiagnosticHistory';
 import { historyGroupKey } from '../lib/uiHistoryMerge';
 import type { PlayerPageSession } from '../features/playback/usePlayerPageSession';
 import type { PlayerPageWindowState } from '../features/playback/usePlayerPageWindow';
@@ -10,59 +13,49 @@ type PlayerPageViewProps = {
   windowState: PlayerPageWindowState;
   title: string;
   onResolutionChange(resolution: string): void;
+  onCopyDiagnostic?(message: string): Promise<boolean>;
+  diagnosticHistory?: readonly PlayerDiagnosticRecord[];
+  onClearDiagnosticHistory?(): void;
 };
 
-export function PlayerPageView({ session, windowState, title, onResolutionChange }: PlayerPageViewProps) {
+export function PlayerPageView({ session, windowState, title, onResolutionChange, onCopyDiagnostic, diagnosticHistory, onClearDiagnosticHistory }: PlayerPageViewProps) {
   const {
     init, epIndex, activeUrl, curName, playName, resolving, driveBind, parseMsg, parseName,
-    sourceFallback, episodes, canPrev, canNext, selectEpisode, retryCurrent, autoChangeParse, retryAlternativeSearch,
-    selectAlternative, confirmPlaybackStarted, dismissDriveBinding, onDriveBound,
+    sourceFallback, playbackFailure, episodes, canPrev, canNext, selectEpisode, retryCurrent, autoChangeParse, retryAlternativeSearch,
+    confirmPlaybackStarted, dismissDriveBinding, onDriveBound, prepareNextEpisode,
   } = session;
   const { appIcon, maximized, mini, pinTop, minimize, toggleMaximize, setMini, togglePinTop, close } = windowState;
   const eps = episodes;
+  const workPreferenceKey = init && init.playbackKind !== 'live' && init.playbackKind !== 'live-catchup' && init.playbackKind !== 'storage'
+    ? playerWorkPreferenceKey({
+      title: init.subtitleTitle || init.title,
+      sourceKey: init.meta?.fromKey || init.key,
+      vodId: init.meta?.vodId || init.meta?.id,
+      profileId: init.meta?.profileId,
+    })
+    : '';
+  const hasRecoveryState = Boolean(parseMsg) || sourceFallback.kind !== 'idle';
   const fallbackInProgress = sourceFallback.kind === 'searching' || sourceFallback.kind === 'switching';
-  const showParseFailure = Boolean(parseMsg) && !fallbackInProgress;
-  const playbackNotices = (parseMsg || sourceFallback.kind !== 'idle') ? (
-    <div className="player-stage-notices" data-recovery-state={sourceFallback.kind} aria-busy={fallbackInProgress}>
-      {showParseFailure && (
-        <div className="player-stage-notice player-stage-notice--error" title={parseMsg}>
-          {parseMsg}
-        </div>
-      )}
-      {sourceFallback.kind !== 'idle' && (
-        <output className="player-source-fallback" aria-live="polite" aria-atomic="true">
-          {sourceFallback.kind === 'searching' && <span>当前媒体流播放失败，正在搜索并核验同剧同集的备用来源…</span>}
-          {sourceFallback.kind === 'switching' && <span>正在切换到已核验的备用源：{sourceFallback.sourceName}</span>}
-          {sourceFallback.kind === 'unavailable' && <>
-            <span>{sourceFallback.message}</span>
-            <div className="player-source-fallback__actions">
-              <button type="button" className="player-source-fallback-choice" onClick={() => void retryAlternativeSearch()}>重新搜索备用源</button>
-            </div>
-          </>}
-          {sourceFallback.kind === 'choices' && (
-            <>
-              <span>
-                已核验到 {sourceFallback.candidates.length} 个同剧同集来源，请选择。
-                {sourceFallback.incompleteSources > 0 && ` 另有 ${sourceFallback.incompleteSources} 个来源尚未完成核验。`}
-                {sourceFallback.truncated && ' 候选较多，仅核验了前几项。'}
-              </span>
-              <div className="player-source-fallback__choices">
-                {sourceFallback.candidates.map(candidate => (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    className="player-source-fallback-choice"
-                    onClick={() => selectAlternative(candidate.id)}
-                  >
-                    {candidate.sourceName}{candidate.profileName ? ` · ${candidate.profileName}` : ''}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </output>
-      )}
-    </div>
+  const recoveryOverlay = hasRecoveryState ? (
+    <PlayerRecoveryOverlay
+      fallback={sourceFallback}
+      failure={playbackFailure}
+      placement={activeUrl ? 'video' : 'stage'}
+      parseError={fallbackInProgress ? '' : parseMsg}
+      canRetryCurrent={!fallbackInProgress}
+      canSearchAgain={sourceFallback.kind === 'unavailable'}
+      canGoPrevious={canPrev}
+      canGoNext={canNext}
+      showEpisodeNavigation={!activeUrl}
+      onSelectAlternative={(id) => { session.selectAlternative(id); }}
+      onRetryCurrent={retryCurrent}
+      onSearchAgain={() => void retryAlternativeSearch()}
+      onPreviousEpisode={() => selectEpisode(epIndex - 1)}
+      onNextEpisode={() => selectEpisode(epIndex + 1)}
+      onCopyDiagnostic={onCopyDiagnostic}
+      diagnosticHistory={diagnosticHistory}
+      onClearDiagnosticHistory={onClearDiagnosticHistory}
+    />
   ) : null;
 
   return (
@@ -136,19 +129,21 @@ export function PlayerPageView({ session, windowState, title, onResolutionChange
           />
         )}
         <div className={`pwin-stage${mini ? ' pwin-stage--mini' : ''}`}>
-          {!activeUrl && playbackNotices}
+          {!activeUrl && recoveryOverlay}
           {activeUrl ? (
             <VideoPlayer
               url={activeUrl}
-              statusOverlay={playbackNotices}
-              suppressPlaybackFailure={sourceFallback.kind !== 'idle'}
+              statusOverlay={recoveryOverlay}
+              suppressPlaybackFailure={hasRecoveryState}
               playbackSource={init ? { profileId: init.meta?.profileId, key: init.meta?.fromKey || init.key } : undefined}
               playbackKind={init?.playbackKind}
+              workPreferenceKey={workPreferenceKey}
               resourceName={curName}
               playTitle={playName}
               parseName={parseName}
               onAutoChangeParse={autoChangeParse}
               onPlaybackStarted={confirmPlaybackStarted}
+              onPrepareNextEpisode={prepareNextEpisode}
               onRetryPlayback={retryCurrent}
               onResolutionChange={onResolutionChange}
               danmakuTitle={((init?.subtitleTitle || init?.title) || '').trim()}
@@ -185,13 +180,7 @@ export function PlayerPageView({ session, windowState, title, onResolutionChange
               skipEpisodeLabel={eps[epIndex]?.name || curName}
             />
           ) : (
-             <div className="empty">{resolving ? '正在解析本集…' : parseMsg ? '播放失败，可重试或切换集数' : '等待播放…'}
-               {!resolving && (init || parseMsg) && <div style={{ marginTop: 12, display: 'flex', gap: 12, justifyContent: 'center' }}>
-                 {init && <button disabled={!canPrev} onClick={() => selectEpisode(epIndex - 1)}>上一集</button>}
-                 <button onClick={() => retryCurrent()}>重试</button>
-                 {init && <button disabled={!canNext} onClick={() => selectEpisode(epIndex + 1)}>下一集</button>}
-               </div>}
-             </div>
+            !hasRecoveryState ? <div className="empty">{resolving ? '正在解析本集…' : '等待播放…'}</div> : null
           )}
         </div>
       </div>
