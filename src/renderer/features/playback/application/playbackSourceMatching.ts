@@ -85,7 +85,9 @@ export function matchPlaybackEpisode(
   }
   const duplicateEpisodes = [...matchesByFlag.values()].filter(routes => routes.length > 1).flat();
   if (duplicateEpisodes.length > 0) return { kind: 'ambiguous', count: duplicateEpisodes.length };
-  const preferred = [...matches].sort((left, right) => flagQualityScore(right.flag) - flagQualityScore(left.flag));
+  const preferred = [...matches].sort((left, right) => (
+    playbackQualityScore(right.flag, right.episode.name) - playbackQualityScore(left.flag, left.episode.name)
+  ));
   return { kind: 'unique', match: preferred[0] };
 }
 
@@ -123,6 +125,12 @@ function episodeOrdinal(value: string): EpisodeOrdinal | null {
     return { season: season ? Number(season[1]) : null, episode: Number(seasonEpisode[1]) };
   }
 
+  const englishSeasonEpisode = /\bSEASON\s*0*(\d{1,2})\s+(?:EP?ISODE|EP)\s*0*(\d{1,4})\b/i.exec(normalized);
+  if (englishSeasonEpisode) return { season: Number(englishSeasonEpisode[1]), episode: Number(englishSeasonEpisode[2]) };
+
+  const compactSeasonEpisode = /(?:^|[^\p{L}\p{N}])0*(\d{1,2})\s*[xX]\s*0*(\d{1,4})(?=$|[^\p{L}\p{N}])/u.exec(normalized);
+  if (compactSeasonEpisode) return { season: Number(compactSeasonEpisode[1]), episode: Number(compactSeasonEpisode[2]) };
+
   const chineseSeasonEpisode = /第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*季.*?第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*[集话話回]/i.exec(normalized);
   if (chineseSeasonEpisode) {
     const season = parseChineseNumber(chineseSeasonEpisode[1]);
@@ -158,6 +166,10 @@ function flagQualityScore(flag: string): number {
   if (/720p|hd/.test(normalized)) return 20;
   if (/480p|sd/.test(normalized)) return 10;
   return 0;
+}
+
+function playbackQualityScore(flag: string, episodeName: string): number {
+  return flagQualityScore(`${flag} ${episodeName}`);
 }
 
 function normalizeEpisodeLabel(value: string): string {

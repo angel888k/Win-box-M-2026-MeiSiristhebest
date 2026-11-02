@@ -19,6 +19,17 @@ describe('playback source identity matching', () => {
     });
   });
 
+  it('recognizes common season-episode spellings without crossing seasons', () => {
+    for (const selected of ['Season 2 Episode 03', '2x03', '第2季第3集']) {
+      expect(matchPlaybackEpisode(selected, {
+        '线路': [{ name: 'S02E03.mkv', url: 'right-season' }],
+      })).toMatchObject({ kind: 'unique', match: { index: 0 } });
+      expect(matchPlaybackEpisode(selected, {
+        '线路': [{ name: 'S01E03.mkv', url: 'wrong-season' }],
+      })).toEqual({ kind: 'none' });
+    }
+  });
+
   it('does not treat the same list index as proof of the same episode', () => {
     expect(matchPlaybackEpisode('第03集', {
       '高清': [
@@ -44,6 +55,16 @@ describe('playback source identity matching', () => {
     expect(matchPlaybackEpisode('第01集', {
       '线路A': [{ name: '第01集', url: 'cut-a' }, { name: '第01集', url: 'cut-b' }],
     })).toEqual({ kind: 'ambiguous', count: 2 });
+    expect(matchPlaybackEpisode('第01集', {
+      '线路': [
+        { name: '第01集 720P', url: '720' },
+        { name: '第01集 4K', url: '4k' },
+      ],
+    })).toEqual({ kind: 'ambiguous', count: 2 });
+    expect(matchPlaybackEpisode('第01集', {
+      '普通线路': [{ name: '第01集 720P', url: '720' }],
+      '备用线路': [{ name: '第01集 4K', url: '4k' }],
+    })).toMatchObject({ kind: 'unique', match: { flag: '备用线路', index: 0 } });
   });
 
   it('keeps season with episode identity and matches equivalent movie editions', () => {
