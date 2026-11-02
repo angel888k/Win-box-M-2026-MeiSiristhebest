@@ -29,4 +29,26 @@ describe('useDriveWebLogin', () => {
     expect(result.current.model.message).toBe('登录失败：web view closed');
     expect(result.current.model.busy).toBe(false);
   });
+
+  it('keeps a pending login attached to its provider and rejects a second login', async () => {
+    let finishLogin!: () => void;
+    const port: DriveWebLoginPort = { login: vi.fn(() => new Promise<void>(resolve => { finishLogin = resolve; })) };
+    const { result } = renderHook(() => useDriveWebLogin(port));
+    const onBound = vi.fn();
+    let quarkLogin!: Promise<boolean>;
+
+    act(() => { quarkLogin = result.current.actions.login('quark', onBound); });
+    expect(result.current.model).toMatchObject({ busy: true, activeProvider: 'quark' });
+    await act(async () => {
+      expect(await result.current.actions.login('uc', onBound)).toBe(false);
+      finishLogin();
+      await quarkLogin;
+    });
+
+    expect(port.login).toHaveBeenCalledOnce();
+    expect(onBound).toHaveBeenCalledWith('quark');
+    expect(result.current.model.activeProvider).toBeNull();
+    expect(result.current.model.messages.quark).toContain('已通过网页扫码保存');
+    expect(result.current.model.messages.uc).toBeUndefined();
+  });
 });

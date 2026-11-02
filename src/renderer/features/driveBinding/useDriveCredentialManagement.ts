@@ -139,8 +139,8 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
     }
   }, [onSaved, port, provider, refresh]);
 
-  const handleExternalLoginSaved = useCallback(async () => {
-    setProbeResults(current => ({ ...current, [provider]: null }));
+  const handleExternalLoginSaved = useCallback(async (savedProvider = provider) => {
+    setProbeResults(current => ({ ...current, [savedProvider]: null }));
     await refresh();
     onSaved();
   }, [onSaved, provider, refresh]);

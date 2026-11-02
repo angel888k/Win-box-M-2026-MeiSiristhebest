@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { driveProviderLabel } from '../../../shared/driveProvider';
 import type { DriveWebLoginPort } from './application/driveBindingPorts';
 
@@ -7,24 +7,33 @@ function describeFailure(cause: unknown): string {
 }
 
 export function useDriveWebLogin(port: DriveWebLoginPort) {
-  const [busy, setBusy] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<Record<string, string>>({});
+  const activeProviderRef = useRef<string | null>(null);
 
   const login = useCallback(async (provider: string, onBound: (provider: string) => void) => {
-    setMessage('');
-    setBusy(true);
+    if (activeProviderRef.current) return false;
+    activeProviderRef.current = provider;
+    setActiveProvider(provider);
+    setMessages(current => ({ ...current, [provider]: '' }));
     try {
       await port.login(provider);
       onBound(provider);
-      setMessage(`✓ 已通过网页扫码保存「${driveProviderLabel(provider)}」绑定`);
+      const result = `✓ 已通过网页扫码保存「${driveProviderLabel(provider)}」绑定`;
+      setMessage(result);
+      setMessages(current => ({ ...current, [provider]: result }));
       return true;
     } catch (cause) {
-      setMessage(`登录失败：${describeFailure(cause)}`);
+      const result = `登录失败：${describeFailure(cause)}`;
+      setMessage(result);
+      setMessages(current => ({ ...current, [provider]: result }));
       return false;
     } finally {
-      setBusy(false);
+      activeProviderRef.current = null;
+      setActiveProvider(null);
     }
   }, [port]);
 
-  return { model: { busy, message }, actions: { login } };
+  return { model: { busy: activeProvider !== null, activeProvider, message, messages }, actions: { login } };
 }

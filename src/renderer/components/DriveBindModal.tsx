@@ -161,7 +161,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
         <DriveLogin
           provider={provider}
           port={ports.webLogin}
-          onBound={() => { void actions.handleExternalLoginSaved(); }}
+          onBound={(savedProvider) => { void actions.handleExternalLoginSaved(savedProvider); }}
         />
 
         {/* ★ 2026-10-14：UC 专属 —— non-VIP（NORMAL）的「UC原画」走 TV Token 而非 cookie，
