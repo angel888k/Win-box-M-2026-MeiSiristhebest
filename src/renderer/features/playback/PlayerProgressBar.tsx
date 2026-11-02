@@ -52,41 +52,59 @@ export function PlayerProgressBar({
 
   return (
     <div
-      ref={progressRef}
       className="vp-progress"
-      style={{ cursor: 'pointer' }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={presenter.onPointerCancel}
-      onPointerLeave={presenter.onPointerLeave}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        presenter.onContextMenu(
-          { clientX: event.clientX, clientY: event.clientY },
-          { clientX: event.clientX, bounds: readBounds(event.currentTarget) },
-        );
-      }}
     >
-      <div className="vp-buffer" style={{ width: `${presenter.progress.buffered}%` }} />
-      <div className="vp-played" style={{ width: `${presenter.progress.played}%` }} />
-      {presenter.markers.map(marker => (
-        <span
-          key={marker.id}
-          className={`vp-progress-marker vp-progress-marker--${marker.kind}`}
-          style={{ left: `${marker.percent}%` }}
-          role="img"
-          aria-label={`${marker.label} · ${formatTime(marker.time)}`}
-          title={`${marker.label} · ${formatTime(marker.time)}`}
-        />
-      ))}
-      {presenter.hover && (
-        <>
-          <div className="vp-hline" style={{ left: presenter.hover.x }} />
-          <div className="vp-htip" style={{ left: presenter.hover.x }}>{presenter.hover.label}</div>
-        </>
-      )}
+      <div
+        ref={progressRef}
+        role="slider"
+        tabIndex={canSeek() ? 0 : -1}
+        aria-label="播放进度"
+        aria-valuemin={0}
+        aria-valuemax={Number.isFinite(duration) && duration > 0 ? duration : 0}
+        aria-valuenow={Math.max(0, Math.min(Number.isFinite(duration) && duration > 0 ? duration : 0, Number.isFinite(currentTime) ? currentTime : 0))}
+        aria-valuetext={`${formatTime(Number.isFinite(currentTime) ? currentTime : 0)} / ${formatTime(Number.isFinite(duration) && duration > 0 ? duration : 0)}`}
+        aria-disabled={!canSeek()}
+        className="vp-progress-track"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={presenter.onPointerCancel}
+        onPointerLeave={presenter.onPointerLeave}
+        onKeyDown={event => {
+          if (presenter.onKeyDown(event.key, event.shiftKey)) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onContextMenu={event => {
+          event.preventDefault();
+          event.stopPropagation();
+          presenter.onContextMenu(
+            { clientX: event.clientX, clientY: event.clientY },
+            { clientX: event.clientX, bounds: readBounds(event.currentTarget) },
+          );
+        }}
+      >
+        <div className="vp-buffer" style={{ width: `${presenter.progress.buffered}%` }} />
+        <div className="vp-played" style={{ width: `${presenter.progress.played}%` }} />
+        {presenter.markers.map(marker => (
+          <span
+            key={marker.id}
+            className={`vp-progress-marker vp-progress-marker--${marker.kind}`}
+            style={{ left: `${marker.percent}%` }}
+            role="img"
+            aria-label={`${marker.label} · ${formatTime(marker.time)}`}
+            title={`${marker.label} · ${formatTime(marker.time)}`}
+          />
+        ))}
+        {presenter.hover && (
+          <>
+            <div className="vp-hline" style={{ left: presenter.hover.x }} />
+            <div className="vp-htip" style={{ left: presenter.hover.x }}>{presenter.hover.label}</div>
+          </>
+        )}
+        <div className="vp-thumb" style={{ left: `${presenter.progress.played}%` }} />
+      </div>
       {presenter.undo && (
         <button
           type="button"
@@ -99,7 +117,6 @@ export function PlayerProgressBar({
           撤销跳转 · {presenter.undo.label}
         </button>
       )}
-      <div className="vp-thumb" style={{ left: `${presenter.progress.played}%` }} />
     </div>
   );
 }

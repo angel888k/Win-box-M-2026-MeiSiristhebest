@@ -111,13 +111,15 @@
 .vp-load-text { display: inline-flex; align-items: center; gap: 2px; }
 .vp-load-speed { color: #8fd0ff; font-variant-numeric: tabular-nums; font-weight: 600; }
 .vp-next { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); z-index: 6; display: flex;
-  align-items: center; gap: 12px; color: #fff; font-size: 14px; padding: 10px 16px; border-radius: 8px;
-  background: rgba(0,0,0,.72); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+  align-items: center; gap: 12px; color: var(--text-primary); font-size: 14px; padding: 10px 16px; border-radius: 8px;
+  background: var(--surface-elevated); border: 1px solid var(--border-strong); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
 .vp-controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 14px 8px; z-index: 5;
   background: linear-gradient(transparent, rgba(0,0,0,.72)); opacity: 0; transition: opacity .2s; }
 .vplayer.vui .vp-controls { opacity: 1; }
-.vp-progress { position: relative; height: 14px; display: flex; align-items: center; margin-bottom: 4px; }
-.vp-progress::before { content: ''; position: absolute; left: 0; right: 0; height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.vp-progress { position: relative; height: 14px; margin-bottom: 4px; }
+.vp-progress-track { position: relative; width: 100%; height: 14px; display: flex; align-items: center; cursor: pointer; outline: none; }
+.vp-progress-track:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: 2px; border-radius: 5px; }
+.vp-progress-track::before { content: ''; position: absolute; left: 0; right: 0; height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); }
 .vp-buffer { position: absolute; left: 0; height: 4px; border-radius: 2px; background: rgba(255,255,255,.32); }
 .vp-played { position: absolute; left: 0; height: 4px; border-radius: 2px;
   background: linear-gradient(90deg, var(--accent), var(--accent-2)); }

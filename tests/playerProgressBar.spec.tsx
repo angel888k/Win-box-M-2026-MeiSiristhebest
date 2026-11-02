@@ -31,7 +31,7 @@ describe('PlayerProgressBar', () => {
   it('seeks by pointer, clamps to the duration, and clears the hover indicator', () => {
     const props = makeProps();
     const { container } = render(<PlayerProgressBar {...props} />);
-    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
     setProgressBounds(progress);
 
     fireEvent.pointerDown(progress, { button: 0, clientX: 60, pointerId: 1 });
@@ -52,7 +52,7 @@ describe('PlayerProgressBar', () => {
     props.currentTime = 90;
     props.buffered = 120;
     const { container } = render(<PlayerProgressBar {...props} />);
-    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
     Object.defineProperty(progress, 'getBoundingClientRect', {
       configurable: true,
       value: () => ({ left: 10, top: 0, right: 10, bottom: 8, width: 0, height: 8 } as DOMRect),
@@ -87,10 +87,24 @@ describe('PlayerProgressBar', () => {
     expect(markers[3].getAttribute('aria-label')).toBe('片尾开始 · 45s');
   });
 
+  it('exposes a keyboard-operable progress slider with bounded seek steps', () => {
+    const props = makeProps();
+    const { getByRole } = render(<PlayerProgressBar {...props} />);
+    const slider = getByRole('slider', { name: '播放进度' });
+
+    expect(slider.getAttribute('aria-valuenow')).toBe('10');
+    expect(slider.getAttribute('aria-valuemax')).toBe('60');
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(props.seekTo).toHaveBeenLastCalledWith(15);
+    fireEvent.keyDown(slider, { key: 'End' });
+    expect(props.seekTo).toHaveBeenLastCalledWith(60);
+    expect(slider.getAttribute('aria-valuetext')).toBe('10s / 60s');
+  });
+
   it('uses the non-passive wheel handler for one-second seeks and reports context-menu time', () => {
     const props = makeProps();
     const { container } = render(<PlayerProgressBar {...props} />);
-    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
     setProgressBounds(progress);
 
     const wheel = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
@@ -106,7 +120,7 @@ describe('PlayerProgressBar', () => {
   it('offers a temporary undo for a manual seek and returns to the original position', () => {
     const props = makeProps();
     const { container } = render(<PlayerProgressBar {...props} />);
-    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
     setProgressBounds(progress);
 
     fireEvent.pointerDown(progress, { button: 0, clientX: 60, pointerId: 1 });
@@ -122,7 +136,7 @@ describe('PlayerProgressBar', () => {
   it('clears an undo action when a different media item replaces the current one', () => {
     const first = makeProps();
     const { container, rerender } = render(<PlayerProgressBar {...first} />);
-    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
     setProgressBounds(progress);
 
     fireEvent.pointerDown(progress, { button: 0, clientX: 60, pointerId: 1 });
@@ -137,7 +151,7 @@ describe('PlayerProgressBar', () => {
   it('uses the latest presenter model after the player switches media', () => {
     const first = makeProps();
     const { container, rerender } = render(<PlayerProgressBar {...first} />);
-    const progress = container.querySelector('.vp-progress') as HTMLDivElement;
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
     setProgressBounds(progress);
     const next = { ...makeProps(), duration: 40, seekTo: vi.fn() };
 

@@ -130,6 +130,29 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
     offerUndo(from, next, 0.5);
   }, [offerUndo]);
 
+  const onKeyDown = useCallback((key: string, shiftKey = false): boolean => {
+    const state = latest.current;
+    if (!state.canSeek() || !Number.isFinite(state.duration) || state.duration <= 0) return false;
+    const sampledTime = state.getCurrentTime();
+    const from = Number.isFinite(sampledTime) ? sampledTime : state.currentTime;
+    const step = shiftKey ? 30 : 5;
+    let next: number;
+    switch (key) {
+      case 'ArrowLeft': next = from - step; break;
+      case 'ArrowRight': next = from + step; break;
+      case 'PageDown': next = from - 60; break;
+      case 'PageUp': next = from + 60; break;
+      case 'Home': next = 0; break;
+      case 'End': next = state.duration; break;
+      default: return false;
+    }
+    next = Math.max(0, Math.min(state.duration, next));
+    if (next === from) return false;
+    state.seekTo(next);
+    offerUndo(from, next);
+    return true;
+  }, [offerUndo]);
+
   const onUndo = useCallback(() => {
     if (!undo || !latest.current.canSeek()) return;
     latest.current.seekTo(undo.from);
@@ -154,6 +177,7 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
     onPointerCancel,
     onPointerLeave,
     onWheel,
+    onKeyDown,
     onContextMenu,
   };
 }
