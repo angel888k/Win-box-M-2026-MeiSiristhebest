@@ -11,6 +11,7 @@ export interface AudioPlayerInput {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
+  onPlaybackStarted?: () => void;
   startTime?: number;
   mini?: boolean;
 }

@@ -878,7 +878,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     resolution: resText || null,
   });
   return {
-    identity: { url, resourceName, danmakuTitle, playTitle, mini },
+    identity: { url, resourceName, danmakuTitle, playTitle, mini, onPlaybackStarted: props.onPlaybackStarted },
     media: {
       kind: mediaKind,
       playbackSource: props.playbackSource,

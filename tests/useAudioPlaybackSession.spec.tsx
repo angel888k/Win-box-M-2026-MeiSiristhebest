@@ -60,6 +60,7 @@ function AudioHarness({
       onTimeUpdate={model.actions.onTimeUpdate}
       onPlay={model.actions.onPlay}
       onPause={model.actions.onPause}
+      onPlaying={model.actions.onPlaying}
     />
   );
 }
@@ -101,6 +102,30 @@ afterEach(() => {
 });
 
 describe('useAudioPlaybackSession', () => {
+  it('confirms a track only after playback actually starts and only once per track', () => {
+    const memory = makeMemory(vi.fn(() => 0));
+    const media = makeMediaPort();
+    const keyboardEvents = makeKeyboardEvents();
+    const playbackStarted = vi.fn();
+    render(
+      <AudioHarness
+        input={makeInput({ onPlaybackStarted: playbackStarted })}
+        memory={memory}
+        media={media.port}
+        guard={{ shouldIgnoreAudioPlaybackShortcuts: () => false }}
+        keyboardEvents={keyboardEvents.port}
+      />,
+    );
+    const audio = screen.getByTestId('audio') as HTMLAudioElement;
+
+    fireEvent.canPlay(audio);
+    fireEvent.play(audio);
+    expect(playbackStarted).not.toHaveBeenCalled();
+    fireEvent.playing(audio);
+    fireEvent.playing(audio);
+    expect(playbackStarted).toHaveBeenCalledOnce();
+  });
+
   it('restores scoped progress, saves playback updates, and pauses on cleanup', () => {
     const memory = makeMemory();
     const media = makeMediaPort();

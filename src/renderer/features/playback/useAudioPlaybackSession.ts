@@ -30,6 +30,7 @@ export function useAudioPlaybackSession(
     canNext,
     onPrev,
     onNext,
+    onPlaybackStarted,
     startTime = 0,
   } = input;
   const playbackProfileId = playbackSource?.profileId;
@@ -47,6 +48,7 @@ export function useAudioPlaybackSession(
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const restoredRef = useRef(false);
+  const playbackStartedRef = useRef(false);
 
   const attachAudioElement = useCallback((element: AudioMediaElement | null) => {
     audioRef.current = element;
@@ -71,6 +73,7 @@ export function useAudioPlaybackSession(
     setCurrentTime(0);
     setDuration(0);
     restoredRef.current = false;
+    playbackStartedRef.current = false;
     mediaPort.load(audio);
     void mediaPort.play(audio).catch(() => {
       // Autoplay rejection leaves the player ready for a user initiated play.
@@ -136,7 +139,12 @@ export function useAudioPlaybackSession(
   const onPlay = useCallback(() => setPaused(false), []);
   const onPause = useCallback(() => setPaused(true), []);
   const onWaiting = useCallback(() => setLoading(true), []);
-  const onPlaying = useCallback(() => setLoading(false), []);
+  const onPlaying = useCallback(() => {
+    setLoading(false);
+    if (playbackStartedRef.current) return;
+    playbackStartedRef.current = true;
+    onPlaybackStarted?.();
+  }, [onPlaybackStarted]);
   const onError = useCallback(() => {
     setLoading(false);
     setError('音频加载失败（链接可能已失效或需要登录）');

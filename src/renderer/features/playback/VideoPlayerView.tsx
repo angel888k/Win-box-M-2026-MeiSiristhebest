@@ -90,6 +90,7 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
         canNext={canNext}
         onPrev={onPrev}
         onNext={onNext}
+        onPlaybackStarted={onPlaybackStarted}
         startTime={media.startTime}
         mini={mini}
       />
