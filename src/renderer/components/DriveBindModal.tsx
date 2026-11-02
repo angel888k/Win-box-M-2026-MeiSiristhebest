@@ -84,6 +84,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
               id={`drive-provider-${p.key}`}
               aria-controls="drive-provider-panel"
               value={p.key}
+              disabled={busy}
               icon={<Circle20Regular className={tokens[p.key] ? 'drive-provider-bound-icon' : 'drive-provider-unbound-icon'} />}
               className="drive-provider-tab"
             >

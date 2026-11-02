@@ -53,6 +53,42 @@ describe('useDriveCredentialManagement', () => {
     expect(result.current.model.credentialStatus).toMatchObject({ kind: 'valid', label: '服务端确认有效', checkedAt: 1 });
   });
 
+  it('keeps unsaved cookie drafts scoped to their provider when switching tabs', async () => {
+    const { result } = renderHook(() => useDriveCredentialManagement({ port, onSaved }));
+    act(() => result.current.actions.changeCookie('quark-cookie'));
+    act(() => result.current.actions.selectProvider('uc'));
+    expect(result.current.model.cookie).toBe('');
+
+    act(() => result.current.actions.changeCookie('uc-cookie'));
+    await act(async () => { await result.current.actions.save(); });
+    expect(port.save).toHaveBeenCalledWith('uc', 'uc-cookie');
+    expect(result.current.model.cookie).toBe('');
+
+    act(() => result.current.actions.selectProvider('quark'));
+    expect(result.current.model.cookie).toBe('quark-cookie');
+  });
+
+  it('keeps a late credential probe attached to the provider that started it', async () => {
+    vi.mocked(port.load).mockResolvedValueOnce({ quark: 'cookie-value' });
+    let finishProbe!: (result: { state: 'valid'; checkedAt: number }) => void;
+    vi.mocked(port.probe).mockImplementationOnce(() => new Promise(resolve => { finishProbe = resolve; }));
+    const { result } = renderHook(() => useDriveCredentialManagement({ port, onSaved }));
+    await act(async () => { await Promise.resolve(); });
+
+    let pendingProbe!: Promise<boolean>;
+    act(() => { pendingProbe = result.current.actions.probe(); });
+    act(() => result.current.actions.selectProvider('baidu'));
+    await act(async () => {
+      finishProbe({ state: 'valid', checkedAt: 42 });
+      await pendingProbe;
+    });
+
+    expect(result.current.model.provider).toBe('baidu');
+    expect(result.current.model.probeResult).toBeNull();
+    act(() => result.current.actions.selectProvider('quark'));
+    expect(result.current.model.probeResult).toEqual({ state: 'valid', checkedAt: 42 });
+  });
+
   it('removes the selected provider and refreshes global credential state', async () => {
     const { result } = renderHook(() => useDriveCredentialManagement({ port, onSaved }));
     await act(async () => { await result.current.actions.unbind(); });
