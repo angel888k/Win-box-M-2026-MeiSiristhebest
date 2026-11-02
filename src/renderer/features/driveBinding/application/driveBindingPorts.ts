@@ -1,9 +1,12 @@
+import type { DriveCredentialProbeResult } from '../../../../shared/driveCredential';
+
 export type DriveCredentials = Readonly<Record<string, string>>;
 
 export interface DriveCredentialsPort {
   load(): Promise<DriveCredentials>;
   save(provider: string, cookie: string): Promise<void>;
   remove(provider: string): Promise<void>;
+  probe(provider: string): Promise<DriveCredentialProbeResult>;
 }
 
 export interface DriveWebLoginPort {

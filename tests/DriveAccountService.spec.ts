@@ -25,6 +25,7 @@ function makeService(overrides: Record<string, unknown> = {}) {
     pollQr: vi.fn(async () => ({ state: 0 })),
     runWebLogin: vi.fn(async () => ({ done: false, cookie: 'visitor=1' })),
     refreshQuarkSession: vi.fn(async (cookie: string) => ({ cookie, changed: false, status: 200, setCookieKeys: [] })),
+    verifyQuarkSession: vi.fn(async () => 'valid' as const),
     ucTv: {
       newDeviceId: vi.fn(() => 'device-1'),
       authorize: vi.fn(async () => ({ reqId: 'req-1', queryToken: 'query-1', imageDataUrl: 'data:image/png;base64,qr' })),
@@ -37,6 +38,28 @@ function makeService(overrides: Record<string, unknown> = {}) {
 }
 
 describe('DriveAccountService', () => {
+  it('reports Quark server verification without mutating stored credentials', async () => {
+    const { service, dependencies } = makeService();
+    await service.set('quark', 'private-cookie');
+    const result = await service.probeCredential('quark');
+    expect(result.state).toBe('valid');
+    expect(dependencies.verifyQuarkSession).toHaveBeenCalledWith('private-cookie');
+    expect(dependencies.drives.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps providers without a generic probe explicitly unsupported', async () => {
+    const { service, dependencies } = makeService();
+    await service.set('baidu', 'private-cookie');
+    expect(await service.probeCredential('baidu')).toEqual({ state: 'unsupported' });
+    expect(dependencies.verifyQuarkSession).not.toHaveBeenCalled();
+  });
+
+  it('does not claim an absent credential is valid', async () => {
+    const { service, dependencies } = makeService();
+    expect(await service.probeCredential('quark')).toEqual({ state: 'missing' });
+    expect(dependencies.verifyQuarkSession).not.toHaveBeenCalled();
+  });
+
   it('does not persist an incomplete web login or reset spiders', async () => {
     const { service, dependencies } = makeService();
 

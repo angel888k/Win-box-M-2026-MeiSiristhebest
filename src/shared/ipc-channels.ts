@@ -52,6 +52,7 @@ export const IPC = {
   DRIVE_GET: 'drive:get',
   DRIVE_SET: 'drive:set',
   DRIVE_REMOVE: 'drive:remove',
+  DRIVE_PROBE: 'drive:probe',
   DRIVE_QR_CREATE: 'drive:qrCreate',
   DRIVE_QR_POLL: 'drive:qrPoll',
   DRIVE_WEB_LOGIN: 'drive:webLogin',

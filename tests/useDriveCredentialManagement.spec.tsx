@@ -10,6 +10,7 @@ const port: DriveCredentialsPort = {
   load: vi.fn(async () => ({})),
   save: vi.fn(async () => undefined),
   remove: vi.fn(async () => undefined),
+  probe: vi.fn(async () => ({ state: 'valid' as const, checkedAt: 1 })),
 };
 const onSaved = vi.fn();
 
@@ -22,6 +23,7 @@ describe('useDriveCredentialManagement', () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(result.current.model.credentials).toEqual({ quark: 'cookie-value' });
+    expect(result.current.model.credentialStatus).toMatchObject({ kind: 'saved-unverified', label: '已保存 · 未验证' });
     act(() => result.current.actions.changeCookie('__pus=123; __puus=456'));
     await act(async () => { await result.current.actions.save(); });
 
@@ -38,6 +40,17 @@ describe('useDriveCredentialManagement', () => {
     expect(saved).toBe(false);
     expect(port.save).not.toHaveBeenCalled();
     expect(result.current.model.message).toBe('请先粘贴 Cookie');
+    expect(result.current.model.credentialStatus).toMatchObject({ kind: 'missing', label: '未设置' });
+  });
+
+  it('exposes only the server probe result as verified status', async () => {
+    vi.mocked(port.load).mockResolvedValueOnce({ quark: 'cookie-value' });
+    const { result } = renderHook(() => useDriveCredentialManagement({ port, onSaved }));
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await result.current.actions.probe(); });
+    expect(port.probe).toHaveBeenCalledWith('quark');
+    expect(result.current.model.probeResult).toEqual({ state: 'valid', checkedAt: 1 });
+    expect(result.current.model.credentialStatus).toMatchObject({ kind: 'valid', label: '服务端确认有效', checkedAt: 1 });
   });
 
   it('removes the selected provider and refreshes global credential state', async () => {

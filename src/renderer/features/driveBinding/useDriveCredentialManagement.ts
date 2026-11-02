@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkDriveCookie } from '../../../shared/driveCookie';
 import { driveProviderLabel } from '../../../shared/driveProvider';
 import type { DriveCredentialsPort } from './application/driveBindingPorts';
+import { driveCredentialStatus } from './application/driveCredentialStatus';
+import type { DriveCredentialProbeResult } from '../../../shared/driveCredential';
 
 interface DriveCredentialManagementOptions {
   port: DriveCredentialsPort;
@@ -20,6 +22,7 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [probeResult, setProbeResult] = useState<DriveCredentialProbeResult | null>(null);
   const alive = useRef(false);
   const requestSequence = useRef(0);
   const operationInProgress = useRef(false);
@@ -48,9 +51,35 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
   const selectProvider = useCallback((value: string) => {
     setProvider(value);
     setMessage('');
+    setProbeResult(null);
   }, []);
-  const changeCookie = useCallback((value: string) => setCookie(value), []);
+  const changeCookie = useCallback((value: string) => {
+    setCookie(value);
+    setProbeResult(null);
+  }, []);
   const clearMessage = useCallback(() => setMessage(''), []);
+
+  const probe = useCallback(async () => {
+    if (operationInProgress.current) return false;
+    operationInProgress.current = true;
+    setBusy(true);
+    setMessage('');
+    setProbeResult(null);
+    try {
+      const result = await port.probe(provider);
+      if (alive.current) setProbeResult(result);
+      return true;
+    } catch (cause) {
+      if (alive.current) {
+        setProbeResult({ state: 'unknown', checkedAt: Date.now() });
+        setMessage(`无法检查登录状态：${describeFailure(cause)}`);
+      }
+      return false;
+    } finally {
+      operationInProgress.current = false;
+      if (alive.current) setBusy(false);
+    }
+  }, [port, provider]);
 
   const save = useCallback(async () => {
     if (operationInProgress.current) return false;
@@ -66,8 +95,9 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
       await port.save(provider, normalizedCookie);
       if (!alive.current) return true;
       setCookie('');
+      setProbeResult(null);
       await refresh();
-      setMessage(`✓ 已保存「${driveProviderLabel(provider)}」全局登录状态，所有支持该网盘的子仓和源均可复用。`);
+      setMessage(`已保存「${driveProviderLabel(provider)}」的全局凭据，所有支持该网盘的子仓和源均可复用。凭据有效性会在实际播放请求时确认；如果是在播放中打开绑定窗口，当前集会自动重新解析。`);
       onSaved();
       return true;
     } catch (cause) {
@@ -88,6 +118,7 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
       await port.remove(provider);
       if (!alive.current) return true;
       await refresh();
+      setProbeResult(null);
       setMessage(`已解绑「${driveProviderLabel(provider)}」`);
       onSaved();
       return true;
@@ -101,6 +132,7 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
   }, [onSaved, port, provider, refresh]);
 
   const handleExternalLoginSaved = useCallback(async () => {
+    setProbeResult(null);
     await refresh();
     onSaved();
   }, [onSaved, refresh]);
@@ -114,7 +146,9 @@ export function useDriveCredentialManagement({ port, initialProvider, onSaved }:
       message,
       validation: checkDriveCookie(provider, cookie),
       isBound: !!credentials[provider],
+      credentialStatus: driveCredentialStatus(!!credentials[provider], probeResult),
+      probeResult,
     },
-    actions: { selectProvider, changeCookie, clearMessage, save, unbind, refresh, handleExternalLoginSaved },
+    actions: { selectProvider, changeCookie, clearMessage, save, unbind, probe, refresh, handleExternalLoginSaved },
   };
 }

@@ -10,7 +10,7 @@
 //   · 其余网盘（百度/阿里/115/哔哩）→ 应用凭据 + 注入蜘蛛 ext（ext.baidu/ali/bili…）。
 //   保存后主进程会丢弃常驻蜘蛛进程 → 下次请求按新 cookie 重新 init（否则仍用旧 cookie）。
 import { Tab as FluentTab, TabList as FluentTabList } from '@fluentui/react-components';
-import { CheckmarkCircle20Filled, Circle20Regular } from '@fluentui/react-icons';
+import { Circle20Regular } from '@fluentui/react-icons';
 import { driveProviderLabel } from '../../shared/driveProvider';
 import { AppModal } from './AppDialog';
 import DriveLogin from './DriveLogin';
@@ -48,7 +48,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
   const initProv = (initialProvider || '').trim().toLowerCase();
   const selectedInitialProvider = PROVIDERS.some((item) => item.key === initProv) ? initProv : 'quark';
   const { model, actions } = useDriveCredentialManagement({ port: ports.credentials, initialProvider: selectedInitialProvider, onSaved });
-  const { provider, cookie, credentials: tokens, busy, message: msg, validation: check, isBound: bound } = model;
+  const { provider, cookie, credentials: tokens, busy, message: msg, validation: check, isBound: bound, credentialStatus } = model;
 
   return (
     <AppModal
@@ -67,7 +67,7 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
           {initProv
             ? `检测到该资源来自「${driveProviderLabel(initProv)}」网盘的专用链接，未绑定对应 Cookie 时无法取流。绑定后回到播放页会自动重新解析。`
             : `使用场景：${siteName}。`}
-          <p>登录状态独立保存在本机，所有支持该网盘的子仓和站点共享；切换线路无需重复登录。</p>
+          <p>凭据独立保存在本机，所有支持该网盘的子仓和站点共享；切换线路无需重复登录。保存成功不等于服务端会话仍有效。</p>
           {reason ? <div style={{ marginTop: 4 }}>{reason}</div> : null}
         </div>
 
@@ -84,12 +84,12 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
               id={`drive-provider-${p.key}`}
               aria-controls="drive-provider-panel"
               value={p.key}
-              icon={tokens[p.key] ? <CheckmarkCircle20Filled className="drive-provider-bound-icon" /> : <Circle20Regular className="drive-provider-unbound-icon" />}
+              icon={<Circle20Regular className={tokens[p.key] ? 'drive-provider-bound-icon' : 'drive-provider-unbound-icon'} />}
               className="drive-provider-tab"
             >
               <span className="drive-provider-name">{p.label}</span>
               <span className="drive-provider-state">
-                {provider === p.key ? '当前' : tokens[p.key] ? '已绑定' : '未绑定'}
+                {provider === p.key ? '当前' : tokens[p.key] ? '凭据已保存' : '未设置'}
               </span>
             </FluentTab>
           ))}
@@ -103,8 +103,9 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
           tabIndex={0}
         >
         <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {bound ? `当前已绑定（${driveProviderLabel(provider)}，凭据长度 ${tokens[provider].length}）` : '当前未绑定'}
+          <span className="muted" role="status" aria-live="polite" style={{ fontSize: 12 }}>
+            {credentialStatus.label}（{driveProviderLabel(provider)}）
+            {'checkedAt' in credentialStatus ? ` · ${new Date(credentialStatus.checkedAt).toLocaleString()}` : ''}
           </span>
           {bound && (
               <button className="linkbtn" style={{ marginLeft: 'auto' }} disabled={busy} onClick={() => void actions.unbind()}>
@@ -112,6 +113,17 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
             </button>
           )}
         </div>
+        <div className="muted" style={{ fontSize: 12, lineHeight: 1.65, marginBottom: 8 }}>
+          {credentialStatus.explanation}
+        </div>
+        {bound && (
+          <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <button type="button" disabled={busy || !!cookie.trim()} onClick={() => void actions.probe()}>
+              {busy ? '检查中…' : '检查已保存凭据'}
+            </button>
+            {!!cookie.trim() && <span className="muted" style={{ fontSize: 12 }}>请先保存或清空未保存的编辑内容</span>}
+          </div>
+        )}
 
         <textarea
           value={cookie}
@@ -124,6 +136,11 @@ export default function DriveBindModal({ siteName, initialProvider, reason, onCl
         {!!cookie.trim() && !check.ok && (
           <div className="banner" style={{ borderLeftColor: 'var(--warn)', marginTop: 8, fontSize: 12, lineHeight: 1.7 }}>
             ⚠ {check.message}
+          </div>
+        )}
+        {!!cookie.trim() && check.ok && (
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.65, marginTop: 6 }}>
+            Cookie 格式检查通过；这只检查必要字段，不会请求网盘服务，也不能证明登录有效。
           </div>
         )}
 

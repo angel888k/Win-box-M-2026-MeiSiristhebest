@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { resolveShareFile, extractEpisodeFid, extractEpisodeName, episodeKeyOf, matchTransferredFile, isQuarkSharePlay, extractQuarkShare, isDirNode, isRealFileNode, quarkPlayUrl, quarkTransfer, quarkFileDelete, refreshQuarkCookieSession, QUARK_CACHE_DIR_NAME, SESSION_DIR_PREFIX, sessionDirName } from '../src/main/net/quarkTransfer';
+import { resolveShareFile, extractEpisodeFid, extractEpisodeName, episodeKeyOf, matchTransferredFile, isQuarkSharePlay, extractQuarkShare, isDirNode, isRealFileNode, quarkPlayUrl, quarkTransfer, quarkFileDelete, refreshQuarkCookieSession, verifyQuarkCookieSession, QUARK_CACHE_DIR_NAME, SESSION_DIR_PREFIX, sessionDirName } from '../src/main/net/quarkTransfer';
 import type { ShareListFetcher } from '../src/main/net/quarkTransfer';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -36,6 +36,26 @@ describe('refreshQuarkCookieSession', () => {
     await expect(refreshQuarkCookieSession('__pus=PUS', fetcher)).resolves.toMatchObject({
       cookie: '__pus=PUS', changed: false, status: 401, setCookieKeys: ['__puus'],
     });
+  });
+});
+
+describe('verifyQuarkCookieSession', () => {
+  it('confirms only the documented successful member response and ignores refreshed cookies', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 0, data: { member_type: 'vip' } }), {
+      status: 200,
+      headers: { 'Set-Cookie': '__puus=rotated; Path=/' },
+    }));
+    await expect(verifyQuarkCookieSession('__pus=secret', fetcher)).resolves.toBe('valid');
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('/1/clouddrive/member?'), expect.objectContaining({
+      method: 'GET',
+      headers: expect.objectContaining({ Cookie: '__pus=secret' }),
+    }));
+  });
+
+  it('calls explicit unauthorized responses invalid, but leaves service errors and network failures unknown', async () => {
+    await expect(verifyQuarkCookieSession('cookie', vi.fn().mockResolvedValue(new Response('{}', { status: 403 })))).resolves.toBe('invalid');
+    await expect(verifyQuarkCookieSession('cookie', vi.fn().mockResolvedValue(new Response('{"code":999}', { status: 200 })))).resolves.toBe('unknown');
+    await expect(verifyQuarkCookieSession('cookie', vi.fn().mockRejectedValue(new Error('offline')))).resolves.toBe('unknown');
   });
 });
 

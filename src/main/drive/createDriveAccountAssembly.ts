@@ -4,7 +4,7 @@ import { DriveAccountService } from './DriveAccountService';
 import { DriveCredentialSynchronizer } from './DriveCredentialSynchronizer';
 import { getAdapter } from '../net/qr';
 import { runDriveWebLogin } from '../net/webLogin';
-import { refreshQuarkCookieSession } from '../net/quarkTransfer';
+import { refreshQuarkCookieSession, verifyQuarkCookieSession } from '../net/quarkTransfer';
 import { ucTvAuthorize, ucTvDeviceId, ucTvExchange, ucTvPollCode } from '../net/ucTvToken';
 import { DriveStore, type DriveCodec } from '../store/DriveStore';
 import { UcTvStore } from '../store/UcTvStore';
@@ -56,6 +56,7 @@ export function createDriveAccountAssembly(options: DriveAccountAssemblyOptions)
     pollQr: (provider, sessionId) => getAdapter(provider).qrPoll(options.http, options.logger, sessionId),
     runWebLogin: (provider) => runDriveWebLogin(provider, options.logger),
     refreshQuarkSession: (cookie) => refreshQuarkCookieSession(cookie),
+    verifyQuarkSession: (cookie) => verifyQuarkCookieSession(cookie),
     ucTv: {
       newDeviceId: ucTvDeviceId,
       authorize: ucTvAuthorize,

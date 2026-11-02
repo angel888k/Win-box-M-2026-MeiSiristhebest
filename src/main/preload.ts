@@ -259,6 +259,7 @@ const api = {
     get: () => invoke(IPC.DRIVE_GET),
     set: (a: { provider: string; token: string }) => invoke(IPC.DRIVE_SET, a),
     remove: (provider: string) => invoke(IPC.DRIVE_REMOVE, provider),
+    probe: (provider: string) => invoke(IPC.DRIVE_PROBE, provider),
     qrCreate: (provider?: string) => invoke(IPC.DRIVE_QR_CREATE, provider),
     qrPoll: (provider: string, sid: string) => invoke(IPC.DRIVE_QR_POLL, provider, sid),
     webLogin: (provider: string) => invoke(IPC.DRIVE_WEB_LOGIN, provider),

@@ -1,5 +1,6 @@
 // Renderer preload contract. Runtime wrappers live in client.ts.
 import type { IpcResult } from '../../shared/ipc-result';
+import type { DriveCredentialProbeResult } from '../../shared/driveCredential';
 import type { DiscoverBoardPage } from '../../shared/discoverBoards';
 import type {
   SiteConfig,
@@ -247,6 +248,7 @@ declare global {
         get: () => Promise<IpcResult<Record<string, string>>>;
         set: (a: { provider: string; token: string }) => Promise<IpcResult<void>>;
         remove: (provider: string) => Promise<IpcResult<void>>;
+        probe: (provider: string) => Promise<IpcResult<DriveCredentialProbeResult>>;
         // ★ 2026-09-30：imageDataUrl = 图片型二维码（百度 passport 直接出图，见 main/net/qr/types.ts）
         qrCreate: (provider?: string) => Promise<IpcResult<{ provider: string; content: string; imageDataUrl?: string; sid: string }>>;
         qrPoll: (

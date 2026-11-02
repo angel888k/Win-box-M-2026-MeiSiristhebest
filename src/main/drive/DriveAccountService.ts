@@ -1,4 +1,5 @@
 import type { Logger } from '../../shared/types';
+import type { DriveCredentialProbeResult } from '../../shared/driveCredential';
 import type { DriveStore, DriveTokens } from '../store/DriveStore';
 import type { UcTvStore } from '../store/UcTvStore';
 import type { QrPollResult, QrSession } from '../net/qr';
@@ -24,6 +25,7 @@ export interface DriveAccountPorts {
     status: number;
     setCookieKeys: string[];
   }>;
+  verifyQuarkSession: (cookie: string) => Promise<'valid' | 'invalid' | 'unknown'>;
   ucTv: {
     newDeviceId: () => string;
     authorize: (deviceId: string) => Promise<UcTvQrSession>;
@@ -57,6 +59,17 @@ export class DriveAccountService {
   remove(provider: string): void {
     this.ports.drives.remove(provider);
     this.persistCredentialChange();
+  }
+
+  async probeCredential(provider: string): Promise<DriveCredentialProbeResult> {
+    const normalizedProvider = (provider || '').trim().toLowerCase();
+    const token = this.ports.drives.list()[normalizedProvider];
+    if (!token?.trim()) return { state: 'missing' };
+    // Quark's member endpoint is already used by the session refresh flow. Here we use it
+    // read-only: the probe ignores Set-Cookie and never changes the saved credential.
+    if (normalizedProvider !== 'quark') return { state: 'unsupported' };
+    const state = await this.ports.verifyQuarkSession(token);
+    return { state, checkedAt: Date.now() };
   }
 
   async webLogin(provider: string): Promise<void> {

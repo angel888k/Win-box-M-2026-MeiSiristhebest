@@ -269,6 +269,39 @@ export async function refreshQuarkCookieSession(
   }
 }
 
+export type QuarkCookieProbe = 'valid' | 'invalid' | 'unknown';
+
+/** Read-only login probe. It deliberately discards Set-Cookie and never mutates DriveStore. */
+export async function verifyQuarkCookieSession(
+  cookie: string,
+  fetcher: typeof globalThis.fetch = globalThis.fetch,
+): Promise<QuarkCookieProbe> {
+  const normalizedCookie = String(cookie || '').trim();
+  if (!normalizedCookie) return 'invalid';
+  try {
+    const response = await fetcher(MEMBER_URL, {
+      method: 'GET',
+      headers: {
+        'User-Agent': UA,
+        Referer: REF,
+        Origin: REF.replace(/\/$/, ''),
+        Cookie: normalizedCookie,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = await response.text();
+    let json: any = null;
+    try { json = JSON.parse(body); } catch { /* non-JSON is an unknown result */ }
+    if (response.status === 200 && json?.code === 0) return 'valid';
+    if (response.status === 401 || response.status === 403) return 'invalid';
+    // Provider-specific auth error codes are not currently documented by the existing contract.
+    // Do not turn arbitrary HTTP/API errors into a claim that the account expired.
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 /**
  * 分享文件免转存直链（失败返回 null，由调用方进入原有转存兜底）。
  *

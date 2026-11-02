@@ -1,5 +1,6 @@
 // src/renderer/api/client.ts — window.api 的类型化封装 + IpcResult 解包
 import type { IpcResult } from '../../shared/ipc-result';
+import type { DriveCredentialProbeResult } from '../../shared/driveCredential';
 import { MAX_SOURCE_CONFIGURATION_BATCH_SIZE } from '../../shared/sourceConfigurationSignature';
 import type {
   SourceBean,
@@ -236,6 +237,7 @@ export const client = {
   driveGet: () => unwrap(window.api.drives.get()),
   driveSet: (provider: string, token: string) => unwrap(window.api.drives.set({ provider, token })),
   driveRemove: (provider: string) => unwrap(window.api.drives.remove(provider)),
+  driveProbe: (provider: string) => unwrap(window.api.drives.probe(provider)) as Promise<DriveCredentialProbeResult>,
   driveQrCreate: (provider?: string) => unwrap(window.api.drives.qrCreate(provider)),
   driveQrPoll: (provider: string, sid: string) => unwrap(window.api.drives.qrPoll(provider, sid)),
   driveWebLogin: (provider: string) => unwrap(window.api.drives.webLogin(provider)),

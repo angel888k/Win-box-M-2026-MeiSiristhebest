@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { DriveBindingPorts } from '../src/renderer/features/driveBinding/application/driveBindingPorts';
 
 vi.mock('../src/renderer/components/DriveLogin', () => ({ default: () => null }));
@@ -15,6 +15,7 @@ const ports: DriveBindingPorts = {
     load: async () => ({}),
     save: async () => {},
     remove: async () => {},
+    probe: async () => ({ state: 'unsupported' }),
   },
   webLogin: { login: async () => {} },
   ucTvToken: {
@@ -61,5 +62,21 @@ describe('DriveBindModal', () => {
     expect(baidu.getAttribute('aria-selected')).toBe('true');
     expect(quark.getAttribute('aria-selected')).toBe('false');
     expect(screen.getByRole('textbox', { name: '百度 Cookie' })).toBeTruthy();
+  });
+
+  it('labels a saved credential separately and displays the real provider probe result', async () => {
+    const probePorts: DriveBindingPorts = {
+      ...ports,
+      credentials: {
+        ...ports.credentials,
+        load: async () => ({ quark: 'saved-cookie' }),
+        probe: async () => ({ state: 'valid', checkedAt: 1_799_999_999_000 }),
+      },
+    };
+    render(<DriveBindModal siteName="演示线路" onClose={vi.fn()} onSaved={vi.fn()} ports={probePorts} />);
+    const probeButton = await screen.findByRole('button', { name: '检查已保存凭据' });
+    await act(async () => { fireEvent.click(probeButton); });
+    expect((await screen.findByRole('status')).textContent).toContain('服务端确认有效');
+    expect(screen.getByText(/实际播放仍取决于当前线路和资源权限/)).toBeTruthy();
   });
 });

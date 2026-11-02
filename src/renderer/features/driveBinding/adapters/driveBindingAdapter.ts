@@ -6,6 +6,7 @@ export const driveBindingAdapter: DriveBindingPorts = {
     load: () => client.driveGet(),
     save: (provider, cookie) => client.driveSet(provider, cookie),
     remove: provider => client.driveRemove(provider),
+    probe: provider => client.driveProbe(provider),
   },
   webLogin: {
     login: provider => client.driveWebLogin(provider),
