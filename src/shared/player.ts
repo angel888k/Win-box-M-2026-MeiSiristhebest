@@ -196,9 +196,11 @@ export interface MediaRuntimeStatus {
   warnings?: string[];
 }
 
-/** 启动一次 mpv 会话（每次换集/换源 = 新会话；主进程先停旧进程） */
+/** 启动 MPV 播放项；换集可在同一进程中替换文件，失败时由主进程回退完整重启。 */
 export interface MpvStartOptions {
   url: string;
+  /** Reuse the running embedded MPV process for a new media URL when possible. */
+  reuseSession?: boolean;
   live?: boolean;
   /** Keep a paused video paused when switching kernels. */
   paused?: boolean;
@@ -208,6 +210,8 @@ export interface MpvStartOptions {
   volume?: number;
   /** 初始倍速（缺省 1） */
   rate?: number;
+  /** 初始音频直通（缺省沿用 MPV 配置） */
+  spdif?: string;
   /** 初始画面比例（PlayerFit；缺省 contain） */
   fit?: string;
   /**

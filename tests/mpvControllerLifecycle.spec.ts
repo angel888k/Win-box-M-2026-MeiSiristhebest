@@ -80,6 +80,61 @@ describe('mpv lifecycle', () => {
     expect(win.listenerCount('resize')).toBe(0);
   });
 
+  it('loads the next item into the same process with an acknowledged per-file resume point', async () => {
+    const { controller, sockets } = make();
+    const proc = new Proc(); vi.mocked(spawn).mockReturnValue(proc as any);
+    const win = windowStub();
+    const first = await controller.start(win as any, { url: 'episode-1.mp4' });
+    const socket = sockets[0];
+    socket.write.mockImplementation((chunk: any) => {
+      for (const line of String(chunk).split(/\r?\n/).filter(Boolean)) {
+        let message: { request_id?: number };
+        try { message = JSON.parse(line); } catch { continue; }
+        if (Number.isSafeInteger(message.request_id)) {
+          queueMicrotask(() => socket.emit('data', Buffer.from(JSON.stringify({ request_id: message.request_id, error: 'success' }) + '\n')));
+        }
+      }
+      return true;
+    });
+
+    const next = await controller.start(win as any, {
+      url: 'episode-2.mp4', reuseSession: true, startTime: 75, paused: false, rate: 1.25, volume: 0.6, fit: 'contain',
+    });
+    expect(spawn).toHaveBeenCalledOnce();
+    expect(next.session).not.toBe(first.session);
+    const lines = socket.write.mock.calls.flat().map(String).join('');
+    expect(lines).toContain('episode-2.mp4');
+    expect(lines).toContain('"start":"75"');
+    expect(lines).toContain('"pause","yes"');
+    expect(lines).toContain('"pause","no"');
+    socket.emit('data', Buffer.from('{"event":"property-change","name":"time-pos","data":3}\n'));
+    expect((controller as any).state.time).toBeNull();
+    socket.emit('data', Buffer.from('{"event":"start-file"}\n{"event":"property-change","name":"time-pos","data":75}\n'));
+    expect((controller as any).state.time).toBe(75);
+
+    proc.finish(); controller.stop();
+  });
+
+  it('does not restart a superseded URL after a newer start cancels MPV reuse', async () => {
+    const { controller, sockets } = make();
+    const oldProc = new Proc(), latestProc = new Proc();
+    vi.mocked(spawn).mockReturnValueOnce(oldProc as any).mockReturnValueOnce(latestProc as any);
+    const win = windowStub();
+    await controller.start(win as any, { url: 'episode-1.mp4' });
+
+    const stale = controller.start(win as any, { url: 'episode-stale.mp4', reuseSession: true });
+    await tick();
+    const latest = controller.start(win as any, { url: 'episode-latest.mp4' });
+    oldProc.finish();
+    await Promise.all([stale, latest]);
+
+    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(sockets).toHaveLength(2);
+    expect(sockets[1].write.mock.calls.flat().map(String).join('')).toContain('episode-latest.mp4');
+    expect(sockets[1].write.mock.calls.flat().map(String).join('')).not.toContain('episode-stale.mp4');
+    latestProc.finish(); controller.stop();
+  });
+
   it('keeps ordinary property updates throttled after file-loaded', async () => {
     const { controller, sockets } = make();
     const proc = new Proc(); vi.mocked(spawn).mockReturnValue(proc as any);

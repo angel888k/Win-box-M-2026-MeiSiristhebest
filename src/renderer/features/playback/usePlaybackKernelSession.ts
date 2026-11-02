@@ -83,6 +83,7 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
   const latestOptions = useRef(options);
   useLayoutEffect(() => { latestOptions.current = options; }, [options]);
   const sessionRef = useRef(0);
+  const mpvProcessMayBeRunningRef = useRef(false);
   const pushRef = useRef<((state: MpvStateEvent) => void) | null>(null);
 
   useEffect(() => {
@@ -120,6 +121,7 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
     let eofFired = false;
     let pendingEvents: MpvStateEvent[] = [];
     let playbackConfirmed = false;
+    const reuseMpvProcess = !engine && mpvProcessMayBeRunningRef.current;
 
     const maybeSkip = (time: number, duration: number) => {
       const decision = decideMpvSegmentSkip({
@@ -184,7 +186,11 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
       if (plan.advanceAfterEnd) handlePlaybackEnd();
     };
 
-    const common: MpvStartOptions = { url, live: liveHint, startTime: startAt, volume: volumeRef.current, rate, fit, paused: pendingHandoff?.paused ?? false };
+    const common: MpvStartOptions = { url, live: liveHint, startTime: startAt, volume: volumeRef.current, rate, fit, spdif: normalizeSpdif(latestOptions.current.spdif), paused: pendingHandoff?.paused ?? false };
+    if (!engine) {
+      common.reuseSession = reuseMpvProcess;
+      mpvProcessMayBeRunningRef.current = true;
+    }
     const started = engine
       ? port.engineStart({ ...common, engineId: kernel })
       : port.mpvStart(common).then(result => ({ ok: true, session: result.session, reason: undefined }));
@@ -201,6 +207,7 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
       if (spdif) void command({ type: 'audio-spdif', value: spdif }).catch(() => undefined);
     }).catch(error => {
       if (!alive) return;
+      if (!engine) mpvProcessMayBeRunningRef.current = false;
       sessionRef.current = -1;
       pendingEvents = [];
       const reason = error instanceof Error ? error.message : String(error);
@@ -215,8 +222,16 @@ export function usePlaybackKernelSession(options: PlaybackKernelSessionOptions):
       pendingEvents = [];
       pushRef.current = null;
       sessionRef.current = -1;
-      if (engine) void port.engineStop().catch(() => undefined);
-      else void port.mpvStop().catch(() => undefined);
+      if (engine) {
+        void port.engineStop().catch(() => undefined);
+      } else {
+        const nextOptions = latestOptions.current;
+        const switchingUrlInSameMpv = nextOptions.allowMpv && nextOptions.kernel === 'mpv' && nextOptions.url !== url;
+        if (!switchingUrlInSameMpv) {
+          mpvProcessMayBeRunningRef.current = false;
+          void port.mpvStop().catch(() => undefined);
+        }
+      }
     };
     // Keep the existing session boundary: settings and callback changes do not restart a playing MPV process.
     // eslint-disable-next-line react-hooks/exhaustive-deps

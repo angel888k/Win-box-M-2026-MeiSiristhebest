@@ -52,6 +52,7 @@ function Harness({
   onEngineFailure,
   initialHandoff = null,
   progressKey = 'profile-a-source-a',
+  url = 'https://media.example/video.mp4',
 }: {
   client: PlaybackKernelSessionPort;
   startTime?: number;
@@ -61,6 +62,7 @@ function Harness({
   onEngineFailure?: (kernel: Kernel, reason: string) => void;
   initialHandoff?: PlaybackHandoff | null;
   progressKey?: string;
+  url?: string;
 }) {
   const stateRef = useRef(state());
   const timeRef = useRef(0);
@@ -93,7 +95,7 @@ function Harness({
     kernel,
     spdif,
     onEngineFailure,
-    url: 'https://media.example/video.mp4',
+    url,
     progressKey,
     playbackSource: { profileId: 'profile-a', key: 'source-a' } satisfies PlaybackSourceRef,
     positionMemory,
@@ -150,6 +152,27 @@ afterEach(() => {
 });
 
 describe('usePlaybackKernelSession', () => {
+  it('reuses the MPV process when only the media URL changes and still stops it on unmount', async () => {
+    const { client } = makeClient();
+    vi.mocked(client.mpvStart)
+      .mockResolvedValueOnce({ session: 7 })
+      .mockResolvedValueOnce({ session: 8 });
+    const view = render(<Harness client={client} url="https://media.example/episode-1.mp4" />);
+    await waitFor(() => expect(client.mpvStart).toHaveBeenCalledOnce());
+
+    view.rerender(<Harness client={client} url="https://media.example/episode-2.mp4" />);
+
+    await waitFor(() => expect(client.mpvStart).toHaveBeenCalledTimes(2));
+    expect(client.mpvStart).toHaveBeenLastCalledWith(expect.objectContaining({
+      url: 'https://media.example/episode-2.mp4',
+      reuseSession: true,
+    }));
+    expect(client.mpvStop).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(client.mpvStop).toHaveBeenCalledOnce();
+  });
+
   it.each<Partial<PlaybackHandoff>>([
     { url: 'https://media.example/old.mp4' }, { progressKey: 'another-profile-source' }, { kernel: 'html5' },
   ])('ignores position and pause state from a different playback handoff: %j', async (overrides) => {

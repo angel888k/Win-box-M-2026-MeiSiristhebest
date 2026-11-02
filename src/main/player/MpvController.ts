@@ -5,7 +5,7 @@
 //   下发属性观察 + `loadfile`；状态由 mpv 事件驱动（节流 200ms 推给渲染层）；`mpvStop`/换集/
 //   关窗口/退出应用都会 quit + 兜底 kill，绝不留下孤儿进程。
 //
-// 单会话是刻意的：同一时刻只有「独立播放器窗口」的一个 mpv（换集 = stop + start 新进程）。
+// 单会话是刻意的：同一时刻只有「独立播放器窗口」的一个 mpv；同窗换集优先复用进程，失败则完整重启。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { connect, type Socket } from 'node:net';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import type { Logger } from '../../shared/types';
-import type { MpvCommand, MpvKernelState, MpvShaderRenderStatus, MpvStartOptions, MpvStatus } from '../../shared/player';
+import { normalizeSpdif, type MpvCommand, type MpvKernelState, type MpvShaderRenderStatus, type MpvStartOptions, type MpvStatus } from '../../shared/player';
 import { IPC } from '../../shared/ipc-channels';
 import { cacheDir, resourcesDir } from '../util/paths';
 import { playerSettings } from './playerSettings';
@@ -70,6 +70,8 @@ export class MpvController {
     resolve(reply: MpvIpcReply | null): void;
   }>();
   private shaderCommandChain: Promise<void> = Promise.resolve();
+  private reloading = false;
+  private startRequest = 0;
   /**
    * `start()` can be called twice before the first process has finished
    * connecting (React effect cleanup/start does exactly that when the kernel
@@ -112,9 +114,26 @@ export class MpvController {
    * 注意：本方法返回时 mpv 已 `loadfile` 目标地址；状态经 MPV_STATE 事件持续推送。
    */
   async start(win: BrowserWindow, opts: MpvStartOptions): Promise<{ session: number; path: string }> {
-    this.stop();
+    const reuseSession = opts?.reuseSession === true;
+    if (!reuseSession) this.stop();
+    const request = ++this.startRequest;
     const reservation = this.session;
-    const run = this.startChain.then(() => this.startInternal(win, opts, reservation));
+    const run = this.startChain.then(async () => {
+      if (request !== this.startRequest) return { session: this.session, path: this.status().path };
+      if (reuseSession && this.proc && this.sock && this.target === win && !win.isDestroyed()) {
+        try {
+          return await this.reloadInternal(opts);
+        } catch (error) {
+          if (request !== this.startRequest) return { session: this.session, path: this.status().path };
+          this.log.w(`mpv: 同进程切换失败，回退完整重启：${error instanceof Error ? error.message : String(error)}`);
+          this.stopSession();
+          return this.startInternal(win, opts, this.session);
+        }
+      }
+      if (reservation !== this.session && !reuseSession) return { session: reservation, path: this.status().path };
+      if (reuseSession) this.stopSession();
+      return this.startInternal(win, opts, reuseSession ? this.session : reservation);
+    });
     // Keep the queue usable after a failed start, while returning the actual
     // result/error to the caller that requested this start.
     this.startChain = run.then(() => undefined, () => undefined);
@@ -138,6 +157,7 @@ export class MpvController {
     const session = this.session;
     this.target = win;
     this.state = initialKernelState(!!opts.live);
+    this.reloading = false;
     this.subOn = false;
     this.lineBuf = '';
 
@@ -201,7 +221,10 @@ export class MpvController {
       win.removeListener('leave-full-screen', updateViewport);
     };
     updateViewport();
-    sock.on('data', (d: Buffer) => this.onSockData(d, session));
+    sock.on('data', (d: Buffer) => {
+      if (sock !== this.sock || proc !== this.proc) return;
+      this.onSockData(d, this.session);
+    });
     sock.on('error', () => undefined);
     sock.on('close', () => {
       if (this.sock === sock) this.sock = null;
@@ -216,8 +239,54 @@ export class MpvController {
       this.log.w('mpv: 初始着色器列表未获命令回执；继续播放，但超分尚未确认');
     }
     if (session !== this.session || proc !== this.proc) return { session, path: st.path };
+    const spdif = normalizeSpdif(opts.spdif);
+    if (spdif) sock.write(mpvCmdLine(['set_property', 'audio-spdif', spdif]));
     sock.write(mpvCmdLine(['loadfile', url, 'replace']));
     return { session, path: st.path };
+  }
+
+  /** Load another item into the same MPV process, with a new renderer session token. */
+  private async reloadInternal(opts: MpvStartOptions): Promise<{ session: number; path: string }> {
+    const sock = this.sock;
+    const win = this.target;
+    const proc = this.proc;
+    const url = String(opts?.url || '').trim();
+    if (!sock || !win || win.isDestroyed() || !proc || proc.exitCode !== null || proc.signalCode !== null || !url) {
+      throw new Error('当前 MPV 会话不可复用');
+    }
+
+    this.session += 1;
+    const session = this.session;
+    this.clearCommandAcks();
+    if (this.pushTimer) clearTimeout(this.pushTimer);
+    this.pushTimer = null;
+    this.state = initialKernelState(!!opts.live);
+    this.reloading = true;
+    this.subOn = false;
+    this.pushNow();
+
+    // Pause the old item while applying the next item's settings. loadfile's
+    // file-local start option seeks before playback begins.
+    sock.write(mpvCmdLine(['set_property', 'pause', 'yes']));
+    const volume = Math.max(0, Math.min(1, opts.volume ?? 1));
+    for (const line of mpvCommandLines({ type: 'volume', value: volume })) sock.write(line);
+    for (const line of mpvCommandLines({ type: 'rate', value: opts.rate ?? 1 })) sock.write(line);
+    for (const line of mpvCommandLines({ type: 'fit', value: opts.fit || 'contain' })) sock.write(line);
+    for (const line of mpvCommandLines({ type: 'audio-spdif', value: normalizeSpdif(opts.spdif) })) sock.write(line);
+
+    const shaders = (opts.shaders ?? []).map(path => String(path || '').trim()).filter(Boolean);
+    if (!(await this.replaceShaderChain(shaders, session))) throw new Error('MPV 未确认新媒体的着色器设置');
+    if (session !== this.session || sock !== this.sock || proc !== this.proc) throw new Error('MPV 会话已被替换');
+
+    const startTime = Number(opts.startTime);
+    const loadOptions = Number.isFinite(startTime) && startTime > 0 ? { start: String(startTime) } : undefined;
+    const command: unknown[] = ['loadfile', url, 'replace'];
+    if (loadOptions) command.push(-1, loadOptions);
+    const reply = await this.sendCommandAndWait(sock, session, command);
+    if (!reply?.accepted) throw new Error('MPV 未接受新媒体地址');
+    if (session !== this.session || sock !== this.sock || proc !== this.proc) throw new Error('MPV 会话已被替换');
+    sock.write(mpvCmdLine(['set_property', 'pause', opts.paused ? 'yes' : 'no']));
+    return { session, path: this.status().path };
   }
 
   /** 控制命令（成功只代表已写入管道） */
@@ -349,6 +418,11 @@ export class MpvController {
 
   /** 停止会话（quit → 宽限后强杀；幂等） */
   stop(): void {
+    this.startRequest += 1;
+    this.stopSession();
+  }
+
+  private stopSession(): void {
     this.unbindViewport?.();
     this.unbindViewport = null;
     const sock = this.sock;
@@ -356,6 +430,7 @@ export class MpvController {
     this.sock = null;
     this.proc = null;
     this.target = null;
+    this.reloading = false;
     this.session += 1; // 在途事件/连接立即作废
     this.clearCommandAcks();
     if (this.pushTimer) {
@@ -435,11 +510,15 @@ export class MpvController {
         continue;
       }
       if (this.settleCommandAck(msg, session)) continue;
-      const changed = reduceMpvMessage(this.state, msg);
-      if (!changed) continue;
       const event = msg && typeof msg === 'object' && 'event' in msg
         ? (msg as { event?: unknown }).event
         : undefined;
+      if (this.reloading) {
+        if (event !== 'start-file' && event !== 'file-loaded' && event !== 'end-file') continue;
+        this.reloading = false;
+      }
+      const changed = reduceMpvMessage(this.state, msg);
+      if (!changed) continue;
       // A state such as `loaded` remains true for the whole playback. Use the
       // transition event to keep ordinary time/track updates on the 200ms path.
       this.schedulePush(event === 'file-loaded' || event === 'end-file' || this.state.exited);
