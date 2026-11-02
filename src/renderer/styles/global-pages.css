@@ -224,6 +224,9 @@
 .dav-player-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 8px 0; color: var(--text-secondary); }
 .live-player-actions [role='status'],
 .dav-player-actions [role='status'] { color: var(--text-primary); }
+.live-latency-controls { display: inline-flex; align-items: center; gap: 4px; }
+.live-latency-controls .selection-button { min-height: 30px; padding: 4px 9px; font-size: 12px; }
+.live-latency-status { font-size: 12px; }
 /* ★ 2026-09-29 WebDAV 存储页：面包屑 / 目录行 / 播放器宿主（与直播页同「定比 + 视口上限」口径） */
 .dav-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px; font-size: 12.5px; }
 .dav-crumb-item { cursor: pointer; }

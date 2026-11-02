@@ -17,9 +17,13 @@ const hlsTestState = vi.hoisted(() => ({
   instances: [] as Array<{
     errorHandler?: (...args: unknown[]) => void;
     fragmentLoadedHandler?: (...args: unknown[]) => void;
+    levelLoadedHandler?: (...args: unknown[]) => void;
+    manifestParsedHandler?: (...args: unknown[]) => void;
     startLoads: number;
+    startPositions: number[];
     mediaRecoveries: number;
     destroyed: boolean;
+    config: Record<string, unknown>;
   }>,
 }));
 vi.mock('hls.js', () => {
@@ -37,21 +41,34 @@ vi.mock('hls.js', () => {
       { name: '国语', lang: 'chi', attrs: { CHANNELS: '2' } },
       { name: '日本語', lang: 'jpn', attrs: { CHANNELS: '6' } },
     ];
-    instanceState = { startLoads: 0, mediaRecoveries: 0, destroyed: false } as {
+    instanceState = { startLoads: 0, startPositions: [], mediaRecoveries: 0, destroyed: false, config: {} } as {
       errorHandler?: (...args: unknown[]) => void;
-    fragmentLoadedHandler?: (...args: unknown[]) => void;
+      fragmentLoadedHandler?: (...args: unknown[]) => void;
+      levelLoadedHandler?: (...args: unknown[]) => void;
+    manifestParsedHandler?: (...args: unknown[]) => void;
       startLoads: number;
+      startPositions: number[];
       mediaRecoveries: number;
       destroyed: boolean;
+      config: Record<string, unknown>;
     };
-    constructor() { hlsTestState.instances.push(this.instanceState); }
+    config: Record<string, unknown> = {};
+    constructor() {
+      this.instanceState.config = this.config;
+      hlsTestState.instances.push(this.instanceState);
+    }
     loadSource() {}
     attachMedia() {}
     on(event: string, handler: (...args: unknown[]) => void) {
       if (event === Events.ERROR) this.instanceState.errorHandler = handler;
       if (event === Events.FRAG_LOADED) this.instanceState.fragmentLoadedHandler = handler;
+      if (event === Events.LEVEL_LOADED) this.instanceState.levelLoadedHandler = handler;
+      if (event === Events.MANIFEST_PARSED) this.instanceState.manifestParsedHandler = handler;
     }
-    startLoad() { this.instanceState.startLoads++; }
+    startLoad(position?: number) {
+      this.instanceState.startLoads++;
+      if (typeof position === 'number') this.instanceState.startPositions.push(position);
+    }
     recoverMediaError() { this.instanceState.mediaRecoveries++; }
     destroy() { this.instanceState.destroyed = true; hlsTestState.destroyed++; }
   }
@@ -93,6 +110,8 @@ function Harness({
   runtime = playbackRuntime,
   adaptiveAudioTracksRef,
   url = playbackUrl,
+  liveHint = false,
+  liveLatencyMode = 'stable',
 }: {
   pausedHandoff?: boolean;
   onEnded?: () => void;
@@ -105,6 +124,8 @@ function Harness({
   runtime?: PlaybackRuntimePort;
   adaptiveAudioTracksRef?: MutableRefObject<AdaptiveAudioTrackController | null>;
   url?: string;
+  liveHint?: boolean;
+  liveLatencyMode?: 'stable' | 'low-latency';
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const prefsRef = useRef<PlayerPrefs>({ vol: 0.6, rate: 1.5, subOffset: 0, fit: 'contain', kernel: 'auto', spdif: '' });
@@ -161,7 +182,8 @@ function Harness({
     kernel,
     isImage: false,
     isAudio: false,
-    liveHint: false,
+    liveHint,
+    liveLatencyMode,
     playbackSource,
     positionMemory,
     runtime,
@@ -233,6 +255,65 @@ describe('useHtml5PlaybackSession', () => {
     unmount();
     expect(adaptiveAudioTracksRef.current).toBeNull();
     expect(hlsTestState.destroyed).toBe(1);
+  });
+
+  it('switches confirmed live HLS latency mode without rebuilding the playback session', async () => {
+    const common = { url: 'https://media.example/live.m3u8', runtime: desktopRuntime, liveHint: true } as const;
+    const { rerender } = render(<Harness {...common} liveLatencyMode="stable" />);
+    await waitFor(() => expect(hlsTestState.instances[0]?.levelLoadedHandler).toBeTypeOf('function'));
+    const instance = hlsTestState.instances[0]!;
+    act(() => instance.levelLoadedHandler?.('level-loaded', { details: { live: true, edge: 40, partTarget: 0.2 } }));
+    expect(instance.config).toMatchObject({ liveSyncDurationCount: 6, maxBufferLength: 30 });
+
+    rerender(<Harness {...common} liveLatencyMode="low-latency" />);
+
+    expect(hlsTestState.instances).toHaveLength(1);
+    expect(instance.destroyed).toBe(false);
+    expect(instance.config).toMatchObject({ liveSyncDurationCount: 2, maxBufferLength: 10 });
+  });
+
+  it('waits for the network instead of failing over, then resumes the same HLS source at the current position', async () => {
+    render(<Harness url="https://media.example/live.m3u8" runtime={desktopRuntime} />);
+    await waitFor(() => expect(hlsTestState.instances[0]?.errorHandler).toBeTypeOf('function'));
+    const instance = hlsTestState.instances[0]!;
+    const video = screen.getByTestId('video') as HTMLVideoElement;
+    const play = vi.spyOn(video, 'play');
+    act(() => instance.manifestParsedHandler?.());
+    await waitFor(() => expect(video.paused).toBe(false));
+    const initialRetryCount = instance.startLoads;
+    Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 57 });
+
+    act(() => window.dispatchEvent(new Event('offline')));
+    expect(screen.getByTestId('view').textContent).toContain('网络已断开');
+    act(() => emitFatalHlsError(0, 'networkError'));
+    expect(instance.startLoads).toBe(initialRetryCount);
+    expect(screen.getByTestId('view').textContent).toContain('网络已断开');
+
+    act(() => window.dispatchEvent(new Event('online')));
+    await waitFor(() => expect(instance.startLoads).toBe(initialRetryCount + 1));
+    expect(instance.startPositions).toEqual([57]);
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('view').textContent).toContain('"error":""');
+  });
+
+  it('does not resume HLS automatically when the viewer pauses while offline', async () => {
+    render(<Harness url="https://media.example/live.m3u8" runtime={desktopRuntime} />);
+    const video = screen.getByTestId('video') as HTMLVideoElement;
+    await waitFor(() => expect(hlsTestState.instances[0]?.manifestParsedHandler).toBeTypeOf('function'));
+    const instance = hlsTestState.instances[0]!;
+    const play = vi.spyOn(video, 'play');
+    act(() => instance.manifestParsedHandler?.());
+    await waitFor(() => expect(video.paused).toBe(false));
+    expect(play).toHaveBeenCalledTimes(1);
+
+    act(() => window.dispatchEvent(new Event('offline')));
+    act(() => video.pause());
+    act(() => video.dispatchEvent(new Event('pause')));
+    act(() => window.dispatchEvent(new Event('online')));
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(instance.startLoads).toBe(1);
+    expect(video.paused).toBe(true);
   });
 
   it('does not launch an external player when a selected kernel is already taking over', async () => {

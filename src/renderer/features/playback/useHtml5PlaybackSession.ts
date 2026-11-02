@@ -16,6 +16,13 @@ import { reportHtmlMediaEvent, type MediaDiagnosticsPort } from './application/m
 import type { PlaybackHandoffPort } from './application/playbackHandoff';
 import type { PlayerPlaybackPresentationUpdate } from './application/PlayerPlaybackPresentation';
 import type { AdaptiveAudioTrackController } from './application/playerAudioTracks';
+import {
+  liveHlsLatencyConfig,
+  measureLiveEdgeLatency,
+  shouldApplyLiveBufferConfig,
+  supportsLowLatencyHls,
+  type LiveLatencyMode,
+} from './application/livePlaybackPolicy';
 import { createHlsAudioTrackControllerAdapter } from './adapters/hlsAudioTrackControllerAdapter';
 import { classifyPlaybackFailure, type PlaybackFailureContext } from '../../../shared/playbackFailure';
 
@@ -33,6 +40,8 @@ export interface Html5PlaybackSessionOptions {
   isImage: boolean;
   isAudio: boolean;
   liveHint: boolean;
+  liveLatencyMode?: LiveLatencyMode;
+  onLivePlaybackTelemetry?: (telemetry: { isLive: boolean | null; latencySeconds: number | null; lowLatencySupported: boolean | null }) => void;
   playbackSource?: PlaybackSourceRef;
   positionMemory: PlaybackPositionMemoryPort;
   runtime: PlaybackRuntimePort;
@@ -62,6 +71,19 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
   const adaptiveAudioTracksRef = options.adaptiveAudioTracksRef ?? localAdaptiveAudioTracksRef;
   const audioTracksRef = useRef(options.onAudioTracks);
   useLayoutEffect(() => { audioTracksRef.current = options.onAudioTracks; }, [options.onAudioTracks]);
+  const liveTelemetryRef = useRef(options.onLivePlaybackTelemetry);
+  useLayoutEffect(() => { liveTelemetryRef.current = options.onLivePlaybackTelemetry; }, [options.onLivePlaybackTelemetry]);
+  const liveLatencyModeRef = useRef(options.liveLatencyMode || 'stable');
+  const livePlaylistStateRef = useRef<{ isLive: boolean; lowLatencySupported: boolean } | null>(null);
+  useLayoutEffect(() => {
+    liveLatencyModeRef.current = options.liveLatencyMode || 'stable';
+    const hls = hlsInstanceRef.current;
+    const playlist = livePlaylistStateRef.current;
+    if (!hls || !playlist?.isLive) return;
+    const mode = liveLatencyModeRef.current === 'low-latency' && playlist.lowLatencySupported
+      ? 'low-latency' : 'stable';
+    Object.assign(hls.config, liveHlsLatencyConfig(mode));
+  }, [options.liveLatencyMode]);
   const {
     videoRef,
     url,
@@ -121,6 +143,9 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
 
     const target = resolvePlayTarget(htmlUrl).toLowerCase().split('?')[0];
     let speedTimer: ReturnType<typeof setInterval> | null = null;
+    let hlsOffline = false;
+    let resumeAfterNetworkRecovery = false;
+    let hlsNetworkHandlers: { offline: () => void; online: () => void } | null = null;
     let cancelled = false;
     let terminalFailureReported = false;
     const recovery = createHtml5PlaybackRecovery();
@@ -356,6 +381,33 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
             fragLoadingRetryDelay: 600,
           });
           hlsInstanceRef.current = hls;
+          const onNetworkOffline = () => {
+            if (cancelled) return;
+            if (!hlsOffline) resumeAfterNetworkRecovery = !video.paused;
+            hlsOffline = true;
+            updatePlaybackStatus({
+              error: '网络已断开，当前播放会等待网络恢复后继续。',
+              loading: false,
+              buffering: resumeAfterNetworkRecovery,
+            });
+          };
+          const onNetworkOnline = () => {
+            if (cancelled || !hlsOffline) return;
+            hlsOffline = false;
+            updatePlaybackStatus({ error: '', loading: true, buffering: true });
+            try { hls.startLoad(Math.max(0, video.currentTime || 0)); } catch { /* HLS may already be loading after reconnection. */ }
+            if (resumeAfterNetworkRecovery) {
+              resumeAfterNetworkRecovery = false;
+              void video.play().catch(() => undefined);
+            }
+          };
+          hlsNetworkHandlers = { offline: onNetworkOffline, online: onNetworkOnline };
+          if (typeof window !== 'undefined') {
+            window.addEventListener('offline', onNetworkOffline);
+            window.addEventListener('online', onNetworkOnline);
+          }
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) onNetworkOffline();
+          livePlaylistStateRef.current = null;
           const audioTrackController = createHlsAudioTrackControllerAdapter(hls);
           adaptiveAudioTracksRef.current = audioTrackController;
           hls.loadSource(htmlUrl);
@@ -364,10 +416,31 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
           hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => audioTracksRef.current?.());
           hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => audioTracksRef.current?.());
           hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
-            const details = (data as unknown as { details?: { live?: boolean } }).details;
+            const details = (data as unknown as { details?: { live?: boolean; edge?: number; partTarget?: number } }).details;
             const live = !!details?.live;
             sessionState.setLivePlaybackKind(live);
             updatePlaybackStatus({ isLive: live });
+            if (!shouldApplyLiveBufferConfig({ liveHint, playlistIsLive: live })) {
+              livePlaylistStateRef.current = { isLive: false, lowLatencySupported: false };
+              liveTelemetryRef.current?.({ isLive: false, latencySeconds: null, lowLatencySupported: false });
+              return;
+            }
+            const lowLatencySupported = supportsLowLatencyHls({ isLive: live, partTarget: details?.partTarget });
+            livePlaylistStateRef.current = { isLive: true, lowLatencySupported };
+            const mode = liveLatencyModeRef.current;
+            // Do not touch playback tuning until the playlist proves it is live.
+            // LL-HLS tuning additionally requires an explicit PART-TARGET.
+            Object.assign(hls.config, liveHlsLatencyConfig(mode === 'low-latency' && lowLatencySupported ? mode : 'stable'));
+            liveTelemetryRef.current?.({
+              isLive: true,
+              latencySeconds: measureLiveEdgeLatency({
+                isLive: live,
+                engine: 'hls.js',
+                currentTime: video.currentTime,
+                liveEdge: details?.edge,
+              }),
+              lowLatencySupported,
+            });
           });
           hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
             const { loading, loaded } = data.frag.stats;
@@ -384,6 +457,10 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
               : data.type === Hls.ErrorTypes.MEDIA_ERROR
                 ? 'media'
                 : 'other';
+            if (errorType === 'network' && (hlsOffline || (typeof navigator !== 'undefined' && navigator.onLine === false))) {
+              onNetworkOffline();
+              return;
+            }
             const decision = recovery.onHlsFatal({ type: errorType, responseStatus });
             if (decision.kind === 'ignore') return;
             const failure = classifyPlaybackFailure({
@@ -508,6 +585,10 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
       }
       if (playbackRafId != null) cancelAnimationFrame(playbackRafId);
       if (speedTimer) clearInterval(speedTimer);
+      if (hlsNetworkHandlers && typeof window !== 'undefined') {
+        window.removeEventListener('offline', hlsNetworkHandlers.offline);
+        window.removeEventListener('online', hlsNetworkHandlers.online);
+      }
       video.removeEventListener('timeupdate', onTime);
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('durationchange', onDuration);
@@ -522,6 +603,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
       video.pause();
       const hlsInstance = hlsInstanceRef.current;
       hlsInstanceRef.current = null;
+      livePlaylistStateRef.current = null;
       if (hlsInstance) {
         if (adaptiveAudioTracksRef.current) adaptiveAudioTracksRef.current = null;
         hlsInstance.destroy();
@@ -536,5 +618,5 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
     };
     // Keep the existing session boundary: URL, kernel, prepared URL, and playback source changes restart the HTML5 session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, kernel, htmlUrl, progressKey, positionMemory, runtime]);
+  }, [url, kernel, htmlUrl, progressKey, positionMemory, runtime, liveHint]);
 }

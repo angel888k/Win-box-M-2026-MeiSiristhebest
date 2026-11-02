@@ -613,6 +613,8 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       isImage,
       isAudio,
       liveHint,
+      liveLatencyMode: props.liveLatencyMode,
+      onLivePlaybackTelemetry: props.onLivePlaybackTelemetry,
       playbackSource: props.playbackSource,
       positionMemory: dependencies.playbackPositionMemory,
       runtime: dependencies.playbackRuntime,

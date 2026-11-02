@@ -7,6 +7,7 @@ import { liveExportAdapter } from '../features/live/adapters/liveExportAdapter';
 import { useLiveExportPresenter } from '../features/live/useLiveExportPresenter';
 import { SelectionButton } from '../components/ui/SelectionButton';
 import { standalonePlayerHandoffAdapter } from '../features/playback/adapters/standalonePlayerHandoffAdapter';
+import { canSelectLowLatencyMode, effectiveLiveLatencyMode, type LiveLatencyMode } from '../features/playback/application/livePlaybackPolicy';
 
 export default function LivePage() {
   const {
@@ -17,6 +18,25 @@ export default function LivePage() {
   } = useLivePlayback(livePlaybackDependencies);
   const [showSchedule, setShowSchedule] = useState(false);
   const [handoffMessage, setHandoffMessage] = useState('');
+  const [liveLatencyMode, setLiveLatencyMode] = useState<LiveLatencyMode>('stable');
+  const [liveTelemetry, setLiveTelemetry] = useState<{
+    url: string;
+    isLive: boolean | null;
+    latencySeconds: number | null;
+    lowLatencySupported: boolean | null;
+  } | null>(null);
+  useEffect(() => {
+    setLiveLatencyMode('stable');
+    setLiveTelemetry(null);
+  }, [liveIdx, groupName, channelName, lineIdx, playUrl]);
+  const currentTelemetry = liveTelemetry?.url === playUrl ? liveTelemetry : null;
+  const lowLatencyAvailable = currentTelemetry !== null && canSelectLowLatencyMode(currentTelemetry);
+  const effectiveLatencyMode = effectiveLiveLatencyMode({
+    requestedMode: liveLatencyMode,
+    isCurrentStream: currentTelemetry !== null,
+    isLive: currentTelemetry?.isLive ?? null,
+    lowLatencySupported: currentTelemetry?.lowLatencySupported ?? null,
+  });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -166,6 +186,32 @@ export default function LivePage() {
               {playUrl && (
                 <div className="live-player-actions">
                   <span className="muted">在独立窗口使用兼容播放内核</span>
+                  {!isCatchupActive && lowLatencyAvailable && (
+                    <div className="live-latency-controls" role="group" aria-label="直播缓冲模式">
+                      <span className="muted">缓冲</span>
+                      <SelectionButton selected={liveLatencyMode === 'stable'} onClick={() => setLiveLatencyMode('stable')}>
+                        稳定
+                      </SelectionButton>
+                      {lowLatencyAvailable && (
+                        <SelectionButton selected={effectiveLatencyMode === 'low-latency'} onClick={() => setLiveLatencyMode('low-latency')}>
+                          低延迟
+                        </SelectionButton>
+                      )}
+                    </div>
+                  )}
+                  {!isCatchupActive && (
+                    <span className="muted live-latency-status" role="status" aria-live="polite">
+                      {liveTelemetry?.url === playUrl && liveTelemetry.isLive === false
+                        ? '当前清单不是直播，直播缓冲模式未启用；延迟未知'
+                        : liveTelemetry?.url === playUrl && liveTelemetry.isLive === true && liveTelemetry.latencySeconds !== null
+                          ? `距直播边缘 ${liveTelemetry.latencySeconds.toFixed(1)} 秒${liveTelemetry.lowLatencySupported ? ' · 支持低延迟' : ' · 未提供 LL-HLS，使用稳定缓冲'}`
+                          : liveTelemetry?.url === playUrl && liveTelemetry.isLive === true
+                            ? '当前为直播清单，边缘延迟暂不可测'
+                            : liveTelemetry?.url === playUrl && liveTelemetry.isLive === null
+                              ? '当前播放协议未提供可验证的直播边缘信息；延迟未知'
+                              : '延迟未知；低延迟仅对明确提供 LL-HLS 分片的直播开放'}
+                    </span>
+                  )}
                   <button type="button" className="linkbtn" onClick={() => void openInStandalonePlayer()}>
                     在独立播放器打开
                   </button>
@@ -181,6 +227,8 @@ export default function LivePage() {
                     url={playUrl}
                     playTitle={isCatchupActive ? `${channelName} - ${catchupTitle}` : channelName}
                     playbackKind={isCatchupActive ? 'live-catchup' : 'live'}
+                    liveLatencyMode={isCatchupActive ? undefined : effectiveLatencyMode}
+                    onLivePlaybackTelemetry={(telemetry) => setLiveTelemetry({ url: playUrl, ...telemetry })}
                     onPlaybackFailure={(_time, reason) => failoverToNextLine(reason)}
                   />
                 </div>
