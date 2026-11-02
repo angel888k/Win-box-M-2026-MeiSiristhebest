@@ -52,10 +52,14 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
     }, 5000);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (identity.current === model.identity) return;
     identity.current = model.identity;
+    // A pointer capture may continue delivering events after the media changes.
+    // End the old drag before the new identity can receive any further seeks.
+    seeking.current = false;
     pendingSeek.current = null;
+    setHover(null);
     clearUndo();
   }, [clearUndo, model.identity]);
 
@@ -159,6 +163,17 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
     clearUndo();
   }, [clearUndo, undo]);
 
+  const selectChapter = useCallback((time: number) => {
+    const state = latest.current;
+    if (!state.canSeek() || !Number.isFinite(time) || !Number.isFinite(state.duration) || state.duration <= 0) return;
+    const sampledTime = state.getCurrentTime();
+    const from = Number.isFinite(sampledTime) ? sampledTime : state.currentTime;
+    const target = Math.max(0, Math.min(state.duration, time));
+    if (!Number.isFinite(from) || Math.abs(target - from) < 0.5) return;
+    state.seekTo(target);
+    offerUndo(from, target, 0.5);
+  }, [offerUndo]);
+
   const onContextMenu = useCallback((position: PointerCoordinates, sample: ProgressPointerSample): boolean => {
     const handled = latest.current.onContextMenu(position, timeAtPointer(sample));
     if (handled) setHover(null);
@@ -171,6 +186,7 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
     hover,
     undo,
     onUndo,
+    selectChapter,
     onPointerDown,
     onPointerMove,
     onPointerUp,

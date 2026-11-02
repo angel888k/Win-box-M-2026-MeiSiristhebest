@@ -1,0 +1,70 @@
+:root[data-theme] .vp-chapter-navigation {
+  position: absolute;
+  z-index: 7;
+  top: -20px;
+  right: 0;
+  color: #f4f6fa;
+  font-size: 12px;
+}
+
+:root[data-theme] .vp-chapter-navigation > summary {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, .48);
+  border-radius: 6px;
+  color: #f4f6fa;
+  background: #171b22;
+  cursor: pointer;
+  list-style: none;
+}
+
+:root[data-theme] .vp-chapter-navigation > summary::-webkit-details-marker { display: none; }
+:root[data-theme] .vp-chapter-navigation > summary:focus-visible { outline: 2px solid #9bc3ff; outline-offset: 2px; }
+:root[data-theme] .vp-chapter-navigation > summary span { color: #c8d0dc; font-variant-numeric: tabular-nums; }
+
+:root[data-theme] .vp-chapter-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  display: grid;
+  width: min(280px, calc(100vw - 32px));
+  max-height: min(300px, 45vh);
+  gap: 2px;
+  overflow: auto;
+  margin: 0;
+  padding: 5px;
+  border: 1px solid #626d7c;
+  border-radius: 8px;
+  color: #f4f6fa;
+  background: #171b22;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .52);
+  list-style: none;
+}
+
+:root[data-theme] .vp-chapter-list button {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #f4f6fa;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-theme] .vp-chapter-list button:hover,
+:root[data-theme] .vp-chapter-list button:focus-visible {
+  border-color: #8098b7;
+  background: #293343;
+  outline: none;
+}
+
+:root[data-theme] .vp-chapter-list time { flex: none; color: #c8d0dc; font-variant-numeric: tabular-nums; }

@@ -7,6 +7,7 @@ type PlayerProgressBarProps = PlayerProgressBarModel;
 export function PlayerProgressBar({
   identity,
   markers,
+  chapters,
   currentTime,
   duration,
   buffered,
@@ -18,6 +19,7 @@ export function PlayerProgressBar({
 }: PlayerProgressBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
   const presenter = usePlayerProgressBarPresenter({ identity, markers, currentTime, duration, buffered, canSeek, getCurrentTime, seekTo, formatTime, onContextMenu });
+  const availableChapters = chapters ?? markers?.filter(marker => marker.kind === 'chapter') ?? [];
   const onWheelSeek = presenter.onWheel;
   const readBounds = (element: HTMLDivElement) => {
     const rect = element.getBoundingClientRect();
@@ -116,6 +118,30 @@ export function PlayerProgressBar({
         >
           撤销跳转 · {presenter.undo.label}
         </button>
+      )}
+      {availableChapters.length > 0 && (
+        <details className="vp-chapter-navigation">
+          <summary aria-label={`章节列表，共 ${availableChapters.length} 个章节`} title="按章节跳转">
+            章节 <span>{availableChapters.length}</span>
+          </summary>
+          <ol className="vp-chapter-list" aria-label="章节列表">
+            {availableChapters.map((chapter, index) => (
+              <li key={chapter.id}>
+                <button
+                  type="button"
+                  aria-label={`跳转到章节：${chapter.label || `章节 ${index + 1}`}，${formatTime(chapter.time)}`}
+                  onClick={event => {
+                    presenter.selectChapter(chapter.time);
+                    event.currentTarget.closest('details')?.removeAttribute('open');
+                  }}
+                >
+                  <span>{chapter.label || `章节 ${index + 1}`}</span>
+                  <time>{formatTime(chapter.time)}</time>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </details>
       )}
     </div>
   );

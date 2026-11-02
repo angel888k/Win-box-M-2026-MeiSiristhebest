@@ -49,6 +49,7 @@ export interface PlayerTechnicalBarModel {
 export interface PlayerProgressBarModel {
   identity: string;
   markers?: readonly ProgressMarker[];
+  chapters?: readonly ProgressMarker[];
   currentTime: number;
   duration: number;
   buffered: number;

@@ -87,6 +87,27 @@ describe('PlayerProgressBar', () => {
     expect(markers[3].getAttribute('aria-label')).toBe('片尾开始 · 45s');
   });
 
+  it('offers an accessible chapter list that seeks and closes after selection', () => {
+    const props = {
+      ...makeProps(),
+      chapters: [
+        { id: 'chapter-1', time: 20, kind: 'chapter' as const, label: '第二幕' },
+        { id: 'chapter-2', time: 45, kind: 'chapter' as const, label: '终章' },
+      ],
+    };
+    const { container, getByRole, getByTitle } = render(<PlayerProgressBar {...props} />);
+    const chapterMenu = container.querySelector('.vp-chapter-navigation') as HTMLDetailsElement;
+
+    expect(chapterMenu.tagName.toLowerCase()).toBe('details');
+    fireEvent.click(getByTitle('按章节跳转'));
+    expect(chapterMenu.open).toBe(true);
+    fireEvent.click(getByRole('button', { name: '跳转到章节：终章，45s' }));
+
+    expect(props.seekTo).toHaveBeenCalledWith(45);
+    expect(chapterMenu.open).toBe(false);
+    expect(getByRole('button', { name: '撤销跳转，回到 10s' })).not.toBeNull();
+  });
+
   it('exposes a keyboard-operable progress slider with bounded seek steps', () => {
     const props = makeProps();
     const { getByRole } = render(<PlayerProgressBar {...props} />);
@@ -145,6 +166,23 @@ describe('PlayerProgressBar', () => {
 
     const next = { ...makeProps(), identity: 'work-episode-2' };
     rerender(<PlayerProgressBar {...next} />);
+    expect(container.querySelector('.vp-seek-undo')).toBeNull();
+  });
+
+  it('cancels a captured pointer drag when the media identity changes', () => {
+    const first = makeProps();
+    const { container, rerender } = render(<PlayerProgressBar {...first} />);
+    const progress = container.querySelector('.vp-progress-track') as HTMLDivElement;
+    setProgressBounds(progress);
+    fireEvent.pointerDown(progress, { button: 0, clientX: 60, pointerId: 1 });
+
+    const next = { ...makeProps(), identity: 'work-episode-2', seekTo: vi.fn() };
+    rerender(<PlayerProgressBar {...next} />);
+    fireEvent.pointerMove(progress, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(progress, { pointerId: 1 });
+
+    expect(first.seekTo).toHaveBeenCalledOnce();
+    expect(next.seekTo).not.toHaveBeenCalled();
     expect(container.querySelector('.vp-seek-undo')).toBeNull();
   });
 

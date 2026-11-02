@@ -742,20 +742,22 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     kernel,
     episodeCount: props.episodes?.length ?? 0,
   });
+  const chapterMarkers = ((kernel === 'mpv' ? technical.chapters : htmlMediaChapters) ?? [])
+    .filter(chapter => chapter.startSeconds > 0 && chapter.startSeconds < dur)
+    .map(chapter => ({ id: 'chapter-' + chapter.id, time: chapter.startSeconds, kind: 'chapter' as const, label: chapter.title }));
   const playerControlsModel: PlayerControlsViewModel = {
     mini, isLive, currentTime: cur, duration: dur, formatPlaybackTime,
     transport: { paused, canPrev, canNext, onPrev: handlePrev, onNext: handleNext, onToggle: togglePlay },
     technicalBar: { active: kernel === 'mpv', error: mpvErr, mpvTech: technical.tech, fmtNet: formatNetworkSpeed },
     progressBar: controlAvailability.progressVisible ? {
       identity: `${progressKey}\u0000${url}`,
+      chapters: chapterMarkers,
       markers: [
         ...(skipSeg.intro > 0 ? [{ id: 'intro-end', time: skipSeg.intro, kind: 'intro-end' as const, label: '片头结束' }] : []),
         ...(skipSeg.outro > 0 ? [{ id: 'outro-start', time: dur - skipSeg.outro, kind: 'outro-start' as const, label: '片尾开始' }] : []),
         ...(segmentLoop.model.start != null ? [{ id: 'segment-start', time: segmentLoop.model.start, kind: 'segment-start' as const, label: '循环 A 点' }] : []),
         ...(segmentLoop.model.end != null ? [{ id: 'segment-end', time: segmentLoop.model.end, kind: 'segment-end' as const, label: '循环 B 点' }] : []),
-        ...((kernel === 'mpv' ? technical.chapters : htmlMediaChapters) ?? [])
-          .filter(chapter => chapter.startSeconds > 0 && chapter.startSeconds < dur)
-          .map(chapter => ({ id: 'chapter-' + chapter.id, time: chapter.startSeconds, kind: 'chapter' as const, label: chapter.title })),
+        ...chapterMarkers,
       ],
       currentTime: cur, duration: dur, buffered, canSeek: () => !!ref.current || kIsChild(), getCurrentTime: kTime, seekTo: kSeek, formatTime: formatPlaybackTime,
       onContextMenu: (position, time) => {
