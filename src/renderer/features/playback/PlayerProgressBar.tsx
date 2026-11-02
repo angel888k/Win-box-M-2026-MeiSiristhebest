@@ -6,6 +6,7 @@ type PlayerProgressBarProps = PlayerProgressBarModel;
 
 export function PlayerProgressBar({
   identity,
+  markers,
   currentTime,
   duration,
   buffered,
@@ -16,7 +17,7 @@ export function PlayerProgressBar({
   onContextMenu,
 }: PlayerProgressBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
-  const presenter = usePlayerProgressBarPresenter({ identity, currentTime, duration, buffered, canSeek, getCurrentTime, seekTo, formatTime, onContextMenu });
+  const presenter = usePlayerProgressBarPresenter({ identity, markers, currentTime, duration, buffered, canSeek, getCurrentTime, seekTo, formatTime, onContextMenu });
   const onWheelSeek = presenter.onWheel;
   const readBounds = (element: HTMLDivElement) => {
     const rect = element.getBoundingClientRect();
@@ -70,6 +71,16 @@ export function PlayerProgressBar({
     >
       <div className="vp-buffer" style={{ width: `${presenter.progress.buffered}%` }} />
       <div className="vp-played" style={{ width: `${presenter.progress.played}%` }} />
+      {presenter.markers.map(marker => (
+        <span
+          key={marker.id}
+          className={`vp-progress-marker vp-progress-marker--${marker.kind}`}
+          style={{ left: `${marker.percent}%` }}
+          role="img"
+          aria-label={`${marker.label} · ${formatTime(marker.time)}`}
+          title={`${marker.label} · ${formatTime(marker.time)}`}
+        />
+      ))}
       {presenter.hover && (
         <>
           <div className="vp-hline" style={{ left: presenter.hover.x }} />

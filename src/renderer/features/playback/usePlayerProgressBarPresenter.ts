@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   progressHoverOffset,
   progressTimeAtPointer,
+  projectProgressMarkers,
   projectProgressPercentages,
   type ProgressTrackBounds,
 } from './application/playerProgressGeometry';
@@ -143,6 +144,7 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
 
   return {
     progress: projectProgressPercentages(model.currentTime, model.buffered, model.duration),
+    markers: projectProgressMarkers(model.markers ?? [], model.duration),
     hover,
     undo,
     onUndo,

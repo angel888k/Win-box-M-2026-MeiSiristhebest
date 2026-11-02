@@ -11,6 +11,7 @@ import type { DanmakuSettingsCommand } from '../application/danmakuSettings';
 import type { SubtitleAppearanceCommand } from '../application/subtitleAppearance';
 import type { SkipSegmentsDraft, SkipSegmentsDraftCommand } from '../application/skipSegmentsDraft';
 import type { DlnaDevice } from '../../../../shared/dlna';
+import type { ProgressMarker } from '../application/playerProgressGeometry';
 
 /** Mutable DOM handle required by controls for positioning and focus. */
 export interface ElementHandle<T> {
@@ -47,6 +48,7 @@ export interface PlayerTechnicalBarModel {
 
 export interface PlayerProgressBarModel {
   identity: string;
+  markers?: readonly ProgressMarker[];
   currentTime: number;
   duration: number;
   buffered: number;

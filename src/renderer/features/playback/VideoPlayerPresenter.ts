@@ -746,6 +746,10 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     technicalBar: { active: kernel === 'mpv', error: mpvErr, mpvTech: technical.tech, fmtNet: formatNetworkSpeed },
     progressBar: controlAvailability.progressVisible ? {
       identity: `${progressKey}\u0000${url}`,
+      markers: [
+        ...(skipSeg.intro > 0 ? [{ id: 'intro-end', time: skipSeg.intro, kind: 'intro-end' as const, label: '片头结束' }] : []),
+        ...(skipSeg.outro > 0 ? [{ id: 'outro-start', time: dur - skipSeg.outro, kind: 'outro-start' as const, label: '片尾开始' }] : []),
+      ],
       currentTime: cur, duration: dur, buffered, canSeek: () => !!ref.current || kIsChild(), getCurrentTime: kTime, seekTo: kSeek, formatTime: formatPlaybackTime,
       onContextMenu: (position, time) => {
         if (!skipUsable || !dur || time == null) return false;

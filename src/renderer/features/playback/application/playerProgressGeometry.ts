@@ -8,6 +8,17 @@ export interface ProgressPercentages {
   buffered: number;
 }
 
+export interface ProgressMarker {
+  id: string;
+  time: number;
+  kind: 'intro-end' | 'outro-start';
+  label: string;
+}
+
+export interface PositionedProgressMarker extends ProgressMarker {
+  percent: number;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Converts a pointer coordinate measured by the DOM adapter into a bounded seek position. */
@@ -33,4 +44,15 @@ export function projectProgressPercentages(currentTime: number, buffered: number
   if (!Number.isFinite(duration) || duration <= 0) return { played: 0, buffered: 0 };
   const percentage = (time: number) => Number.isFinite(time) ? clamp((time / duration) * 100, 0, 100) : 0;
   return { played: percentage(currentTime), buffered: percentage(buffered) };
+}
+
+/** Projects valid markers onto the timeline and drops values outside the media duration. */
+export function projectProgressMarkers(
+  markers: readonly ProgressMarker[],
+  duration: number,
+): PositionedProgressMarker[] {
+  if (!Number.isFinite(duration) || duration <= 0) return [];
+  return markers
+    .filter(marker => Number.isFinite(marker.time) && marker.time > 0 && marker.time < duration)
+    .map(marker => ({ ...marker, percent: clamp((marker.time / duration) * 100, 0, 100) }));
 }

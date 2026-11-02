@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   progressHoverOffset,
   progressTimeAtPointer,
+  projectProgressMarkers,
   projectProgressPercentages,
 } from '../src/renderer/features/playback/application/playerProgressGeometry';
 
@@ -27,5 +28,20 @@ describe('player progress geometry policy', () => {
     expect(projectProgressPercentages(30, 75, 60)).toEqual({ played: 50, buffered: 100 });
     expect(projectProgressPercentages(Number.NaN, -1, 60)).toEqual({ played: 0, buffered: 0 });
     expect(projectProgressPercentages(15, 25, Number.POSITIVE_INFINITY)).toEqual({ played: 0, buffered: 0 });
+  });
+
+  it('projects intro and outro markers and drops invalid or out-of-range points', () => {
+    const markers = [
+      { id: 'intro', time: 30, kind: 'intro-end' as const, label: '片头结束' },
+      { id: 'outro', time: 90, kind: 'outro-start' as const, label: '片尾开始' },
+      { id: 'negative', time: -1, kind: 'intro-end' as const, label: '无效' },
+      { id: 'past-end', time: 100, kind: 'outro-start' as const, label: '越界' },
+      { id: 'nan', time: Number.NaN, kind: 'intro-end' as const, label: '无效' },
+    ];
+    expect(projectProgressMarkers(markers, 100).map(({ id, percent }) => ({ id, percent }))).toEqual([
+      { id: 'intro', percent: 30 },
+      { id: 'outro', percent: 90 },
+    ]);
+    expect(projectProgressMarkers(markers, 0)).toEqual([]);
   });
 });

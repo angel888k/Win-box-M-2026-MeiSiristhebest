@@ -65,6 +65,23 @@ describe('PlayerProgressBar', () => {
     expect(container.querySelector('.vp-buffer')?.getAttribute('style')).toContain('width: 100%');
   });
 
+  it('renders the configured intro and outro points at their timeline positions', () => {
+    const props = {
+      ...makeProps(),
+      markers: [
+        { id: 'intro-end', time: 15, kind: 'intro-end' as const, label: '片头结束' },
+        { id: 'outro-start', time: 45, kind: 'outro-start' as const, label: '片尾开始' },
+      ],
+    };
+    const { container } = render(<PlayerProgressBar {...props} />);
+    const markers = container.querySelectorAll('.vp-progress-marker');
+
+    expect(markers).toHaveLength(2);
+    expect(markers[0].getAttribute('style')).toContain('left: 25%');
+    expect(markers[1].getAttribute('style')).toContain('left: 75%');
+    expect(markers[0].getAttribute('aria-label')).toBe('片头结束 · 15s');
+  });
+
   it('uses the non-passive wheel handler for one-second seeks and reports context-menu time', () => {
     const props = makeProps();
     const { container } = render(<PlayerProgressBar {...props} />);
