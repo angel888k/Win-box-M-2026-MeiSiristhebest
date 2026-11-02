@@ -149,8 +149,8 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
           onClick={onSurfaceClick}
           onMouseDown={onBoostMouseDown}
         />
+        {statusOverlay}
       </div>
-      {statusOverlay}
       {/* 弹幕叠加层（canvas，全屏区域，不拦截鼠标；fit 决定绘制区是否避让宽银幕黑边）
           ★ 2026-10-08 MPV 内核：时间/画面尺寸由主进程事件驱动（mpv 子窗口在 Chromium 之下，覆盖层仍在其上） */}
       <DanmakuOverlay
