@@ -48,6 +48,8 @@ describe('clearAppCache', () => {
     writeFileSync(join(ud, 'Local Storage', 'leveldb', 'data'), 'history-bytes');
     mkdirSync(join(ud, 'Session Storage'), { recursive: true });
     writeFileSync(join(ud, 'Session Storage', 'sess'), 'x');
+    mkdirSync(join(ud, 'WebStorage'), { recursive: true });
+    writeFileSync(join(ud, 'WebStorage', 'database.db'), 'site-storage-bytes');
     mkdirSync(join(ud, 'tvfan'), { recursive: true });
     writeFileSync(join(ud, 'tvfan', 'Cloud-drive.txt'), 'cookie');
     // 缓存也要有（证明两者并存、只删缓存）
@@ -63,7 +65,9 @@ describe('clearAppCache', () => {
     expect(existsSync(join(ud, 'Local State'))).toBe(true);
     expect(existsSync(join(ud, 'Local Storage', 'leveldb', 'data'))).toBe(true);
     expect(existsSync(join(ud, 'Session Storage', 'sess'))).toBe(true);
+    expect(existsSync(join(ud, 'WebStorage', 'database.db'))).toBe(true);
     expect(existsSync(join(ud, 'tvfan', 'Cloud-drive.txt'))).toBe(true);
+    expect(r.cleared).not.toContain('WebStorage');
     // 缓存被清空
     expect(readdirSync(join(ud, 'Cache'))).toEqual([]);
   });

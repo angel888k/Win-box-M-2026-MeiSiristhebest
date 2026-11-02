@@ -4,7 +4,7 @@
 //   - 删：Chromium 各缓存目录（Cache/Code Cache/GPUCache/…）、播放器 blob 临时存储、
 //          jar 转换缓存（cache/spider）—— 全部可在下次使用时自动重建。
 //   - 不删：user-config.json、drive-tokens.json、subtitle.json、tvfan/（Cloud-drive 配置）、
-//           Preferences、Local State、Local Storage（★ 主窗口历史记录 uiMem 存于此）、
+//           Preferences、Local State、Local Storage / WebStorage（可能含站点数据）、
 //           Session Storage、Network（含 Chromium 持久登录态）。
 import { existsSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,7 +26,6 @@ export const SAFE_USERDATA_SUBDIRS = [
   'Dictionaries',
   'blob_storage',     // 播放器 blob: URL 临时存储
   'VideoDecodeStats',
-  'WebStorage',
 ] as const;
 
 export interface ClearCacheResult {

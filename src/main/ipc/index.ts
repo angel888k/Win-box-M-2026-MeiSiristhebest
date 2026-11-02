@@ -15,6 +15,7 @@ import {
   type WebHomeOpenInit,
 } from '../webbridge/WebHomeWindow';
 import { clearAppCache } from '../util/cacheClean';
+import { inspectDataDirStorage } from '../util/storageUsage';
 import { nameFromLocalFile } from '../util/importNaming';
 import { join, basename } from 'node:path';
 import { IPC } from '../../shared/ipc-channels';
@@ -174,13 +175,17 @@ export function registerIpc(
     return 'data:image/png;base64,' + readFileSync(p).toString('base64');
   }, log);
   // ★ 2026-09-30（用户要求）：数据目录信息（安装目录/data；老用户迁移结果 / 回退原因）——配置页展示 + 排障
-  registerHandler(IPC.SYSTEM_DATA_DIR, () => ({
-    path: userDataDir(),
-    mode: dataDirReport.mode,
-    planned: dataDirReport.planned,
-    reason: dataDirReport.reason,
-    migration: dataDirReport.migration,
-  }), log);
+  registerHandler(IPC.SYSTEM_DATA_DIR, async () => {
+    const path = userDataDir();
+    return {
+      path,
+      mode: dataDirReport.mode,
+      planned: dataDirReport.planned,
+      reason: dataDirReport.reason,
+      migration: dataDirReport.migration,
+      storageUsage: await inspectDataDirStorage(path),
+    };
+  }, log);
 
   registerSourceConfigurationIpc(services.sourceConfiguration, services.sourceReads, log, services.configRuntimeSync);
   registerSubscriptionImportIpc(services.subscriptionImports, services.subscriptionGroups, log);

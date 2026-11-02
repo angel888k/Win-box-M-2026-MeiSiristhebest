@@ -605,6 +605,8 @@ export interface DataDirInfo {
   mode: 'dev' | 'activated' | 'fallback';
   planned: string;
   reason?: string;
+  /** Read-only, bounded size estimate. Categories partition totalBytes and never expose filenames. */
+  storageUsage?: DataDirStorageUsage;
   migration?: {
     status: 'no-legacy' | 'moved' | 'copied' | 'already' | 'failed';
     files: number;
@@ -613,6 +615,17 @@ export interface DataDirInfo {
     cleanedLegacy: boolean;
     error?: string;
   };
+}
+
+export interface DataDirStorageUsage {
+  totalBytes: number;
+  retainedDataBytes: number;
+  browserCacheBytes: number;
+  spiderCacheBytes: number;
+  otherAppCacheBytes: number;
+  mediaRuntimeBytes: number;
+  complete: boolean;
+  entriesScanned: number;
 }
 
 /** 单源实时诊断报告（vod:debug） */
