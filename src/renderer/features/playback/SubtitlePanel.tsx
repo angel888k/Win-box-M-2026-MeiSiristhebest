@@ -11,6 +11,7 @@ export function SubtitlePanel({
   fontSize,
   bottom,
   offset,
+  syncCapability,
   query,
   searching,
   tokenHint,
@@ -79,12 +80,15 @@ export function SubtitlePanel({
               <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-bottom', delta: 8 })}>下移</button>
             </div>
             <div className="vsp-row">
-              <span className="muted vsp-label">时间</span>
-              <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.5 })}>−0.5s</button>
+              <span className="muted vsp-label">同步</span>
+              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.5 })}>−0.5s</button>
+              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.1 })}>−0.1s</button>
               <span className="muted" style={{ fontSize: 12 }}>{offset >= 0 ? '+' : ''}{offset}s</span>
-              <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.5 })}>+0.5s</button>
-              <button className="vsp-btn" title="重置" onClick={() => onAppearanceCommand({ type: 'reset-offset' })}>重置</button>
+              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.1 })}>+0.1s</button>
+              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.5 })}>+0.5s</button>
+              <button className="vsp-btn" title="重置同步" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'reset-offset' })}>重置</button>
             </div>
+            <div className="vsp-hint" role="status">{syncCapability.explanation}</div>
             <div className="vsp-row" style={{ marginBottom: 6 }}>
               <input
                 className="vsp-input"

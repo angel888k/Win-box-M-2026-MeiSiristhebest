@@ -9,7 +9,8 @@ export type SubtitleAppearanceCommand =
   | { type: 'step-font-size'; delta: -2 | 2 }
   | { type: 'set-bottom'; value: number }
   | { type: 'step-bottom'; delta: -8 | 8 }
-  | { type: 'step-offset'; delta: -0.5 | 0.5 }
+  | { type: 'step-offset'; delta: -0.5 | -0.1 | 0.1 | 0.5 }
+  | { type: 'set-offset'; value: number }
   | { type: 'reset-offset' };
 
 export type SubtitleAppearanceAction = SubtitleAppearanceCommand | {
@@ -43,7 +44,9 @@ export function reduceSubtitleAppearance(
     case 'step-bottom':
       return { ...current, bottom: clamp(current.bottom + action.delta, 10, 420, current.bottom) };
     case 'step-offset':
-      return { ...current, offset: current.offset + action.delta };
+      return { ...current, offset: clamp(current.offset + action.delta, -60, 60, current.offset) };
+    case 'set-offset':
+      return { ...current, offset: clamp(action.value, -60, 60, current.offset) };
     case 'reset-offset':
       return current.offset === 0 ? current : { ...current, offset: 0 };
   }

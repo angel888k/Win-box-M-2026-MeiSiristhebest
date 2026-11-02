@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SubtitlePanel } from '../src/renderer/features/playback/SubtitlePanel';
 import { reduceSubtitleAppearance } from '../src/renderer/features/playback/application/subtitleAppearance';
 import type { SubtitleAppearanceCommand } from '../src/renderer/features/playback/application/subtitleAppearance';
+import type { SubtitleSyncCapability } from '../src/renderer/features/playback/application/subtitleSyncCapability';
 import type { SubtitleCandidate } from '../src/shared/subtitle';
 
 afterEach(() => cleanup());
@@ -18,9 +19,10 @@ const candidate: SubtitleCandidate = {
   hitKeyword: '测试作品',
 };
 
-function Harness({ onSearch = vi.fn(), onSelectCandidate = vi.fn() }: {
+function Harness({ onSearch = vi.fn(), onSelectCandidate = vi.fn(), syncCapability = { state: 'available', explanation: '精细同步适用于当前已加载的外挂字幕。' } }: {
   onSearch?: () => void;
   onSelectCandidate?: (value: SubtitleCandidate) => void;
+  syncCapability?: SubtitleSyncCapability;
 }) {
   const [enabled, setEnabled] = useState(true);
   const [appearance, dispatchAppearance] = useReducer(reduceSubtitleAppearance, { fontSize: 20, bottom: 40, offset: 0 });
@@ -38,6 +40,7 @@ function Harness({ onSearch = vi.fn(), onSelectCandidate = vi.fn() }: {
         fontSize={fontSize}
         bottom={bottom}
         offset={offset}
+        syncCapability={syncCapability}
         query={query}
         searching={false}
         tokenHint={false}
@@ -90,5 +93,17 @@ describe('SubtitlePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '+0.5s' }));
 
     expect(readSettings()).toMatchObject({ fontSize: 18, bottom: 32, offset: 0.5 });
+  });
+
+  it('offers fine subtitle sync steps and disables sync clearly until an external subtitle is loaded', () => {
+    const { rerender } = render(<Harness syncCapability={{ state: 'needs-external-subtitle', explanation: '加载外挂字幕后可调整同步；内置字幕轨暂不支持此控件。' }} />);
+    expect(screen.getByText(/加载外挂字幕后可调整同步/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: '+0.1s' }) as HTMLButtonElement).disabled).toBe(true);
+
+    rerender(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: '+0.1s' }));
+    expect(readSettings().offset).toBeCloseTo(0.1);
+    fireEvent.click(screen.getByRole('button', { name: '−0.1s' }));
+    expect(readSettings().offset).toBe(0);
   });
 });

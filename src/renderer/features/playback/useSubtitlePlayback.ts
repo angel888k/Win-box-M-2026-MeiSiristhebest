@@ -7,6 +7,7 @@ import type { SubtitlePlaybackPort } from './application/subtitlePlaybackPort';
 import { useHtmlSubtitleTrack } from './useHtmlSubtitleTrack';
 import { useNativeSubtitleTrack } from './useNativeSubtitleTrack';
 import type { SubtitleCue } from '../../../engine/subtitle/parseSubtitle';
+import { subtitleSyncCapability } from './application/subtitleSyncCapability';
 
 interface UseSubtitlePlaybackOptions {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -42,6 +43,11 @@ export function useSubtitlePlayback({
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const settingsChangedRef = useRef(false);
+  const syncAvailableRef = useRef(false);
+
+  useEffect(() => {
+    dispatchAppearance({ type: 'set-offset', value: initialOffset });
+  }, [initialOffset]);
 
   const markSettingsChanged = useCallback(() => {
     settingsChangedRef.current = true;
@@ -49,6 +55,8 @@ export function useSubtitlePlayback({
   }, []);
 
   const onAppearanceCommand = useCallback((command: SubtitleAppearanceCommand) => {
+    if ((command.type === 'step-offset' || command.type === 'set-offset' || command.type === 'reset-offset')
+        && !syncAvailableRef.current) return;
     if (command.type === 'set-font-size' || command.type === 'step-font-size' ||
         command.type === 'set-bottom' || command.type === 'step-bottom') {
       markSettingsChanged();
@@ -65,7 +73,9 @@ export function useSubtitlePlayback({
   }, [markSettingsChanged]);
 
   const search = useSubtitleSearch({ url, resourceName, onApply: applyCues, dependencies: searchDependencies });
-  const { query, candidates, tokenHint, search: runSearch } = search;
+  const { query, candidates, tokenHint, activeSubtitle, search: runSearch } = search;
+  const syncCapability = subtitleSyncCapability(kernel, !!activeSubtitle);
+  syncAvailableRef.current = syncCapability.state === 'available';
 
   useHtmlSubtitleTrack({ videoRef, enabled, cues, offset });
   useNativeSubtitleTrack({
@@ -121,6 +131,7 @@ export function useSubtitlePlayback({
   return {
     enabled,
     offset,
+    syncCapability,
     fontSize,
     bottom,
     onAppearanceCommand,
