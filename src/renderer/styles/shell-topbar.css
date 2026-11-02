@@ -278,7 +278,7 @@
 :root[data-shell='topbar'] .vp-ctl:hover,
 :root[data-shell='topbar'] .mini-btn:hover { background: rgba(255, 255, 255, .14); }
 :root[data-shell='topbar'] .vp-bar { gap: 16px; }
-:root[data-shell='topbar'] .vp-next { background: color-mix(in srgb, var(--surface-glass) 90%, transparent); border-radius: 6px; }
+:root[data-shell='topbar'] .vp-next { color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: 6px; }
 :root[data-shell='topbar'] .vp-next button { background: var(--accent); }
 
 /* Keyboard focus keeps the cinema controls discoverable without changing the hover language. */
@@ -565,7 +565,7 @@
 :root[data-shell='topbar'] .vp-ctl { width: 32px; height: 32px; border-radius: 6px; color: var(--text); }
 :root[data-shell='topbar'] .vp-ctl:hover { color: var(--text-accent, var(--accent)); background: rgba(255, 255, 255, .16); }
 :root[data-shell='topbar'] .vp-time { font-size: 12.5px; font-weight: 600; color: #f0f0f2; }
-:root[data-shell='topbar'] .vp-next { background: rgba(10, 10, 11, .93); border-radius: 6px; }
+:root[data-shell='topbar'] .vp-next { color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: 6px; }
 :root[data-shell='topbar'] .vp-next button { background: var(--accent); }
 
 }

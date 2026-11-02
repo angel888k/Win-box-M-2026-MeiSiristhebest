@@ -77,12 +77,12 @@
 
 /* ---- 外挂字幕渲染（原生 TextTrack + VTTCue，用 CSS 变量控制字号/位置） ---- */
 .vplayer video::cue { font-size: var(--sub-font, 20px); font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  color: #fff; background: rgba(0,0,0,.55); text-shadow: 0 1px 2px #000; line-height: 1.4; }
+  color: #fff; background: rgba(0,0,0,.82); text-shadow: 0 1px 3px #000; line-height: 1.4; }
 .vplayer video::-webkit-media-text-track-container { bottom: var(--sub-bottom, 40px) !important; }
 /* 字幕面板 */
 .vp-subdot { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: #5be08b; }
 .vp-subpanel { position: absolute; right: 12px; bottom: 60px; width: 340px; max-height: 280px; overflow: auto; z-index: 20;
-  color: var(--text); background: var(--surface-glass, rgba(18,20,26,.94)); border: 1px solid var(--border); border-radius: 10px; padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  color: var(--text-primary, var(--text)); background: var(--surface-elevated, var(--surface-3)); border: 1px solid var(--border-strong, var(--border)); border-radius: 10px; padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
 .vp-popup-anchor { position: relative; display: inline-flex; align-items: center; flex: none; }
 .vp-panelhost { position: absolute; left: 50%; bottom: 100%; padding-bottom: 8px; z-index: 20; }
 .vp-panelhost .vp-subpanel { position: static; box-sizing: border-box; max-width: 100%; max-height: min(380px, calc(100vh - 140px)); }
@@ -160,13 +160,14 @@
 .vp-stats, .vp-keys {
   position: absolute; left: 12px; z-index: 27;
   max-width: min(64%, 420px); padding: 10px 12px;
-  color: #fff; font-size: 12.5px; line-height: 1.5; font-variant-numeric: tabular-nums;
-  background: rgba(12, 14, 20, .66); border: 1px solid rgba(255, 255, 255, .14); border-radius: 10px;
-  -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5);
+  color: var(--text-primary); font-size: 12.5px; line-height: 1.5; font-variant-numeric: tabular-nums;
+  background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: 10px;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
   animation: vpBadgeIn .2s ease-out both;
 }
 .vp-stats { top: 12px; }
+.vp-capability-panel { max-width: min(90%, 380px); }
 .vp-keys { bottom: 74px; }
 .vp-inf-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .vp-inf-title { flex: 1 1 auto; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
@@ -174,20 +175,20 @@
   display: inline-flex; align-items: center; justify-content: center; color: rgba(255,255,255,.75);
   font-size: 14px; line-height: 1; transition: background .13s var(--ease-standard, ease), color .13s; }
 .vp-inf-x:hover { background: rgba(255,255,255,.16); color: #fff; }
-.vp-inf-empty { font-size: 12px; color: rgba(255,255,255,.6); }
+.vp-inf-empty { font-size: 12px; color: var(--text-secondary); }
 /* 两列表格（display:contents 让每个 row 直接参与父级 grid 排布，标签/取值对齐） */
 .vp-stats-body { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; max-height: min(52vh, 320px); overflow: auto; }
 .vp-stats-row { display: contents; }
-.vp-stats-k { color: rgba(255,255,255,.55); white-space: nowrap; }
+.vp-stats-k { color: var(--text-secondary); white-space: nowrap; }
 .vp-stats-v { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-keys-body { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; }
 .vp-keys-row { display: contents; }
 .vp-keys-kbd { justify-self: start; font: inherit; font-size: 12px; padding: 2px 7px; border-radius: 5px;
-  color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.16); white-space: nowrap; }
-.vp-keys-desc { color: rgba(255,255,255,.85); }
+  color: var(--text-primary); background: var(--surface-2); border: 1px solid var(--border-soft); white-space: nowrap; }
+.vp-keys-desc { color: var(--text-primary); }
 .vp-toast { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 26; pointer-events: none;
-  padding: 8px 16px; border-radius: 999px; background: rgba(0,0,0,.72); color: #fff; font-size: 13px;
-  border: 1px solid rgba(255,255,255,.14); }
+  max-width: min(560px, calc(100% - 32px)); padding: 8px 16px; border-radius: 12px; background: var(--surface-elevated); color: var(--text-primary); font-size: 13px;
+  border: 1px solid var(--border-strong); text-align: center; overflow-wrap: anywhere; }
 .vp-toast.vp-command-error { max-width: min(560px, calc(100% - 32px)); border-color: #ffb3ad; background: #6b1f1f; color: #fff; text-align: center; }
 .vp-dmpanel .vsp-item-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .vsp-fits { display: flex; flex-wrap: wrap; gap: 6px; }

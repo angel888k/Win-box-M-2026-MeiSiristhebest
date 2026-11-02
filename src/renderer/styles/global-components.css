@@ -360,7 +360,14 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-:root[data-theme] :is(.vp-stats, .vp-keys, .vp-next, .vp-toast, .live-hud-toast) {
+:root[data-theme] .vplayer :is(.vp-stats, .vp-keys, .vp-next, .vp-toast) {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  border-color: var(--border-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme] .live-hud-toast {
   color: #fff;
   background: #11151d;
   border-color: rgba(255, 255, 255, .28);

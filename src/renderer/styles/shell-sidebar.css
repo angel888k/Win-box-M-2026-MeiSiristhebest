@@ -440,11 +440,11 @@
 :root[data-shell='sidebar'] .mini-btn { background: none; border: none; padding: 0; box-shadow: none; }
 :root[data-shell='sidebar'] .vp-ctl:hover,
 :root[data-shell='sidebar'] .mini-btn:hover { background: rgba(255, 255, 255, .14); }
-:root[data-shell='sidebar'] .vp-next { background: rgba(28, 28, 30, .82); border-radius: var(--radius); backdrop-filter: blur(20px); }
+:root[data-shell='sidebar'] .vp-next { color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius); backdrop-filter: none; -webkit-backdrop-filter: none; }
 :root[data-shell='sidebar'] .vp-next button { background: var(--accent); }
 :root[data-shell='sidebar'] .vp-vpanel {
-  background: rgba(28, 28, 30, .78); border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px;
-  backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%);
+  color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: 12px;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 :root[data-shell='sidebar'] .vp-vfill { background: var(--accent); }
 /* 播放器窗口（独立 BrowserWindow）：★ 2026-10-15（用户要求「大果的播放器外壳也应该是白色的」）——
@@ -890,9 +890,9 @@
 :root[data-shell='sidebar'] .vp-controls {
   left: 0; right: 0; bottom: 0; border-radius: 0;
   padding: 8px 20px 10px;
-  background: rgba(28, 28, 30, .42);
+  background: linear-gradient(to top, rgba(0, 0, 0, .96) 0%, rgba(0, 0, 0, .76) 72%, transparent 100%);
   border-top: 1px solid rgba(255, 255, 255, .12);
-  backdrop-filter: blur(28px) saturate(1.6); -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
   box-shadow: none;
 }
 /* 进度条做成**极细**（track 2px / 播放段 2px 系统蓝）+ 小圆点（10px 白点，悬停 14px） */

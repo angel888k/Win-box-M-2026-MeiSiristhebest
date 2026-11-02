@@ -344,15 +344,15 @@
 /* 倍速下拉（压在视频上）：深色玻璃，不做白底（写在 select 规则之后，同特异度取后者） */
 :root[data-shell='pillbar'] .vp-rate { background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .16); color: var(--on-media); }
 :root[data-shell='pillbar'] .vp-vfill { background: var(--accent); }
-:root[data-shell='pillbar'] .vp-toast { background: rgba(24, 22, 28, .8); }
-/* 播放器内弹层（字幕 / 弹幕 / 画质 / 跳过 / 投屏）：白卡片 + 深字（浅色皮肤的“浅色抽屉”） */
+:root[data-shell='pillbar'] .vp-toast { background: var(--surface-elevated); border-color: var(--border-strong); }
+/* Player popovers share the stage's opaque dark palette; shell theme colors stay in the app chrome. */
 :root[data-shell='pillbar'] .vp-subpanel,
-:root[data-shell='pillbar'] .vp-skipmenu { background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 16px; box-shadow: 0 18px 46px rgba(0, 0, 0, .3); }
+:root[data-shell='pillbar'] .vp-skipmenu { color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 18px 46px rgba(0, 0, 0, .3); }
 :root[data-shell='pillbar'] .vp-skipmenu-item:hover { background: var(--accent-soft); }
 :root[data-shell='pillbar'] .vsp-btn { background: var(--surface-2); border-radius: 999px; color: var(--text); }
 :root[data-shell='pillbar'] .vsp-btn.primary { background: var(--color-accent); color: var(--on-accent); }
 :root[data-shell='pillbar'] .vsp-item { background: var(--surface-2); border: 1px solid var(--border); }
-:root[data-shell='pillbar'] .vp-cpanel, :root[data-shell='pillbar'] .vp-vpanel { background: rgba(24, 22, 28, .82); }
+:root[data-shell='pillbar'] .vp-cpanel, :root[data-shell='pillbar'] .vp-vpanel { color: var(--text-primary); background: var(--surface-elevated); border-color: var(--border-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
 :root[data-shell='pillbar'] .vp-subpanel,
 :root[data-shell='pillbar'] .vsp-dmsrc-item,
 :root[data-shell='pillbar'] .vsp-dmsrc-name { color: var(--text); }
@@ -975,7 +975,7 @@
   left: 0; right: 0; bottom: 20px;
   width: min(880px, calc(100% - 40px)); margin: 0 auto; box-sizing: border-box;
   padding: 14px 22px 16px; border-radius: 28px;
-  background: rgba(24, 26, 24, .9); border: 1px solid rgba(255, 255, 255, .1);
+  background: var(--surface-1); border: 1px solid var(--border-strong);
   backdrop-filter: none; -webkit-backdrop-filter: none;
   box-shadow: 0 26px 60px -22px rgba(0, 0, 0, .95), inset 0 1px 0 rgba(255, 255, 255, .06);
 }

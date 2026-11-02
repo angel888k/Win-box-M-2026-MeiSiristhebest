@@ -4,8 +4,42 @@
    舞台 `.vplayer` 必须是**直角**。它带 `overflow:hidden`，一旦有圆角就会**把视频画面自身的四角切掉**
    （画面满铺时肉眼可见）；浅色外壳的皮肤（大豆 / 大果）还会在黑色舞台四周露出圆角缺口。
    故圆角在**基类**统一置 0 —— 各皮肤不得再给 `.vplayer` 加圆角（原值 10px 为开源初始口径）。 */
-.vplayer { position: relative; flex: 1; background: #000; min-height: 0; overflow: hidden;
-  font-family: inherit; border-radius: 0; }
+.vplayer {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0;
+  background: #000;
+  font-family: inherit;
+  /* Player chrome sits over a black media surface in every app theme. Keep its
+     controls and popovers on one opaque, readable local palette. */
+  color-scheme: dark;
+  --surface-0: #10141b;
+  --surface-1: #171c24;
+  --surface-2: #202733;
+  --surface-3: #283240;
+  --surface-raised: #202733;
+  --surface-elevated: #202733;
+  --surface-glass: #171c24;
+  --accent-soft: color-mix(in srgb, var(--color-accent, var(--accent)) 20%, #171c24);
+  --text: #f3f6fb;
+  --text-primary: #f3f6fb;
+  --text-dim: #c5cfdd;
+  --text-secondary: #c5cfdd;
+  --text-disabled: #a7b3c3;
+  --text-accent: #a9c8ff;
+  --text-danger: #ffb4ab;
+  --text-warn: #ffd287;
+  --text-success: #83e2bc;
+  --muted: #c5cfdd;
+  --on-media: #fff;
+  --border: #657389;
+  --border-soft: #4f5d70;
+  --border-strong: #8493a8;
+  --focus-ring-color: #a8c8ff;
+}
 .vplayer video { width: 100%; height: 100%; object-fit: contain; outline: none; }
 
 /* ★ 2026-09-26（用户报「部分比例的视频会让播放器底部 UI 消失」）——
@@ -14,71 +48,7 @@
       播放器窗口链 = .main → .pwin-body → .pwin-stage → .vplayer，**每一层都必须允许收缩**。
    ② 画面区域：.vp-stage 绝对定位撑满并裁切溢出 → 画面本身不可能把控制条挤出可视区。 */
 .pwin-body { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-.pwin-stage { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; background: #000; }
-.player-stage-notices {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  right: 12px;
-  box-sizing: border-box;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: min(38%, 360px);
-  min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  pointer-events: none;
-}
-.player-stage-notices > * { pointer-events: auto; }
-.player-stage-notice {
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  color: #f3f6fb;
-  background: rgba(24, 31, 42, .98);
-  border: 1px solid #56657b;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.player-stage-notice--error { color: #ffd8d8; background: rgba(54, 25, 29, .98); border-color: #97525a; }
-.pwin-stage--mini .player-stage-notices { top: 8px; }
-/* MPV mini strip is also a floating layer and does not consume stage layout height. */
-:root[data-mpv] .pwin-stage--mini .player-stage-notices { top: 26px; }
-.player-source-fallback {
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 8px 10px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  color: #f3f6fb;
-  background: rgba(24, 31, 42, .98);
-  border: 1px solid #56657b;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.player-source-fallback__choices { display: flex; flex-wrap: wrap; gap: 8px; }
-.player-source-fallback__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.player-source-fallback-choice {
-  min-height: 32px;
-  padding: 5px 10px;
-  color: #f7f9fc;
-  background: #2a3a51;
-  border: 1px solid #788ba6;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.player-source-fallback-choice:hover { background: #354a65; }
-.player-source-fallback-choice:focus-visible { outline: 2px solid #9dc2ff; outline-offset: 2px; }
+.pwin-stage { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; overflow: hidden; isolation: isolate; background: #000; }
 .vp-stage { position: absolute; inset: 0; overflow: hidden; display: flex; align-items: center; justify-content: center;
   container-type: size; }
 .vp-stage-toggle { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0;
@@ -169,8 +139,7 @@
 .vp-fmtbadges { position: absolute; top: 14px; right: 14px; z-index: 6; display: flex; gap: 6px;
   pointer-events: none; animation: vpBadgeIn .28s ease-out both; }
 .vp-fmtbadge { font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 4px 8px; border-radius: 5px;
-  color: #fff; background: rgba(12,14,20,.62); border: 1px solid rgba(255,255,255,.16);
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border-strong); }
 @keyframes vpBadgeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .vp-time { font-size: 12px; color: #e6e8ee; font-variant-numeric: tabular-nums; }
 .vp-live { color: var(--text-danger, var(--danger)); font-size: 12px; font-weight: 700; letter-spacing: .5px; }
@@ -361,30 +330,30 @@
 
 /* ---- 播放器音量控件：竖向条状音量条（悬浮面板） ---- */
 .vp-vol { position: relative; display: inline-flex; align-items: center; }
-/* ★ 2026-09-29 DLNA 投屏：控制条按钮 + 设备弹层（与音量面板同款玻璃材质/展开动效） */
+/* DLNA and volume popovers use the same opaque player palette so controls remain readable over any frame. */
 .vp-cast { position: relative; display: inline-flex; align-items: center; }
 .vp-cpanel { position: absolute; bottom: calc(100% + 8px); left: 50%; z-index: 7;
   transform: translateX(-50%) translateY(6px) scale(.98); transform-origin: bottom center;
   display: flex; flex-direction: column; gap: 6px; min-width: 168px; max-width: 260px;
   padding: 10px; border-radius: 10px;
-  background: rgba(10, 12, 16, .86); border: 1px solid rgba(255, 255, 255, .1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .45); backdrop-filter: blur(8px);
+  color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45); backdrop-filter: none; -webkit-backdrop-filter: none;
   opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
 .vp-cpanel.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0) scale(1); }
-.vp-cpct { font-size: 12px; color: rgba(255, 255, 255, .62); padding: 0 2px 2px; }
+.vp-cpct { font-size: 12px; color: var(--text-secondary); padding: 0 2px 2px; }
 .vp-citem { text-align: left; font-size: 12px; padding: 6px 8px; border-radius: 7px; cursor: pointer;
-  background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .08); color: #fff;
+  background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vp-citem:hover:not(:disabled) { background: rgba(255, 255, 255, .14); }
+.vp-citem:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); }
 .vp-citem:disabled { color: var(--text-disabled, var(--text-dim)); opacity: 1; cursor: not-allowed; }
-.vp-crefresh { color: rgba(255, 255, 255, .72); background: transparent; }
-.vp-cmsg { font-size: 12px; color: rgba(255, 255, 255, .72); line-height: 1.5; word-break: break-all; }
+.vp-crefresh { color: var(--text-accent); background: transparent; }
+.vp-cmsg { font-size: 12px; color: var(--text-secondary); line-height: 1.5; word-break: break-all; }
 .vp-vpanel { position: absolute; bottom: calc(100% + 8px); left: 50%; z-index: 7;
   transform: translateX(-50%) translateY(6px) scale(.98); transform-origin: bottom center;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 10px 9px; border-radius: 10px;
-  background: rgba(10, 12, 16, .8); border: 1px solid rgba(255, 255, 255, .1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .45); backdrop-filter: blur(8px);
+  color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45); backdrop-filter: none; -webkit-backdrop-filter: none;
   opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
 /* ★ 打开条件：悬停到音量控件或面板（CSS :hover 会因后代溢出而保持）→ 悬停开/移开收；
      拖拽/键盘闪烁（.open）也保持打开。 */
