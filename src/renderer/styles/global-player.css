@@ -124,6 +124,8 @@
 .vp-progress-marker { position: absolute; top: 50%; z-index: 2; width: 3px; height: 10px; transform: translate(-50%, -50%);
   border: 1px solid #141a23; border-radius: 2px; background: #ffd166; box-shadow: 0 0 0 1px rgba(255,255,255,.92); }
 .vp-progress-marker--outro-start { background: #ff986b; }
+.vp-progress-marker--segment-start { background: #78d5ff; }
+.vp-progress-marker--segment-end { background: #c0a2ff; }
 /* ★ 2026-09-26（用户要求）：进度点缩小（12px → 9px）；★ 2026-09-28 再缩（9px → 7px）
    并用 translate(-50%) 居中定位 —— 主题皮肤可各自覆盖尺寸，无需再在 JSX 里写半宽偏移 */
 .vp-thumb { position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); width: 7px; height: 7px; border-radius: 50%;

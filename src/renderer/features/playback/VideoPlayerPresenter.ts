@@ -749,6 +749,8 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       markers: [
         ...(skipSeg.intro > 0 ? [{ id: 'intro-end', time: skipSeg.intro, kind: 'intro-end' as const, label: '片头结束' }] : []),
         ...(skipSeg.outro > 0 ? [{ id: 'outro-start', time: dur - skipSeg.outro, kind: 'outro-start' as const, label: '片尾开始' }] : []),
+        ...(segmentLoop.model.start != null ? [{ id: 'segment-start', time: segmentLoop.model.start, kind: 'segment-start' as const, label: '循环 A 点' }] : []),
+        ...(segmentLoop.model.end != null ? [{ id: 'segment-end', time: segmentLoop.model.end, kind: 'segment-end' as const, label: '循环 B 点' }] : []),
       ],
       currentTime: cur, duration: dur, buffered, canSeek: () => !!ref.current || kIsChild(), getCurrentTime: kTime, seekTo: kSeek, formatTime: formatPlaybackTime,
       onContextMenu: (position, time) => {

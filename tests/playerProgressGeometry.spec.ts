@@ -34,12 +34,16 @@ describe('player progress geometry policy', () => {
     const markers = [
       { id: 'intro', time: 30, kind: 'intro-end' as const, label: '片头结束' },
       { id: 'outro', time: 90, kind: 'outro-start' as const, label: '片尾开始' },
+      { id: 'loop-start', time: 40, kind: 'segment-start' as const, label: '循环 A 点' },
+      { id: 'loop-end', time: 60, kind: 'segment-end' as const, label: '循环 B 点' },
       { id: 'negative', time: -1, kind: 'intro-end' as const, label: '无效' },
       { id: 'past-end', time: 100, kind: 'outro-start' as const, label: '越界' },
       { id: 'nan', time: Number.NaN, kind: 'intro-end' as const, label: '无效' },
     ];
     expect(projectProgressMarkers(markers, 100).map(({ id, percent }) => ({ id, percent }))).toEqual([
       { id: 'intro', percent: 30 },
+      { id: 'loop-start', percent: 40 },
+      { id: 'loop-end', percent: 60 },
       { id: 'outro', percent: 90 },
     ]);
     expect(projectProgressMarkers(markers, 0)).toEqual([]);

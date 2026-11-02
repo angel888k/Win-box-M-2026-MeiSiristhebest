@@ -11,7 +11,7 @@ export interface ProgressPercentages {
 export interface ProgressMarker {
   id: string;
   time: number;
-  kind: 'intro-end' | 'outro-start';
+  kind: 'intro-end' | 'outro-start' | 'segment-start' | 'segment-end';
   label: string;
 }
 
@@ -54,5 +54,6 @@ export function projectProgressMarkers(
   if (!Number.isFinite(duration) || duration <= 0) return [];
   return markers
     .filter(marker => Number.isFinite(marker.time) && marker.time > 0 && marker.time < duration)
-    .map(marker => ({ ...marker, percent: clamp((marker.time / duration) * 100, 0, 100) }));
+    .map(marker => ({ ...marker, percent: clamp((marker.time / duration) * 100, 0, 100) }))
+    .sort((left, right) => left.time - right.time);
 }

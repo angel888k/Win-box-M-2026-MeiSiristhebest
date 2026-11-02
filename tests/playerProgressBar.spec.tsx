@@ -71,15 +71,20 @@ describe('PlayerProgressBar', () => {
       markers: [
         { id: 'intro-end', time: 15, kind: 'intro-end' as const, label: '片头结束' },
         { id: 'outro-start', time: 45, kind: 'outro-start' as const, label: '片尾开始' },
+        { id: 'segment-start', time: 20, kind: 'segment-start' as const, label: '循环 A 点' },
+        { id: 'segment-end', time: 30, kind: 'segment-end' as const, label: '循环 B 点' },
       ],
     };
     const { container } = render(<PlayerProgressBar {...props} />);
     const markers = container.querySelectorAll('.vp-progress-marker');
 
-    expect(markers).toHaveLength(2);
+    expect(markers).toHaveLength(4);
     expect(markers[0].getAttribute('style')).toContain('left: 25%');
-    expect(markers[1].getAttribute('style')).toContain('left: 75%');
     expect(markers[0].getAttribute('aria-label')).toBe('片头结束 · 15s');
+    expect(markers[1].getAttribute('aria-label')).toBe('循环 A 点 · 20s');
+    expect(markers[2].getAttribute('aria-label')).toBe('循环 B 点 · 30s');
+    expect(markers[3].getAttribute('style')).toContain('left: 75%');
+    expect(markers[3].getAttribute('aria-label')).toBe('片尾开始 · 45s');
   });
 
   it('uses the non-passive wheel handler for one-second seeks and reports context-menu time', () => {
