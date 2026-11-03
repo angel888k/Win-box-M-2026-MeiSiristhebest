@@ -57,16 +57,22 @@ export function useMovieSourcesPanelPresenter(
     () => projectSearchResults(report?.items ?? [], query, { mode, profileId, sourceId }),
     [report, query, mode, profileId, sourceId],
   );
+  const sourceItems = useMemo(
+    () => folderTarget ? folder?.items ?? [] : view.items,
+    [folderTarget, folder?.items, view.items],
+  );
+  const visibleItems = useMemo(() => sourceItems.slice(0, cap), [sourceItems, cap]);
   const comparisonByItem = useMemo(() => {
-    const ranked = rankSourcesWithComparison(view.items, report?.perSource ?? []);
+    // Only the cards mounted in the current page need comparison scores.
+    // Re-scoring every hit on each streamed progress snapshot made large searches
+    // do work for hundreds of cards that were not visible.
+    const ranked = rankSourcesWithComparison(visibleItems, report?.perSource ?? []);
     const map = new Map<string, SourceComparisonScore>();
     for (const entry of ranked) {
       map.set(JSON.stringify([entry.item.sourceRef?.profileId, entry.item.sourceKey, entry.item.id]), entry.comparison);
     }
     return map;
-  }, [view.items, report?.perSource]);
-  const sourceItems = folderTarget ? folder?.items ?? [] : view.items;
-  const visibleItems = sourceItems.slice(0, cap);
+  }, [visibleItems, report?.perSource]);
 
   const openItem = useCallback(async (item: AggVodItem): Promise<void> => {
     setFolderError('');
@@ -144,7 +150,10 @@ export function useMovieSourcesPanelPresenter(
     if (folderTarget) void openItem(folderTarget);
   }, [folderTarget, openItem]);
   const toggleSourceStates = useCallback((open: boolean) => setShowStates(open), []);
-  const hitSourceCount = new Set(view.items.map((item) => sourceIdentityKey(item.sourceRef?.profileId, item.sourceKey))).size;
+  const hitSourceCount = useMemo(
+    () => new Set(view.items.map((item) => sourceIdentityKey(item.sourceRef?.profileId, item.sourceKey))).size,
+    [view.items],
+  );
 
   return {
     query,
