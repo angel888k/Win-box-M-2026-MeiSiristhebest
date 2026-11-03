@@ -1,4 +1,4 @@
-import { SearchResultsAccumulator } from '../../../../engine/vod/aggSearch';
+import { mergeSearchResults, SearchResultsAccumulator } from '../../../../engine/vod/aggSearch';
 import type { SearchAllProgressEvent, SearchAllReport } from '../../../../shared/types';
 import type {
   MovieSourceFolderIdentity,
@@ -21,6 +21,15 @@ export interface MovieSourcesSearchResult {
   progress: MovieSourcesProgress | null;
 }
 
+export interface MovieSourcesSearchStreamOptions {
+  /** Deliver each completed source immediately without building a full report snapshot. */
+  onSource?: (report: SearchAllReport, progress: MovieSourcesProgress) => void;
+  /** Forward progress-only events without materializing a full aggregate report. */
+  onSearchProgress?: (progress: MovieSourcesProgress) => void;
+  /** Coalesce expensive aggregate snapshots for UI progress consumers. Defaults to 200 ms. */
+  progressIntervalMs?: number;
+}
+
 function abortError(): Error {
   const error = new Error('搜索已取消');
   error.name = 'AbortError';
@@ -32,8 +41,9 @@ export async function searchMovieSources(
   query: string,
   refresh: boolean,
   port: MovieSourcesSearchPort,
-  onProgress: (update: MovieSourcesProgressUpdate) => void,
+  onProgress?: (update: MovieSourcesProgressUpdate) => void,
   signal?: AbortSignal,
+  streamOptions: MovieSourcesSearchStreamOptions = {},
 ): Promise<MovieSourcesSearchResult> {
   if (signal?.aborted) throw abortError();
   const scope = await port.readScope();
@@ -49,18 +59,36 @@ export async function searchMovieSources(
   let latestProgress: MovieSourcesProgress | null = null;
   let unsubscribe: () => void = () => {};
   let disposed = false;
+  let progressTimer: ReturnType<typeof setTimeout> | undefined;
+  const progressIntervalMs = Math.max(50, streamOptions.progressIntervalMs ?? 200);
+  const publishProgress = (): void => {
+    progressTimer = undefined;
+    if (disposed || !latestProgress || !onProgress) return;
+    onProgress({ report: accumulator.snapshot(), progress: latestProgress });
+  };
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    if (progressTimer) clearTimeout(progressTimer);
+    progressTimer = undefined;
     unsubscribe();
   };
   const onAbort = () => dispose();
 
   unsubscribe = port.onProgress((event: SearchAllProgressEvent) => {
     if (disposed || event.wd !== query || !acceptedProfiles.has(event.profileId ?? '')) return;
-    if (event.source) accumulator.add(event.source, { profileOrder: event.profileOrder, sourceOrder: event.sourceOrder });
+    if (event.source && onProgress) {
+      accumulator.add(event.source, { profileOrder: event.profileOrder, sourceOrder: event.sourceOrder });
+    }
     latestProgress = { done: event.done, total: event.total };
-    onProgress({ report: accumulator.snapshot(), progress: latestProgress });
+    if (event.source && streamOptions.onSource) {
+      streamOptions.onSource(mergeSearchResults([event.source]), latestProgress);
+    } else if (!event.source) {
+      streamOptions.onSearchProgress?.(latestProgress);
+    }
+    if (onProgress && !progressTimer) {
+      progressTimer = setTimeout(publishProgress, progressIntervalMs);
+    }
   });
   signal?.addEventListener('abort', onAbort, { once: true });
 

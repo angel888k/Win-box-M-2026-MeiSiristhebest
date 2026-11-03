@@ -104,7 +104,7 @@ describe('discoverPlaybackAlternatives', () => {
     const result = await discoverPlaybackAlternatives({ current, episodeIndex: 1, position: 0, excludedSourceIds: new Set() }, port, new AbortController().signal);
 
     expect(result.candidates).toEqual([]);
-    expect(port.loadDetail).toHaveBeenCalledTimes(2); // Current item plus the one exact-title candidate.
+    expect(port.loadDetail).toHaveBeenCalledTimes(1); // Only the exact-title candidate needs detail verification.
   });
 
   it('counts failed and pending sources as incomplete, preventing automatic selection', async () => {
@@ -249,7 +249,7 @@ describe('discoverPlaybackAlternatives', () => {
 
       await vi.advanceTimersByTimeAsync(60_000);
       await expect(pending).resolves.toMatchObject({ candidates: [], incompleteSources: 24, truncated: false });
-      expect(port.loadDetail).toHaveBeenCalledTimes(25);
+      expect(port.loadDetail).toHaveBeenCalledTimes(24);
     } finally {
       vi.useRealTimers();
     }

@@ -30,7 +30,7 @@ export interface DiscoverPlaybackAlternativesInput {
 }
 
 const MAX_DETAIL_LOOKUPS = 24;
-const DETAIL_LOOKUP_CONCURRENCY = 4;
+const DETAIL_LOOKUP_CONCURRENCY = 8;
 const SEARCH_DEADLINE_MS = 45_000;
 const DETAIL_DEADLINE_MS = 10_000;
 const DISCOVERY_DEADLINE_MS = 60_000;
@@ -46,32 +46,50 @@ export async function discoverPlaybackAlternatives(
   const deadlineAt = Date.now() + DISCOVERY_DEADLINE_MS;
   const remainingBudget = (): number => Math.max(0, deadlineAt - Date.now());
   const selectedEpisode = input.current.episodes[input.episodeIndex];
-  const currentId = input.current.meta?.vodId || input.current.meta?.id || '';
   const currentKey = input.current.meta?.fromKey || input.current.key;
   const currentProfileId = input.current.meta?.profileId || '';
 
-  let currentDetail: VodDetail | null = null;
-  if (currentId && currentKey && currentProfileId) {
-    try {
-      currentDetail = await withDeadline(
-        detailSignal => port.loadDetail({ key: currentKey, id: currentId, profileId: currentProfileId }, detailSignal),
-        Math.min(DETAIL_DEADLINE_MS, remainingBudget()),
-        signal,
-      );
-    } catch {
-      // The already-open player may have been launched from history or its detail endpoint may be stale.
-      if (signal.aborted) throw abortError();
-    }
-  }
-
-  const title = currentDetail?.name?.trim() || input.current.title.trim();
+  // The player already has the selected title. Fetching its detail again before
+  // starting aggregate search added up to 10 seconds to every recovery attempt.
+  const title = input.current.title.trim();
   if (!title || !selectedEpisode?.name.trim()) return { candidates: [], incompleteSources: 0, searchIncomplete: false, truncated: false };
 
-  const expectedYear = parseYear(currentDetail?.year) ?? playbackTitleYear(title);
-  let latestReport: SearchAllReport = { items: [], perSource: [], hitSources: 0, failedSources: 0, totalRaw: 0 };
+  const expectedYear = playbackTitleYear(title);
+  const partialSources = new Map<string, SearchAllReport['perSource'][number]>();
+  let partialPendingSources: number | undefined;
+  let partialHitSources = 0;
+  let partialFailedSources = 0;
+  let partialTotalRaw = 0;
   const queuedItems = new Set<string>();
   const detailQueue: Array<[string, AggVodItem]> = [];
   const candidatesById = new Map<string, PlaybackAlternativeCandidate>();
+  const rememberPartialReport = (partial: SearchAllReport): void => {
+    partialHitSources = Math.max(partialHitSources, partial.hitSources);
+    partialFailedSources = Math.max(partialFailedSources, partial.failedSources);
+    partialTotalRaw = Math.max(partialTotalRaw, partial.totalRaw);
+    if (partial.pendingSources !== undefined) partialPendingSources = partial.pendingSources;
+    for (const source of partial.perSource) {
+      partialSources.set(`${source.profileId || ''}\u001f${source.key}`, source);
+    }
+  };
+  const partialReportSnapshot = (): SearchAllReport => {
+    const perSource = [...partialSources.values()];
+    const totalRaw = perSource.length
+      ? perSource.reduce((sum, source) => sum + (source.count || 0), 0)
+      : partialTotalRaw;
+    return {
+      // Partial source items were already verified as they streamed in. Keep
+      // only summary data here so a long search does not retain a second copy.
+      items: [],
+      perSource,
+      hitSources: perSource.length
+        ? perSource.filter(source => source.status === 'ok' && (source.count || 0) > 0).length
+        : partialHitSources,
+      failedSources: Math.max(partialFailedSources, perSource.filter(source => source.status === 'error').length),
+      totalRaw,
+      ...(partialPendingSources !== undefined ? { pendingSources: partialPendingSources } : {}),
+    };
+  };
   let lookupCount = 0;
   let truncated = false;
   let failedDetailLookups = 0;
@@ -167,7 +185,7 @@ export async function discoverPlaybackAlternatives(
 
   const enqueueReport = (partial: SearchAllReport): void => {
     if (signal.aborted) return;
-    latestReport = partial;
+    rememberPartialReport(partial);
     for (const item of partial.items) {
       const profileId = item.sourceRef?.profileId;
       const sourceKey = item.sourceRef?.key || item.sourceKey;
@@ -204,7 +222,7 @@ export async function discoverPlaybackAlternatives(
     if (!(error instanceof PlaybackDeadlineError)) throw error;
     // Keep verified partial results when the aggregate scan exceeds its budget.
     // The partial scan is explicitly marked so it cannot be presented as “no source exists”.
-    report = latestReport;
+    report = partialReportSnapshot();
     searchIncomplete = true;
   }
   enqueueReport(report);

@@ -14,14 +14,26 @@ export const playerPageSessionAdapter: PlayerPageSessionPort = {
     sourceName,
   }),
   loadDetail: (input) => client.detail(input),
-    discover: async (input, signal, onCandidate) => discoverPlaybackAlternatives(input, {
-      search: async (query, searchSignal, onReport, refresh = false) => {
-        const result = await searchMovieSources(query, refresh, movieSourcesSearchAdapter,
-          update => onReport(update.report), searchSignal);
-        return result.report;
-      },
-      loadDetail: ({ key, id, profileId }, detailSignal) => client.detail({ key, ids: [id], profileId }, detailSignal),
-    }, signal, onCandidate),
+  discover: async (input, signal, onCandidate) => discoverPlaybackAlternatives(input, {
+    search: async (query, searchSignal, onReport, refresh = false) => {
+      const result = await searchMovieSources(query, refresh, movieSourcesSearchAdapter, undefined, searchSignal, {
+        onSource: (sourceReport, progress) => onReport({
+          ...sourceReport,
+          pendingSources: Math.max(0, progress.total - progress.done),
+        }),
+        onSearchProgress: progress => onReport({
+          items: [],
+          perSource: [],
+          hitSources: 0,
+          failedSources: 0,
+          totalRaw: 0,
+          pendingSources: Math.max(0, progress.total - progress.done),
+        }),
+      });
+      return result.report;
+    },
+    loadDetail: ({ key, id, profileId }, detailSignal) => client.detail({ key, ids: [id], profileId }, detailSignal),
+  }, signal, onCandidate),
   onInit: (listener) => client.playerOnInit((data) => {
     if (data) listener(data as PlayerInitData);
   }),
