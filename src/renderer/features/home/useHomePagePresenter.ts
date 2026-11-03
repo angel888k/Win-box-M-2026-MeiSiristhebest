@@ -360,6 +360,13 @@ export function useHomePagePresenter({ onOpenDetail, route, filterPanel, waterfa
         chooseCategory(match ? String(match.id) : "");
       },
       onImportSources: () => navigate("/config?section=sources"),
+      onRetry: () => {
+        if (tid) void browse.loadCategory(tid, pg, filtersActive);
+        else {
+          const sourceKey = keyRef.current || curSite?.key || '';
+          if (sourceKey) void loadHome(sourceKey);
+        }
+      },
       onPreviousPage: previousPage,
       onNextPage: nextPage,
       onJumpPage: jumpToPage,

@@ -417,6 +417,14 @@ button:active { transition-duration: var(--dur-instant); }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   animation: fadeIn var(--dur-panel) var(--ease-standard) both;
 }
+.home-browse-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.home-browse-error p { margin: 4px 0 0; color: inherit; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ⑦ 数字对齐：时间 / 进度 / 速度用等宽数字（跳秒、进度推进时不再左右抖） */

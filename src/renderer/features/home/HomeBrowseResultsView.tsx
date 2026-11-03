@@ -31,6 +31,7 @@ export function HomeBrowseResultsView({
   onToggleFilters,
   onPresetCategory,
   onImportSources,
+  onRetry,
   onPreviousPage,
   onNextPage,
   onJumpPage,
@@ -41,6 +42,16 @@ export function HomeBrowseResultsView({
       {!error && fallback && (
         <div className="banner" style={{ borderLeftColor: 'var(--accent-2)', marginBottom: 12 }}>
           当前展示首个分类的内容，可在下方切换分类。
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="home-browse-error" role="alert">
+          <div>
+            <strong>当前来源加载失败</strong>
+            <p>{error}</p>
+          </div>
+          <Button onClick={onRetry}>重试</Button>
         </div>
       )}
 
@@ -88,17 +99,15 @@ export function HomeBrowseResultsView({
         </div>
       )}
 
-      {items.length === 0 ? (
+      {items.length === 0 ? (error && !loading ? null : (
         <div className="empty">
           {loading
             ? '加载中…'
             : !hasSources
               ? <><h2>添加你的第一个订阅</h2><p>支持单仓、多仓和本地配置文件。</p><Button variant="primary" onClick={onImportSources}>导入订阅</Button></>
-              : error
-                ? '加载失败，请查看上方错误提示'
-                : <><h2>当前站点暂无内容</h2><p>可以切换分类、在左侧更换站点，或使用顶部搜索。</p></>}
+              : <><h2>当前站点暂无内容</h2><p>可以切换分类、在左侧更换站点，或使用顶部搜索。</p></>}
         </div>
-      ) : (
+      )) : (
         <>
           {listStyle ? (
             <div className="list">

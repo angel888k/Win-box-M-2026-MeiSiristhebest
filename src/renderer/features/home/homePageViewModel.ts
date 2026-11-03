@@ -41,6 +41,7 @@ export type HomeBrowseResultsModel = {
   onToggleFilters: () => void;
   onPresetCategory: (category: string) => void;
   onImportSources: () => void;
+  onRetry: () => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onJumpPage: () => void;
