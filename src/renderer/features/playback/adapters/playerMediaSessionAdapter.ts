@@ -32,15 +32,9 @@ export const playerMediaSessionAdapter: PlayerMediaSessionPort = {
   setActionHandler(action: PlayerMediaSessionAction, handler: PlayerMediaSessionActionHandler | null) {
     const session = currentMediaSession();
     if (!session) return;
-    try {
-      session.setActionHandler(action, handler
-        ? details => handler({ seekOffset: details.seekOffset, seekTime: details.seekTime })
-        : null);
-    } catch (error) {
-      // Unsupported actions differ between Chromium/Electron versions. Let the
-      // application binding skip this action and keep registering the others.
-      throw error;
-    }
+    session.setActionHandler(action, handler
+      ? details => handler({ seekOffset: details.seekOffset, seekTime: details.seekTime })
+      : null);
   },
   setPlaybackState(state: PlayerMediaSessionPlaybackState) {
     // The Web Media Session API has no "unknown" value. Leave the platform state
