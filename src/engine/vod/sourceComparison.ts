@@ -74,12 +74,36 @@ export function evaluateSourceQuality(
 export function rankSourcesWithComparison(
   items: readonly AggVodItem[],
   perSource: readonly SearchPerSource[] = [],
+  displayedItems: readonly AggVodItem[] = items,
 ): Array<{ item: AggVodItem; comparison: SourceComparisonScore }> {
   const latencyMap = new Map<string, number>();
   for (const s of perSource) {
     if (typeof s.ms === 'number' && s.ms > 0) {
       latencyMap.set(sourceIdentityKey(s.profileId, s.key), s.ms);
     }
+  }
+
+  const latencyFor = (item: AggVodItem): number | undefined =>
+    latencyMap.get(sourceIdentityKey(item.sourceRef?.profileId, item.sourceKey));
+
+  if (displayedItems !== items) {
+    // Find the true best source across the full filtered result set, but retain
+    // and return scores only for cards currently mounted in the UI.
+    let maxScore = -1;
+    for (const item of items) {
+      if (item.tag === 'folder') continue;
+      const score = evaluateSourceQuality(item, latencyFor(item));
+      if (!score.isCamOrTc && score.totalScore > maxScore) maxScore = score.totalScore;
+    }
+    const visible = displayedItems.map(item => ({ item, comparison: evaluateSourceQuality(item, latencyFor(item)) }));
+    if (maxScore >= 50) {
+      for (const entry of visible) {
+        if (entry.item.tag !== 'folder' && !entry.comparison.isCamOrTc && entry.comparison.totalScore === maxScore) {
+          entry.comparison.isTopRecommended = true;
+        }
+      }
+    }
+    return visible;
   }
 
   const evaluated = items.map((item) => {

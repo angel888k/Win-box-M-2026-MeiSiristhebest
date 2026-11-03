@@ -66,13 +66,13 @@ export function useMovieSourcesPanelPresenter(
     // Only the cards mounted in the current page need comparison scores.
     // Re-scoring every hit on each streamed progress snapshot made large searches
     // do work for hundreds of cards that were not visible.
-    const ranked = rankSourcesWithComparison(visibleItems, report?.perSource ?? []);
+    const ranked = rankSourcesWithComparison(sourceItems, report?.perSource ?? [], visibleItems);
     const map = new Map<string, SourceComparisonScore>();
     for (const entry of ranked) {
       map.set(JSON.stringify([entry.item.sourceRef?.profileId, entry.item.sourceKey, entry.item.id]), entry.comparison);
     }
     return map;
-  }, [visibleItems, report?.perSource]);
+  }, [sourceItems, visibleItems, report?.perSource]);
 
   const openItem = useCallback(async (item: AggVodItem): Promise<void> => {
     setFolderError('');
