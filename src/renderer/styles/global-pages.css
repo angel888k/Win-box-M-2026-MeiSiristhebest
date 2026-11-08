@@ -27,15 +27,12 @@
 :root[data-theme][data-theme] button:focus:not(:focus-visible) { outline: none; }
 
 /* ============================================================================
-   ★★ 2026-10-16（用户要求）：播放器窗口**顶部标题栏** —— 去掉 38px 实心「边框」，改为
-   **无边框浮层**（视频铺满到顶，标题栏浮在画面上），窗口按钮使用不透明深色表面，
-   不模糊视频，并与底部控制条**同一份显隐状态**（`ui` 由 VideoPlayer 镜像到
-   `:root[data-pwin-ui]`）——播放中鼠标静止后一起淡出，鼠标移到顶部即显形。
-   ★ 只在真正的播放器窗口生效（`.app.pvwin`）；详情/搜索辅助窗口（`.app.pwin` 无 `pvwin`）不受影响。
-   ★ 用 `:not([data-mpv])` 排除 MPV 内核（其透明链敏感、已有自己的顶层浮层规则），零回归。
-   ★ 全屏：播放器窗口的两种内核都用**主进程原生窗口全屏**（HTML5 亦然，2026-10-17 起，见
-     VideoPlayer `nativeFs`）——标题栏由 `[data-player-fullscreen]` 规则 `display:none` 隐藏；
-     `:fullscreen` 规则仍保留，仅供主窗口（直播 / WebDAV）的元素全屏使用。
+   Player window chrome uses a reserved top row instead of floating over the video.
+   The old absolute titlebar removed itself from layout, so the episode drawer began
+   at the same y-position and the native window buttons covered its heading/actions.
+   Keep this row in normal flow; fullscreen still hides it through the rule above.
+   Only the HTML5 surface needs this override: MPV already keeps its titlebar in flow
+   because its native child surface spans the BrowserWindow client area.
    ============================================================================ */
 /* ★★ 特异度：四皮肤在 2026-10-16 大改里各自写了
    `:root[data-theme='X']:not([data-mpv]) .app.pwin.pvwin .titlebar {...}`（(0,7,0)，浅色白顶栏）
@@ -43,9 +40,10 @@
    （同本文件既有的 `:root[data-theme][data-theme]` 提权手法）。 */
 :root[data-theme][data-theme] .app.pwin.pvwin .main { position: relative; }
 :root[data-theme][data-theme]:not([data-mpv]) .app.pwin.pvwin .titlebar {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 6;
+  position: relative; inset: auto; z-index: 6;
+  display: flex; flex: 0 0 46px; width: 100%; box-sizing: border-box;
   height: 46px; padding: 0 14px;
-  background: transparent; border-bottom: none; box-shadow: none;
+  background: #111419; border-bottom: 1px solid rgb(255 255 255 / 10%); box-shadow: none;
   opacity: 1; transition: opacity .2s ease;
 }
 /* 播放中静止（底部控制条已隐）→ 顶部一并淡出；鼠标移到顶部（悬停）即显形，避免交互中途消失 */
