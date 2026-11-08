@@ -98,6 +98,8 @@ export interface VideoPlayerProps {
   playbackSource?: PlaybackSourceRef;
   /** Explicitly preserve live, catch-up and storage semantics across player surfaces. */
   playbackKind?: PlayerPlaybackKind;
+  /** Shortens the first-frame probe for automatically selected backup sources. */
+  fastRecovery?: boolean;
   /** Prepares only the next VOD episode after playback reaches its final 30 seconds. */
   onPrepareNextEpisode?: () => void | Promise<boolean>;
   /** Live HLS buffer target. Ignored for VOD, catch-up, storage, and non-HLS streams. */
@@ -679,6 +681,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       isImage,
       isAudio,
       liveHint,
+      firstFrameTimeoutMs: props.fastRecovery ? 8_000 : undefined,
       liveLatencyMode: props.liveLatencyMode,
       onLivePlaybackTelemetry: props.onLivePlaybackTelemetry,
       playbackSource: props.playbackSource,

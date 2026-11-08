@@ -137,6 +137,7 @@ export function PlayerPageView({ session, windowState, title, onResolutionChange
               suppressPlaybackFailure={hasRecoveryState}
               playbackSource={init ? { profileId: init.meta?.profileId, key: init.meta?.fromKey || init.key } : undefined}
               playbackKind={init?.playbackKind}
+              fastRecovery={init?.fastRecovery}
               workPreferenceKey={workPreferenceKey}
               resourceName={curName}
               playTitle={playName}

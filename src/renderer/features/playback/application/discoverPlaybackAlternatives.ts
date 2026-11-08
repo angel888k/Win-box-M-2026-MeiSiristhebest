@@ -31,9 +31,11 @@ export interface DiscoverPlaybackAlternativesInput {
 
 const MAX_DETAIL_LOOKUPS = 24;
 const DETAIL_LOOKUP_CONCURRENCY = 8;
-const SEARCH_DEADLINE_MS = 45_000;
-const DETAIL_DEADLINE_MS = 10_000;
-const DISCOVERY_DEADLINE_MS = 60_000;
+// Failover discovery is a recovery path, not a background catalog crawl. Keep
+// its own budgets short; exact candidates are emitted as soon as they verify.
+const SEARCH_DEADLINE_MS = 20_000;
+const DETAIL_DEADLINE_MS = 5_000;
+const DISCOVERY_DEADLINE_MS = 25_000;
 
 /** Search all configured profiles, then verify title/year/episode against each source's detail. */
 export async function discoverPlaybackAlternatives(

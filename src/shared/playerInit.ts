@@ -26,6 +26,8 @@ export interface PlayerInitData {
   recordHistory?: boolean;
   /** Internal session state: record only after the media engine confirms playback. */
   deferHistoryUntilPlayback?: boolean;
+  /** Use shorter startup checks while automatically probing a verified backup source. */
+  fastRecovery?: boolean;
   /** Preserve live/storage behavior when the same resource is opened in a separate window. */
   playbackKind?: PlayerPlaybackKind;
 }

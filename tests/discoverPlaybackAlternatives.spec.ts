@@ -101,7 +101,12 @@ describe('discoverPlaybackAlternatives', () => {
       },
     }));
 
-    const result = await discoverPlaybackAlternatives({ current, episodeIndex: 1, position: 0, excludedSourceIds: new Set() }, port, new AbortController().signal);
+    const result = await discoverPlaybackAlternatives({
+      current: { ...current, title: '海风 (2024)' },
+      episodeIndex: 1,
+      position: 0,
+      excludedSourceIds: new Set(),
+    }, port, new AbortController().signal);
 
     expect(result.candidates).toEqual([]);
     expect(port.loadDetail).toHaveBeenCalledTimes(1); // Only the exact-title candidate needs detail verification.
@@ -205,7 +210,7 @@ describe('discoverPlaybackAlternatives', () => {
         excludedSourceIds: new Set(),
       }, port, new AbortController().signal);
 
-      await vi.advanceTimersByTimeAsync(45_000);
+      await vi.advanceTimersByTimeAsync(20_000);
       await expect(pending).resolves.toMatchObject({
         searchIncomplete: true,
         incompleteSources: 9,
@@ -247,7 +252,7 @@ describe('discoverPlaybackAlternatives', () => {
         excludedSourceIds: new Set(),
       }, port, new AbortController().signal);
 
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(25_000);
       await expect(pending).resolves.toMatchObject({ candidates: [], incompleteSources: 24, truncated: false });
       expect(port.loadDetail).toHaveBeenCalledTimes(24);
     } finally {
@@ -279,6 +284,6 @@ describe('discoverPlaybackAlternatives', () => {
 
     expect(result.candidates).toHaveLength(24);
     expect(result.truncated).toBe(true);
-    expect(maxConcurrentLookups).toBe(4);
+    expect(maxConcurrentLookups).toBe(8);
   });
 });

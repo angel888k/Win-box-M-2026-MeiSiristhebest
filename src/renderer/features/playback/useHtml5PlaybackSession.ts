@@ -41,6 +41,7 @@ export interface Html5PlaybackSessionOptions {
   isImage: boolean;
   isAudio: boolean;
   liveHint: boolean;
+  firstFrameTimeoutMs?: number;
   liveLatencyMode?: LiveLatencyMode;
   onLivePlaybackTelemetry?: (telemetry: { isLive: boolean | null; latencySeconds: number | null; lowLatencySupported: boolean | null }) => void;
   playbackSource?: PlaybackSourceRef;
@@ -94,6 +95,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
     isImage,
     isAudio,
     liveHint,
+    firstFrameTimeoutMs,
     playbackSource,
     positionMemory,
     runtime,
@@ -168,7 +170,9 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
       const context = failure || classifyPlaybackFailure({ engine: 'unknown', reason });
       onPlaybackFailure?.(Math.max(0, video.currentTime || 0), reason, context);
     };
-    const armFirstFrameTimer = (timeoutMs = sessionState.getLivePlaybackKind() ? LIVE_FIRST_FRAME_TIMEOUT_MS : VOD_FIRST_FRAME_TIMEOUT_MS) => {
+    const armFirstFrameTimer = (timeoutMs = sessionState.getLivePlaybackKind()
+      ? LIVE_FIRST_FRAME_TIMEOUT_MS
+      : firstFrameTimeoutMs ?? VOD_FIRST_FRAME_TIMEOUT_MS) => {
       if (cancelled || playbackConfirmed || firstFrameTimer) return;
       firstFrameTimer = setTimeout(() => {
         firstFrameTimer = null;
@@ -627,5 +631,5 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
     };
     // Keep the existing session boundary: URL, kernel, prepared URL, and playback source changes restart the HTML5 session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, kernel, htmlUrl, progressKey, positionMemory, runtime, liveHint]);
+  }, [url, kernel, htmlUrl, progressKey, positionMemory, runtime, liveHint, firstFrameTimeoutMs]);
 }

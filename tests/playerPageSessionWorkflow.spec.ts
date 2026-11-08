@@ -223,6 +223,65 @@ describe('player page session workflow', () => {
     expect(history.recordHistory).toHaveBeenCalledOnce();
   });
 
+  it('bounds automatic backup probing and leaves remaining verified candidates available for manual selection', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = alternateCandidate();
+      const second = {
+        ...alternateCandidate(),
+        id: 'profile-c\u001fsource-c\u001fmovie-c',
+        sourceName: 'Source C',
+        data: {
+          ...alternateCandidate().data,
+          key: 'source-c',
+          meta: { fromKey: 'source-c', id: 'movie-c', vodId: 'movie-c', profileId: 'profile-c', sourceName: 'Source C' },
+        },
+      };
+      const session: PlayerPagePlaybackWorkflowPort = {
+        play: vi.fn(async input => ({
+          parse: 0,
+          url: `https://media.invalid/${input.key}.mp4`,
+          playUrl: '',
+          flag: input.flag,
+        })),
+        resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+        loadDetail: vi.fn(async () => null),
+        discover: vi.fn(async () => ({ candidates: [first, second], incompleteSources: 0, truncated: false })),
+        cleanupTemporaryFiles: vi.fn(async () => undefined),
+      };
+      const actions: PlayerPageSessionAction[] = [];
+      const workflow = createPlayerPageSessionWorkflow({
+        session,
+        history: { beginPlayerHistorySession: vi.fn(), recordHistory: vi.fn(), persist: vi.fn() },
+        sourceMemory: { rememberSource: vi.fn() },
+        publish: action => actions.push(action),
+      });
+
+      const initializing = workflow.applyInit(playbackInit());
+      await vi.advanceTimersByTimeAsync(0);
+      await initializing;
+      await vi.advanceTimersByTimeAsync(0);
+      await workflow.autoChangeParse(125, 'HTTP 403', 'media-failure');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.play).toHaveBeenCalledWith(expect.objectContaining({ key: 'source-b', fastRecovery: true }));
+      expect(session.play).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'source-c' }));
+
+      await vi.advanceTimersByTimeAsync(45_001);
+      expect(await workflow.autoChangeParse(92, 'segment failed', 'media-failure')).toBe(false);
+      expect(session.play).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'source-c' }));
+      expect(actions).toContainEqual(expect.objectContaining({
+        type: 'source-fallback-unavailable',
+        message: expect.stringContaining('已暂停自动试播'),
+      }));
+
+      expect(workflow.selectAlternative(second.id)).toBe(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.play).toHaveBeenCalledWith(expect.objectContaining({ key: 'source-c', fastRecovery: false }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lets the user force-refresh the backup-source search when the first scan is incomplete', async () => {
     const session: PlayerPagePlaybackWorkflowPort = {
       play: vi.fn(async () => ({ parse: 0, url: 'https://media.invalid/current.mp4', playUrl: '', flag: 'line-a' })),

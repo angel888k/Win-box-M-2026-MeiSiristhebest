@@ -112,6 +112,7 @@ function Harness({
   adaptiveAudioTracksRef,
   url = playbackUrl,
   liveHint = false,
+  firstFrameTimeoutMs,
   liveLatencyMode = 'stable',
 }: {
   pausedHandoff?: boolean;
@@ -127,6 +128,7 @@ function Harness({
   adaptiveAudioTracksRef?: MutableRefObject<AdaptiveAudioTrackController | null>;
   url?: string;
   liveHint?: boolean;
+  firstFrameTimeoutMs?: number;
   liveLatencyMode?: 'stable' | 'low-latency';
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -185,6 +187,7 @@ function Harness({
     isImage: false,
     isAudio: false,
     liveHint,
+    firstFrameTimeoutMs,
     liveLatencyMode,
     playbackSource,
     positionMemory,
@@ -426,6 +429,20 @@ describe('useHtml5PlaybackSession', () => {
     await act(async () => { await Promise.resolve(); });
     expect(video.play).toHaveBeenCalledOnce();
     await act(async () => { vi.advanceTimersByTime(11_999); });
+    expect(onPlaybackFailure).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(onPlaybackFailure).toHaveBeenCalledWith(45, 'first-frame-timeout', expect.objectContaining({ code: 'first-frame-timeout' }));
+  });
+
+  it('uses the shorter first-frame allowance for a fast automatic backup probe', async () => {
+    vi.useFakeTimers();
+    const onPlaybackFailure = vi.fn();
+    render(<Harness firstFrameTimeoutMs={8_000} onPlaybackFailure={onPlaybackFailure} />);
+    const video = screen.getByTestId('video') as HTMLVideoElement;
+
+    await act(async () => { await Promise.resolve(); });
+    expect(video.play).toHaveBeenCalledOnce();
+    await act(async () => { vi.advanceTimersByTime(7_999); });
     expect(onPlaybackFailure).not.toHaveBeenCalled();
     await act(async () => { vi.advanceTimersByTime(1); });
     expect(onPlaybackFailure).toHaveBeenCalledWith(45, 'first-frame-timeout', expect.objectContaining({ code: 'first-frame-timeout' }));

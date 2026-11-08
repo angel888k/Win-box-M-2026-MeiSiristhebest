@@ -167,7 +167,7 @@ describe('usePlayerPageSession', () => {
     unmount();
   });
 
-  it('autoChangeParse() 递增 parseOffset 轮转解析线路并保留播放秒数', async () => {
+  it('does not rerun the same source parser chain during automatic recovery', async () => {
     let initListener: ((data: PlayerInitData) => void) | null = null;
     const playCalls: Array<{ id: string; parseOffset?: number }> = [];
     const sessionPort: PlayerPageSessionPort = {
@@ -216,13 +216,19 @@ describe('usePlayerPageSession', () => {
     expect(result.current.parseName).toBe('解析一线');
     expect(playCalls[0].parseOffset).toBeUndefined();
 
-    // 触发自动切线，保留当前进度 125 秒
+    // The original resolution already tried this source's configured parsers.
+    // Recovery should search verified same-episode sources, not replay the same chain.
     await act(async () => {
       await result.current.autoChangeParse(125);
     });
-    await waitFor(() => expect(result.current.activeUrl).toBe('https://media.invalid/stream-parse-2.m3u8'));
-    expect(result.current.parseName).toBe('解析二线');
-    expect(playCalls[1].parseOffset).toBe(1);
+    expect(result.current.activeUrl).toBe('https://media.invalid/stream-parse-1.m3u8');
+    expect(result.current.parseName).toBe('解析一线');
+    expect(sessionPort.discover).toHaveBeenCalledWith(
+      expect.objectContaining({ position: 125, episodeIndex: 0 }),
+      expect.any(AbortSignal),
+      expect.any(Function),
+    );
+    expect(playCalls).toHaveLength(1);
     expect(result.current.init?.startTime).toBe(125);
 
     await act(async () => {
@@ -230,12 +236,13 @@ describe('usePlayerPageSession', () => {
       expect(await result.current.autoChangeParse(125)).toBe(true);
       expect(await result.current.autoChangeParse(125)).toBe(true);
     });
-    expect(playCalls.map(call => call.parseOffset)).toEqual([undefined, 1, 2, 3]);
+    expect(playCalls.map(call => call.parseOffset)).toEqual([undefined]);
+    expect(sessionPort.discover).toHaveBeenCalledOnce();
     await waitFor(() => expect(result.current.sourceFallback.kind).toBe('unavailable'));
 
     act(() => result.current.retryCurrent());
-    await waitFor(() => expect(sessionPort.play).toHaveBeenCalledTimes(5));
-    expect(playCalls[4]).toEqual({ id: 'episode-1', parseOffset: undefined });
+    await waitFor(() => expect(sessionPort.play).toHaveBeenCalledTimes(2));
+    expect(playCalls[1]).toEqual({ id: 'episode-1', parseOffset: undefined });
 
     unmount();
   });

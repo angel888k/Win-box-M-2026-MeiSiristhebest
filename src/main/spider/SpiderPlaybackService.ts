@@ -59,8 +59,8 @@ export interface SpiderPlaybackPorts {
   torrentPlay(): TorrentPlaybackPort | undefined;
 }
 
-const FAST_RECOVERY_SOURCE_TIMEOUT_MS = 8_000;
-const FAST_RECOVERY_PARSE_BUDGET_MS = 10_000;
+const FAST_RECOVERY_SOURCE_TIMEOUT_MS = 4_000;
+const FAST_RECOVERY_PARSE_BUDGET_MS = 6_000;
 
 /** Playback use case: translate a source result into a desktop-playable result. */
 export class SpiderPlaybackService {
