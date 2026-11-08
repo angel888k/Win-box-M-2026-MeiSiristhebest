@@ -8,7 +8,7 @@ export function useSearchPanelInteractions(open: boolean, onClose: () => void, i
   const triggerId = `${interactionId}-trigger`;
   const inputId = `${interactionId}-input`;
   const panelId = `${interactionId}-panel`;
-  const panelPosition = useAnchoredPanel(open, triggerId, panelId, 520);
+  const panelPosition = useAnchoredPanel(open, triggerId, panelId, 420);
   const onBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
     const panel = document.getElementById(panelId);
     if (!event.currentTarget.contains(event.relatedTarget) && !panel?.contains(event.relatedTarget)) onClose();

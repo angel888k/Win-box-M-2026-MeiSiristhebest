@@ -23,6 +23,7 @@ export default function SearchPanel({ bar = false }: { bar?: boolean }) {
     <SearchPanelView
       bar={bar}
       open={presenter.open}
+      panelMode={presenter.panelMode}
       {...interactions}
       portalTarget={document.body}
       query={presenter.query}
@@ -32,6 +33,8 @@ export default function SearchPanel({ bar = false }: { bar?: boolean }) {
       suggestionsLoading={presenter.suggestionsLoading}
       history={presenter.history}
       onShow={presenter.show}
+      onShowHotSearches={presenter.showHotSearches}
+      onShowSearchHistory={presenter.showSearchHistory}
       onClose={presenter.close}
       onSearch={search}
       onQueryChange={presenter.changeQuery}

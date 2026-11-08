@@ -7,6 +7,7 @@ const SUGGESTION_DEBOUNCE_MS = 250;
 
 export function useSearchPanelPresenter(ports: SearchPanelPorts) {
   const [open, setOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<'history' | 'hot'>('history');
   const [query, setQuery] = useState('');
   const [hotList, setHotList] = useState<MovieHotList | null>(null);
   const [hotLoading, setHotLoading] = useState(false);
@@ -17,14 +18,15 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || panelMode !== 'hot') return;
     let active = true;
+    setHotLoading(true);
     void ports.recommendations.loadHotList()
       .then((result) => { if (active) setHotList(result); })
       .catch(() => undefined)
       .finally(() => { if (active) setHotLoading(false); });
     return () => { active = false; };
-  }, [open, hotAttempt, ports]);
+  }, [open, panelMode, hotAttempt, ports]);
 
   useEffect(() => {
     let active = true;
@@ -45,11 +47,17 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
 
   const show = useCallback(() => {
     setHistory(ports.history.load());
-    setHotLoading(true);
+    setPanelMode('history');
     setSuggestions([]);
     setSuggestionsLoading(Boolean(query.trim()));
     setOpen(true);
   }, [ports, query]);
+
+  const showHotSearches = useCallback(() => {
+    setPanelMode('hot');
+    if (!hotList) setHotLoading(true);
+  }, [hotList]);
+  const showSearchHistory = useCallback(() => setPanelMode('history'), []);
 
   const search = useCallback(async (value: string): Promise<void> => {
     const term = value.trim();
@@ -73,6 +81,7 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
 
   const changeQuery = useCallback((value: string) => {
     setQuery(value);
+    if (value.trim()) setPanelMode('history');
     setSuggestions([]);
     setSuggestionsLoading(Boolean(value.trim()));
   }, []);
@@ -94,6 +103,7 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
 
   return {
     open,
+    panelMode,
     query,
     hotList,
     hotLoading,
@@ -101,6 +111,8 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
     suggestionsLoading,
     history,
     show,
+    showHotSearches,
+    showSearchHistory,
     close,
     search,
     changeQuery,

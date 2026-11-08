@@ -8,6 +8,7 @@ const HOT_RANK_MAX = 10;
 interface SearchPanelViewProps {
   bar: boolean;
   open: boolean;
+  panelMode: 'history' | 'hot';
   wrapId: string;
   triggerId: string;
   inputId: string;
@@ -22,6 +23,8 @@ interface SearchPanelViewProps {
   suggestionsLoading: boolean;
   history: string[];
   onShow(): void;
+  onShowHotSearches(): void;
+  onShowSearchHistory(): void;
   onClose(): void;
   onSearch(term: string): void;
   onQueryChange(value: string): void;
@@ -61,7 +64,7 @@ export function SearchPanelView(props: SearchPanelViewProps) {
               }}
             />
           </div>
-          <div className="sp-scope-note muted">搜索结果范围由搜索页选项决定（默认跨子仓全源）。侧栏子仓和站点只切换当前浏览内容；搜索后仍可按来源筛选。</div>
+          <div className="sp-scope-note muted">回车搜索全部来源，结果页可按来源筛选。</div>
           {props.query.trim() ? (
             <div className="sp-list">
               {props.suggestionsLoading && <div className="sp-item muted">联想中…</div>}
@@ -77,47 +80,54 @@ export function SearchPanelView(props: SearchPanelViewProps) {
               ))}
             </div>
           ) : (
-            <div className={`sp-cols${props.history.length === 0 ? ' sp-cols-no-history' : ''}`}>
-              {props.history.length > 0 && (
+            <>
+              <div className="sp-tabs" role="group" aria-label="搜索面板内容">
+                <button type="button" className="sp-tab ui-action" aria-pressed={props.panelMode === 'history'} onClick={props.onShowSearchHistory}>最近搜索</button>
+                <button type="button" className="sp-tab ui-action" aria-pressed={props.panelMode === 'hot'} onClick={props.onShowHotSearches}>热搜</button>
+              </div>
+              {props.panelMode === 'history' && (
                 <div className="sp-hist">
-                  <div className="sp-hot-tip muted">搜索历史（{props.history.length}/10）</div>
-                  <div className="sp-hist-list">
-                    {props.history.map((term) => (
-                      <div key={term} className="sp-item sp-hist-item">
-                        <button type="button" className="sp-hist-txt ui-action" title={term} onClick={() => props.onSearch(term)}>{term}</button>
-                        <button
-                          className="sp-hist-del"
-                          aria-label={`删除搜索记录 ${term}`}
-                          onClick={(event) => { event.stopPropagation(); props.onRemoveHistory(term); }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <button type="button" className="sp-clear" onClick={props.onClearHistory}>清空搜索记录</button>
+                  {props.history.length > 0 ? <div className="sp-hot-tip muted">搜索历史</div> : null}
+                  {props.history.length > 0 ? (
+                    <div className="sp-hist-list">
+                      {props.history.slice(0, 10).map((term) => (
+                        <div key={term} className="sp-item sp-hist-item">
+                          <button type="button" className="sp-hist-txt ui-action" title={term} onClick={() => props.onSearch(term)}>{term}</button>
+                          <button
+                            className="sp-hist-del"
+                            aria-label={`删除搜索记录 ${term}`}
+                            onClick={(event) => { event.stopPropagation(); props.onRemoveHistory(term); }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className="sp-item muted">还没有搜索记录，输入片名后按回车开始全源搜索。</div>}
+                  {props.history.length > 0 ? <button type="button" className="sp-clear" onClick={props.onClearHistory}>清空记录</button> : null}
                 </div>
               )}
-              <div className="sp-rank">
-                <div className="sp-hot-tip muted">电影热搜推荐 · 百度{props.hotList?.stale && props.hotList.items.length ? ' · 上次缓存' : ''}</div>
-                {props.hotList?.fetchedAt ? <div className="muted">获取于 {new Date(props.hotList.fetchedAt).toLocaleString('zh-CN')}</div> : null}
-                {!props.hotList?.items.length ? (
-                  <div className="sp-item muted">
-                    {props.hotLoading ? '正在加载热搜…' : <>热搜暂时获取失败，仍可直接搜索 <button onClick={props.onRetryHotList}>重试</button></>}
-                  </div>
-                ) : (
-                  <div className="sp-rank-list">
-                    {props.hotList.items.slice(0, HOT_RANK_MAX).map((item) => (
-                      <button type="button" key={item.title} className="sp-rank-item ui-action" onClick={() => props.onSearch(item.title)} title={`${item.title} · 热搜指数 ${item.score}`}>
-                        <span className={`sp-rank-no${item.rank <= 3 ? ' top' : ''}`}>{item.rank}</span>
-                        <span className="sp-rank-txt">{item.title}</span>
-                        <span className="muted sp-hot-score">{item.score}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+              {props.panelMode === 'hot' && (
+                <div className="sp-rank">
+                  <div className="sp-hot-tip muted">电影热搜推荐 · 百度{props.hotList?.stale && props.hotList.items.length ? ' · 上次缓存' : ''}</div>
+                  {!props.hotList?.items.length ? (
+                    <div className="sp-item muted">
+                      {props.hotLoading ? '正在加载热搜…' : <>热搜暂时获取失败，仍可直接搜索 <button onClick={props.onRetryHotList}>重试</button></>}
+                    </div>
+                  ) : (
+                    <div className="sp-rank-list">
+                      {props.hotList.items.slice(0, HOT_RANK_MAX).map((item) => (
+                        <button type="button" key={item.title} className="sp-rank-item ui-action" onClick={() => props.onSearch(item.title)} title={`${item.title} · 热搜指数 ${item.score}`}>
+                          <span className={`sp-rank-no${item.rank <= 3 ? ' top' : ''}`}>{item.rank}</span>
+                          <span className="sp-rank-txt">{item.title}</span>
+                          <span className="muted sp-hot-score">{item.score}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </section>, props.portalTarget,
       )}

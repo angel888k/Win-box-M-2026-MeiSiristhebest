@@ -17,6 +17,7 @@ import type { PlayerPageResolutionState, PlayerPageSessionAction } from './playe
 
 const MAX_AUTOMATIC_PARSE_SWITCHES = 3;
 const PREWARM_TTL_MS = 60_000;
+type AlternativeAttemptOutcome = 'resolved' | 'failed' | 'interrupted';
 
 export interface PlayerPageSessionWorkflowPorts {
   session: PlayerPagePlaybackWorkflowPort;
@@ -56,13 +57,26 @@ export function createPlayerPageSessionWorkflow(
   let fallbackSearchController: AbortController | null = null;
   let fallbackGeneration = 0;
   let queuedAlternativeAttempt: Promise<boolean> | null = null;
+  let resolvedAlternativeId: string | null = null;
+  let fallbackExhaustionReported = false;
   let lastFallbackPosition = 0;
   let lastPlaybackFailure: PlaybackFailureContext | undefined;
   let prewarmController: AbortController | null = null;
   let prewarmingKey = '';
   let preparedEpisode: { key: string; result: PlayResult; expiresAt: number } | null = null;
   const attemptedSourceIds = new Set<string>();
+  const resolvedCandidateIds = new Set<string>();
   const candidateById = new Map<string, { data: PlayerInitData; sourceName: string }>();
+
+  const reportAlternativeExhausted = () => {
+    if (fallbackExhaustionReported || resolvedAlternativeId || candidateById.size === 0) return;
+    fallbackExhaustionReported = true;
+    const resolvedCount = [...candidateById.keys()].filter(id => resolvedCandidateIds.has(id)).length;
+    const message = resolvedCount > 0
+      ? `已核验 ${candidateById.size} 个同剧同集来源，其中 ${resolvedCount} 个取得过播放地址但未能正常播放，其余来源未能解析；可以手动切换来源或重新搜索。`
+      : `已核验的 ${candidateById.size} 个同剧同集来源都未能取得可播放地址；可以手动切换来源或重新搜索。`;
+    publish({ type: 'source-fallback-unavailable', message });
+  };
 
   const cancelPrewarm = () => {
     prewarmController?.abort(new Error('下一集预解析已取消'));
@@ -86,10 +100,13 @@ export function createPlayerPageSessionWorkflow(
     fallbackSearchAttempted = false;
     fallbackSearchPromise = null;
     queuedAlternativeAttempt = null;
+    resolvedAlternativeId = null;
+    fallbackExhaustionReported = false;
     fallbackSearchController?.abort();
     fallbackSearchController = null;
     attemptedSourceIds.clear();
     candidateById.clear();
+    resolvedCandidateIds.clear();
     lastPlaybackFailure = undefined;
     const currentId = sourceId(data);
     if (currentId) attemptedSourceIds.add(currentId);
@@ -102,7 +119,10 @@ export function createPlayerPageSessionWorkflow(
     fallbackSearchController = null;
     fallbackSearchPromise = null;
     queuedAlternativeAttempt = null;
+    resolvedAlternativeId = null;
+    fallbackExhaustionReported = false;
     candidateById.clear();
+    resolvedCandidateIds.clear();
     publish({ type: 'source-fallback-cleared' });
   };
 
@@ -160,8 +180,6 @@ export function createPlayerPageSessionWorkflow(
     const controller = new AbortController();
     fallbackSearchController = controller;
     publish({ type: 'source-fallback-searching' });
-    let autoSwitchStarted = false;
-
     const promise = Promise.resolve().then(async () => {
       try {
         const result = await session.discover({
@@ -173,6 +191,7 @@ export function createPlayerPageSessionWorkflow(
         }, controller.signal, candidate => {
           if (fallbackGeneration !== searchGeneration || controller.signal.aborted || attemptedSourceIds.has(candidate.id)) return;
           candidateById.set(candidate.id, { data: candidate.data, sourceName: candidate.sourceName });
+          fallbackExhaustionReported = false;
           publish({
             type: 'source-fallback-candidate-found',
             candidate: {
@@ -181,13 +200,10 @@ export function createPlayerPageSessionWorkflow(
               profileName: candidate.profileName,
             },
           });
-          if (autoSwitchStarted) return;
-          autoSwitchStarted = true;
-          void startAlternative(candidate.id, position);
+          void attemptNextQueuedAlternative(position);
         });
         if (fallbackGeneration !== searchGeneration || controller.signal.aborted) return true;
 
-        candidateById.clear();
         for (const candidate of result.candidates) {
           candidateById.set(candidate.id, { data: candidate.data, sourceName: candidate.sourceName });
         }
@@ -206,13 +222,12 @@ export function createPlayerPageSessionWorkflow(
         // A candidate has already passed exact title/year/episode verification.
         // Unsearched sources cannot invalidate that evidence; requiring a complete
         // scan made failover impossible for large profiles with bounded search time.
-        if (candidates.length > 0) {
-          if (!autoSwitchStarted) await startAlternative(candidates[0].id, position);
+        if (candidateById.size > 0) {
+          void attemptNextQueuedAlternative(position);
           // Keep later exact candidates queued. Try the next only after the
           // active candidate fails, so two sources never start at once.
           return true;
         }
-        if (autoSwitchStarted) return true;
 
         const failureNote = lastPlaybackFailure ? `${playbackFailureSummary(lastPlaybackFailure)}。` : '';
         const message = result.searchIncomplete
@@ -231,6 +246,9 @@ export function createPlayerPageSessionWorkflow(
       } finally {
         if (fallbackSearchController === controller) fallbackSearchController = null;
         if (fallbackSearchPromise === promise) fallbackSearchPromise = null;
+        if (!resolvedAlternativeId && candidateById.size > 0) {
+          void attemptNextQueuedAlternative(lastFallbackPosition);
+        }
       }
     });
     fallbackSearchPromise = promise;
@@ -239,20 +257,43 @@ export function createPlayerPageSessionWorkflow(
 
   function attemptNextQueuedAlternative(position: number): Promise<boolean> {
     if (queuedAlternativeAttempt) return queuedAlternativeAttempt;
-    const candidate = [...candidateById.entries()].find(([id]) => !attemptedSourceIds.has(id));
-    if (!candidate) return Promise.resolve(false);
-    const attempt = startAlternative(candidate[0], position).finally(() => {
+    if (resolvedAlternativeId) return Promise.resolve(false);
+    const hasUnattemptedCandidate = [...candidateById.keys()].some(id => !attemptedSourceIds.has(id));
+    if (!hasUnattemptedCandidate) {
+      if (candidateById.size > 0 && !fallbackSearchPromise && !fallbackExhaustionReported) {
+        reportAlternativeExhausted();
+      }
+      return Promise.resolve(false);
+    }
+    const attempt = (async () => {
+      while (!resolvedAlternativeId) {
+        const candidate = [...candidateById.entries()].find(([id]) => !attemptedSourceIds.has(id));
+        if (!candidate) return false;
+        const outcome = await startAlternative(candidate[0], position, true);
+        if (outcome === 'resolved') return true;
+        if (outcome === 'interrupted') return false;
+      }
+      return false;
+    })().finally(() => {
       if (queuedAlternativeAttempt === attempt) queuedAlternativeAttempt = null;
+      const hasQueuedCandidate = [...candidateById.keys()].some(id => !attemptedSourceIds.has(id));
+      if (!resolvedAlternativeId && hasQueuedCandidate) {
+        void attemptNextQueuedAlternative(position);
+      } else if (!resolvedAlternativeId && candidateById.size > 0 && !fallbackSearchPromise && !fallbackExhaustionReported) {
+        reportAlternativeExhausted();
+      }
     });
     queuedAlternativeAttempt = attempt;
     return attempt;
   }
 
-  async function startAlternative(id: string, position: number): Promise<boolean> {
+  async function startAlternative(id: string, position: number, automatic = false): Promise<AlternativeAttemptOutcome> {
     const candidate = candidateById.get(id);
-    if (!candidate) return false;
+    if (!candidate) return 'interrupted';
     cancelPrewarm();
     attemptedSourceIds.add(id);
+    resolvedCandidateIds.delete(id);
+    resolvedAlternativeId = null;
     fallbackSearchAttempted = false;
     automaticParseSwitches = 0;
     parseOffset = 0;
@@ -266,15 +307,25 @@ export function createPlayerPageSessionWorkflow(
     updateInit(next);
     const result = await resolve(next, currentEpisodeIndex);
     if (result === 'drive-bind-required') {
-      publish({ type: 'source-fallback-unavailable', message: `${candidate.sourceName} 需要先登录网盘，绑定后可继续播放。` });
-      return true;
+      if (!automatic) {
+        publish({ type: 'source-fallback-unavailable', message: `${candidate.sourceName} 需要先登录网盘，绑定后可继续播放。` });
+        return 'resolved';
+      }
+      publish({ type: 'drive-bind-dismissed' });
+      return 'failed';
     }
     if (result === 'failed') {
-      // Resolution failures get the same bounded parser retries as media failures.
+      if (automatic) return 'failed';
+      // Manual selection keeps the existing parser fallback for the chosen source.
       void autoChangeParse(position, '备用源解析失败', 'resolution-failure');
-      return true;
+      return 'resolved';
     }
-    return result !== 'empty';
+    if (result === 'resolved') {
+      resolvedAlternativeId = id;
+      resolvedCandidateIds.add(id);
+      return 'resolved';
+    }
+    return 'interrupted';
   }
 
   async function autoChangeParse(
@@ -298,6 +349,7 @@ export function createPlayerPageSessionWorkflow(
     // verified sources immediately. Parser rotation remains for URL failures.
     if (cause === 'media-failure') {
       lastPlaybackFailure = failure;
+      resolvedAlternativeId = null;
       if (failure) publish({ type: 'playback-failure-reported', failure });
       return searchAlternativeSources(currentPosition);
     }
@@ -324,6 +376,8 @@ export function createPlayerPageSessionWorkflow(
     if (!currentInit || !session.discover || fallbackSearchPromise) return false;
     fallbackSearchAttempted = false;
     candidateById.clear();
+    resolvedCandidateIds.clear();
+    fallbackExhaustionReported = false;
     publish({ type: 'source-fallback-cleared' });
     return searchAlternativeSources(Math.max(0, currentPosition), true);
   }
