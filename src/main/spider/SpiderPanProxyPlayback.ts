@@ -4,6 +4,7 @@ import { parsePanProxyQuery } from './panProxyDescriptor';
 
 /** Infrastructure ports used by the spider-specific pan proxy use case. */
 export interface SpiderPanProxyPlaybackPorts {
+  fastRecovery?: boolean;
   logger: Pick<Logger, 'i' | 'w'>;
   isBaiduDescriptor(url: string): boolean;
   baiduShareCode(url: string): string;
@@ -39,6 +40,17 @@ export async function resolveSpiderPanProxyPlayback(
   const isPanProxy = /[?&]do=pan\b/i.test(url);
   const isJvmLocalProxy = /127\.0\.0\.1:-1/i.test(url);
   if (!url || (!isPanProxy && !isJvmLocalProxy && !panJson)) return null;
+
+  if (ports.fastRecovery && (isPanProxy || panJson)) {
+    ports.logger.w('play: 自动换源跳过需要网盘解链/转存的候选，保留手动选择: ' + key);
+    return {
+      ...result,
+      parse: 1,
+      url: '',
+      playUrl: '',
+      message: '自动换源跳过需要网盘解链或转存的候选；可在备用源列表中手动选择该来源',
+    };
+  }
 
   const pan = parsePanProxyQuery(url);
   const panKeys = Object.keys(pan).join(',');

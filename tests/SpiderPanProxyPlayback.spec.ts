@@ -52,6 +52,25 @@ describe('resolveSpiderPanProxyPlayback', () => {
     expect(adapters.resolveBaidu).not.toHaveBeenCalled();
   });
 
+  it('skips cloud-drive transfer in automatic recovery and preserves manual source selection', async () => {
+    const adapters = ports({ fastRecovery: true });
+    const result = await resolveSpiderPanProxyPlayback(
+      playResult('http://127.0.0.1:-1/proxy?do=pan&site=quark&shareId=abc&fileId=episode'),
+      'source-a',
+      'main',
+      'episode-a',
+      source,
+      adapters,
+    );
+
+    expect(result?.parse).toBe(1);
+    expect(result?.message).toContain('手动选择');
+    expect(adapters.probeSelfResolveUrl).not.toHaveBeenCalled();
+    expect(adapters.resolveBaidu).not.toHaveBeenCalled();
+    expect(adapters.resolveUc).not.toHaveBeenCalled();
+    expect(adapters.resolveQuark).not.toHaveBeenCalled();
+  });
+
   it('prefers the source JVM proxy and returns it when its media probe succeeds', async () => {
     const adapters = ports({ probeSelfResolveUrl: vi.fn(async () => true) });
     const result = await resolveSpiderPanProxyPlayback(

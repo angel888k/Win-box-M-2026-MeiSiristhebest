@@ -9,7 +9,7 @@ import { resolveSpiderPanProxyPlayback as resolveSpiderPanProxyPlaybackUseCase }
 type NativeDriveProvider = 'quark' | 'uc' | 'baidu';
 
 export interface NativeDriveSharePlaybackPort {
-  resolve(id: string, flag: string): Promise<{
+  resolve(id: string, flag: string, fastRecovery?: boolean): Promise<{
     result: PlayResult | null;
     failures: Record<NativeDriveProvider, string>;
   }>;
@@ -87,7 +87,7 @@ export class SpiderPlaybackService {
     parseOffset = 0,
     fastRecovery = false,
   ): Promise<PlayResult> {
-    const nativeShare = await this.ports.nativeDriveSharePlayback.resolve(id, flag);
+    const nativeShare = await this.ports.nativeDriveSharePlayback.resolve(id, flag, fastRecovery);
     if (nativeShare.result) return nativeShare.result;
     const quarkFail = nativeShare.failures.quark;
     const ucFail = nativeShare.failures.uc;
@@ -120,6 +120,7 @@ export class SpiderPlaybackService {
         }
       }
       const panPlaybackResult = await resolveSpiderPanProxyPlaybackUseCase(r, key, flag, id, b, {
+        fastRecovery,
         logger: this.ports.logger,
         isBaiduDescriptor: this.ports.isBaiduPanDescriptor,
         baiduShareCode: this.ports.baiduShareCode,

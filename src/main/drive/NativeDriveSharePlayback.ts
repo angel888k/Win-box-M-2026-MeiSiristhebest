@@ -49,7 +49,7 @@ export interface NativeDriveSharePorts {
 export class NativeDriveSharePlayback {
   constructor(private readonly ports: NativeDriveSharePorts) {}
 
-  async resolve(id: string, flag: string): Promise<NativeDriveShareOutcome> {
+  async resolve(id: string, flag: string, fastRecovery = false): Promise<NativeDriveShareOutcome> {
     const failures: Record<NativeDriveProvider, string> = { quark: '', uc: '', baidu: '' };
     const unsupported = unsupportedNestedProvider(id);
     if (unsupported) {
@@ -61,6 +61,24 @@ export class NativeDriveSharePlayback {
           flag,
           jx: 0,
           message: `该线路使用「${unsupported}」网盘（桌面端暂不支持解链）——请换夸克 / 百度 / UC 线路再播`,
+        },
+        failures,
+      };
+    }
+
+    // Automatic recovery must not enter account-drive transfers: Quark/UC/Baidu
+    // may enqueue remote saves and poll for tens of seconds. A user-selected
+    // source still uses the full path; recovery continues with the next source.
+    if (fastRecovery && this.requiresNativeDriveResolution(id, flag)) {
+      this.ports.logger.w('play: 自动换源跳过网盘解链/转存候选，保留手动选择');
+      return {
+        result: {
+          parse: 1,
+          url: '',
+          playUrl: '',
+          flag,
+          jx: 0,
+          message: '自动换源跳过需要网盘解链或转存的候选；可在备用源列表中手动选择该来源',
         },
         failures,
       };
@@ -125,6 +143,17 @@ export class NativeDriveSharePlayback {
     }
 
     return { result: null, failures };
+  }
+
+  private requiresNativeDriveResolution(id: string, flag: string): boolean {
+    return /[?&]do=pan\b/i.test(id)
+      || this.ports.isQuarkPanProxy(id)
+      || this.ports.isBaiduDescriptor(id)
+      || !!extractBaiduSharedFile(id)
+      || !!extractUcShare(id, flag)
+      || isUcSharePlay(id)
+      || isQuarkSharePlay(id, flag)
+      || isBaiduSharePlay(id);
   }
 
   private async resolveQuark(id: string, flag: string): Promise<{ result: PlayResult | null; failure: string }> {
