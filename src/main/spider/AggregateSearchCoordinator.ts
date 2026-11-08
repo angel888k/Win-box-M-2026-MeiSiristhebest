@@ -1,5 +1,5 @@
 import type { Logger, SearchAllProgressEvent, SearchAllReport, SourceBean, UserProfile, VodItem, SiteConfig } from '../../shared/types';
-import { mergeSearchResults, type AggSearchInput } from '../../engine/vod/aggSearch';
+import { mergeSearchReportUpdates, mergeSearchResults, type AggSearchInput } from '../../engine/vod/aggSearch';
 import { throwIfSearchAborted } from '../../engine/vod/searchRuntime';
 import {
   searchAcrossProfiles,
@@ -29,11 +29,7 @@ export interface SearchReadinessPort {
   prepare(options: {
     sources: readonly SourceBean[];
     unsupportedScopes: ReadonlySet<string>;
-    term: string;
-    profileId: string;
-    profileName?: string;
     signal?: AbortSignal;
-    onProgress?: (event: SearchAllProgressEvent) => void;
   }): Promise<{ active: number[]; skipped: Array<AggSearchInput | null> }>;
 }
 
@@ -48,6 +44,7 @@ export interface AggregateSearchOptions {
   refresh?: boolean;
   profileId?: string;
   profileIds?: string[];
+  sourceRefs?: Array<{ profileId: string; key: string }>;
 }
 
 /** Narrow consumer contract for the aggregate-search use case. */
@@ -105,17 +102,19 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     if (!term) throw new Error('请输入搜索关键词');
     throwIfSearchAborted(signal);
     const version = this.currentStateVersion();
+    const sourceRefs = normalizeSourceRefs(opts?.sourceRefs);
     const key = JSON.stringify([
       this.dependencies.profiles.revision(),
       version.configuration,
       version.credentials,
       term,
       opts?.profileIds ?? opts?.profileId ?? this.dependencies.profiles.activeProfileId(),
+      sourceRefs,
       !!opts?.refresh,
     ]);
     return this.requestBroker.run(
       key,
-      (publish, requestSignal) => this.execute(term, opts, publish, requestSignal, version),
+      (publish, requestSignal) => this.execute(term, { ...opts, sourceRefs }, publish, requestSignal, version),
       onProgress,
       signal,
     );
@@ -138,7 +137,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
 
   private async execute(
     term: string,
-    opts: { refresh?: boolean; profileId?: string; profileIds?: string[] } | undefined,
+    opts: AggregateSearchOptions | undefined,
     onProgress?: (event: SearchAllProgressEvent) => void,
     signal?: AbortSignal,
     version: SearchStateVersion = this.currentStateVersion(),
@@ -158,7 +157,11 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
         profileOrder,
         profileName: profile.name || profileId,
         context,
-        total: this.dependencies.sources.searchable(profileId, context.config).length,
+        total: filterSourcesByRefs(
+          this.dependencies.sources.searchable(profileId, context.config),
+          profileId,
+          opts.sourceRefs,
+        ).length,
       };
     });
     return searchAcrossProfiles({
@@ -172,7 +175,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
       searchProfile: (entry, profileProgress, workerBudget, profileSignal) =>
         this.searchSingleProfile(
           term,
-          { refresh: opts.refresh, profileId: entry.profileId },
+          { refresh: opts.refresh, profileId: entry.profileId, sourceRefs: opts.sourceRefs },
           profileProgress,
           entry.context,
           entry.profileName,
@@ -186,7 +189,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
 
   private async searchSingleProfile(
     wd: string,
-    opts?: { refresh?: boolean; profileId?: string },
+    opts?: AggregateSearchOptions,
     progress?: (event: SearchAllProgressEvent) => void,
     capturedContext?: { profileId: string; config: SiteConfig | null },
     profileNameOverride?: string,
@@ -201,7 +204,13 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     const context = capturedContext ?? this.dependencies.profiles.executionContext(opts?.profileId);
     const profileId = context.profileId;
     const profileName = profileNameOverride ?? this.dependencies.profiles.list().find((profile) => profile.id === profileId)?.name;
-    const cacheKey = JSON.stringify([profileId, version.configuration, term, version.credentials]);
+    const cacheKey = JSON.stringify([
+      profileId,
+      version.configuration,
+      term,
+      version.credentials,
+      opts?.sourceRefs ?? null,
+    ]);
     // ★ 秒回：同一关键词 TTL 内再搜 → 直接给上次报告（带 cachedAt，UI 提示「本地缓存 · 点「重新搜索」刷新」）
     if (!opts?.refresh) {
       const hit = this.cache.getEntryByKey(cacheKey, this.dependencies.timing.now());
@@ -212,7 +221,11 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     } else {
       this.cache.deleteByKey(cacheKey);
     }
-    const pool = this.dependencies.sources.searchable(profileId, context.config);
+    const pool = filterSourcesByRefs(
+      this.dependencies.sources.searchable(profileId, context.config),
+      profileId,
+      opts?.sourceRefs,
+    );
     const results: Array<AggSearchInput | null> = Array.from({ length: pool.length }, () => null);
     // Only explicit unsupported formats are skipped for this session. A manual
     // refresh rechecks them; network/runtime/ARM bridge errors remain retryable.
@@ -230,11 +243,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     const { active, skipped } = await this.dependencies.readiness.prepare({
       sources: pool,
       unsupportedScopes,
-      term,
-      profileId,
-      profileName,
       signal,
-      onProgress: progress,
     });
     const total = active.length;
     let done = 0;
@@ -369,7 +378,31 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     const pendingSources = all.filter((r) => r.status === 'error' && (r.error || '').startsWith('运行时就绪中')).length;
     if (pendingSources > 0) report.pendingSources = pendingSources;
     if (this.isCurrent(version)) {
-      this.cache.setByKey(cacheKey, report, this.dependencies.timing.now()); // 不缓存配置/凭据变更前启动的过期结果
+      const cachedAt = this.dependencies.timing.now();
+      if (opts?.sourceRefs?.length) {
+        // A readiness retry is a partial refresh. Merge it into the canonical
+        // profile report so a later cache hit cannot resurrect its stale
+        // "runtime preparing" row; do not retain an extra partial copy.
+        const fullProfileCacheKey = JSON.stringify([
+          profileId,
+          version.configuration,
+          term,
+          version.credentials,
+          null,
+        ]);
+        const cached = this.cache.getEntryByKey(fullProfileCacheKey, cachedAt);
+        if (cached) {
+          const updated = mergeSearchReportUpdates(cached.value, report, undefined, profileId);
+          const pendingCount = updated.perSource.filter((source) =>
+            source.status === 'error' && (source.error || '').startsWith('运行时就绪中'),
+          ).length;
+          if (pendingCount > 0) updated.pendingSources = pendingCount;
+          else delete updated.pendingSources;
+          this.cache.setByKey(fullProfileCacheKey, updated, cachedAt);
+        }
+      } else {
+        this.cache.setByKey(cacheKey, report, cachedAt); // 不缓存配置/凭据变更前启动的过期结果
+      }
     }
     // ★ 诊断摘要（2026-09-24）：一行看清「引擎侧到底卡在哪」——首结果耗时/总耗时/推送条数/跳过数。
     //   下次用户再报「慢」，看这一行即可区分是引擎慢还是界面慢（跳过数 > 0 说明有源还在后台准备运行时）。
@@ -388,4 +421,26 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
   private isCurrent(version: SearchStateVersion): boolean {
     return version.configuration === this.configurationRevision && version.credentials === this.credentialRevision;
   }
+}
+
+function normalizeSourceRefs(sourceRefs?: Array<{ profileId: string; key: string }>): Array<{ profileId: string; key: string }> | undefined {
+  if (!sourceRefs?.length) return undefined;
+  const unique = new Map<string, { profileId: string; key: string }>();
+  for (const ref of sourceRefs) {
+    const profileId = String(ref.profileId || '').trim();
+    const key = String(ref.key || '').trim();
+    if (!profileId || !key) continue;
+    unique.set(JSON.stringify([profileId, key]), { profileId, key });
+  }
+  return [...unique.values()].sort((a, b) => a.profileId.localeCompare(b.profileId) || a.key.localeCompare(b.key));
+}
+
+function filterSourcesByRefs(
+  sources: SourceBean[],
+  profileId: string,
+  sourceRefs?: Array<{ profileId: string; key: string }>,
+): SourceBean[] {
+  if (!sourceRefs) return sources;
+  const keys = new Set(sourceRefs.filter((ref) => ref.profileId === profileId).map((ref) => ref.key));
+  return sources.filter((source) => keys.has(source.key));
 }

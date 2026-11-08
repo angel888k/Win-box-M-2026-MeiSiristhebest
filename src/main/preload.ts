@@ -147,11 +147,12 @@ const api = {
     search: (a: { key: string; wd: string; profileId?: string; requestId?: string }) => invoke(IPC.VOD_SEARCH, a),
     cancelSearch: (requestId: string) => ipcRenderer.send(IPC.VOD_SEARCH_CANCEL, requestId),
     /** ★ opts.refresh=true 忽略本地缓存强制重搜（UI「重新搜索」）；缺省命中 5 分钟缓存即秒回 */
-    searchAll: (wd: string, opts?: { refresh?: boolean; profileId?: string; profileIds?: string[] }, requestId?: string) => invoke(IPC.VOD_SEARCH_ALL, {
+    searchAll: (wd: string, opts?: { refresh?: boolean; profileId?: string; profileIds?: string[]; sourceRefs?: Array<{ profileId: string; key: string }> }, requestId?: string) => invoke(IPC.VOD_SEARCH_ALL, {
       wd,
       refresh: !!opts?.refresh,
       profileId: opts?.profileId,
       profileIds: opts?.profileIds,
+      sourceRefs: opts?.sourceRefs,
       requestId,
     }),
     cancelSearchAll: (requestId: string) => ipcRenderer.send(IPC.VOD_SEARCH_ALL_CANCEL, requestId),

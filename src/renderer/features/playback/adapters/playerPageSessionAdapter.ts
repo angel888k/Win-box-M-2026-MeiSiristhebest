@@ -17,6 +17,7 @@ export const playerPageSessionAdapter: PlayerPageSessionPort = {
   discover: async (input, signal, onCandidate) => discoverPlaybackAlternatives(input, {
     search: async (query, searchSignal, onReport, refresh = false) => {
       const result = await searchMovieSources(query, refresh, movieSourcesSearchAdapter, undefined, searchSignal, {
+        priorityProfileId: input.current.meta?.profileId,
         onSource: (sourceReport, progress) => onReport({
           ...sourceReport,
           pendingSources: Math.max(0, progress.total - progress.done),

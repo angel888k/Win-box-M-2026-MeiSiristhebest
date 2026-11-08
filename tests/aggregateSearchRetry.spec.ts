@@ -22,6 +22,21 @@ function createClock() {
 }
 
 describe('AggregateSearchRetrySchedule', () => {
+  it('uses a 10-second probe with a six-minute retry limit by default', () => {
+    const clock = createClock();
+    const schedule = new AggregateSearchRetrySchedule(clock);
+    const retry = vi.fn();
+
+    for (let i = 0; i < 36; i++) {
+      expect(schedule.schedule(() => true, retry)).toBe(true);
+      expect(clock.schedule).toHaveBeenLastCalledWith(expect.any(Function), 10_000);
+      clock.runNext();
+    }
+
+    expect(schedule.schedule(() => true, retry)).toBe(false);
+    expect(retry).toHaveBeenCalledTimes(36);
+  });
+
   it('runs a retry only after its configured delay and while its search is current', () => {
     const clock = createClock();
     const schedule = new AggregateSearchRetrySchedule(clock, { delayMs: 30_000, maxAttempts: 12 });

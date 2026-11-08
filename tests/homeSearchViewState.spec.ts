@@ -15,6 +15,14 @@ const report: SearchAllReport = {
 };
 
 describe('home search presentation model', () => {
+  it('keeps completed cards visible while retrying only pending sources', () => {
+    const current = { ...initialHomeSearchViewState, report };
+
+    expect(reduceHomeSearchViewState(current, {
+      type: 'search-started', scope: 'all', aggregate: true, retainReport: true,
+    }).report).toBe(report);
+  });
+
   it('starts aggregate searches with a clean page while retaining independent match preferences', () => {
     const current = {
       ...initialHomeSearchViewState,

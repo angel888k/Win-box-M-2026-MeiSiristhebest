@@ -160,7 +160,7 @@ declare global {
   search: (a: { key: string; wd: string; profileId?: string; requestId?: string }) => Promise<IpcResult<VodItem[]>>;
   cancelSearch: (requestId: string) => void;
         /** ★ 全源搜索：refresh=true 忽略本地缓存强制重搜（「重新搜索」按钮）；默认命中缓存即秒回 */
-  searchAll: (wd: string, opts?: { refresh?: boolean; profileId?: string; profileIds?: string[] }, requestId?: string) => Promise<IpcResult<SearchAllReport>>;
+   searchAll: (wd: string, opts?: { refresh?: boolean; profileId?: string; profileIds?: string[]; sourceRefs?: Array<{ profileId: string; key: string }> }, requestId?: string) => Promise<IpcResult<SearchAllReport>>;
   cancelSearchAll: (requestId: string) => void;
         /** ★ 聚合搜索逐源进度（边搜边出）：返回退订函数 */
         onSearchAllProgress: (cb: (ev: SearchAllProgressEvent) => void) => () => void;

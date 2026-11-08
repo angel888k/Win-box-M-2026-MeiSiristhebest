@@ -13,10 +13,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function makeSource(): SourceBean {
+function makeSource(key = 'source-a'): SourceBean {
   return {
-    key: 'source-a',
-    name: 'Source A',
+    key,
+    name: key,
     type: 0,
     api: 'https://example.test/api',
     searchable: 1,
@@ -34,8 +34,12 @@ function makeSource(): SourceBean {
   };
 }
 
-function makeCoordinator(search: AggregateSearchDependencies['sources']['search']) {
-  const source = makeSource();
+function makeCoordinator(
+  search: AggregateSearchDependencies['sources']['search'],
+  sources: SourceBean[] = [makeSource()],
+  readiness?: AggregateSearchDependencies['readiness'],
+) {
+  const source = sources[0]!;
   const dependencies: AggregateSearchDependencies = {
     profiles: {
       list: () => [{ id: 'ProfileA', name: 'Profile A' }],
@@ -45,10 +49,10 @@ function makeCoordinator(search: AggregateSearchDependencies['sources']['search'
       activeSourceKey: () => source.key,
     },
     sources: {
-      searchable: () => [source],
+      searchable: () => sources,
       search,
     },
-    readiness: {
+    readiness: readiness ?? {
       prepare: async ({ sources }) => ({
         active: sources.map((_source, index) => index),
         skipped: sources.map(() => null),
@@ -74,6 +78,69 @@ function makeCoordinator(search: AggregateSearchDependencies['sources']['search'
 }
 
 describe('AggregateSearchCoordinator lifecycle', () => {
+  it('can retry one pending source without searching the rest of the profile', async () => {
+    const search = vi.fn<AggregateSearchDependencies['sources']['search']>().mockResolvedValue([]);
+    const coordinator = makeCoordinator(search, [makeSource('source-a'), makeSource('source-b')]);
+
+    const targeted = await coordinator.run('Movie', {
+      profileId: 'ProfileA',
+      sourceRefs: [{ profileId: 'ProfileA', key: 'source-a' }],
+    });
+    expect(search).toHaveBeenCalledOnce();
+    expect(targeted.perSource.map((entry) => entry.key)).toEqual(['source-a']);
+
+    await coordinator.run('Movie', { profileId: 'ProfileA' });
+    expect(search).toHaveBeenCalledTimes(3);
+    expect(search.mock.calls.map(([source]) => source.key)).toEqual(['source-a', 'source-a', 'source-b']);
+  });
+
+  it('merges a completed readiness retry into the full-search cache', async () => {
+    let readinessCalls = 0;
+    const readiness: AggregateSearchDependencies['readiness'] = {
+      prepare: async ({ sources }) => {
+        const active: number[] = [];
+        const skipped: Array<{ key: string; name: string; status: 'error'; error: string; ms: number } | null> =
+          Array.from({ length: sources.length }, () => null);
+        for (const [index, source] of sources.entries()) {
+          if (source.key === 'java-source' && readinessCalls === 0) {
+            skipped[index] = {
+              key: source.key,
+              name: source.name,
+              status: 'error',
+              error: '运行时就绪中：测试转换',
+              ms: 0,
+            };
+          } else {
+            active.push(index);
+          }
+        }
+        readinessCalls++;
+        return { active, skipped };
+      },
+    };
+    const search = vi.fn<AggregateSearchDependencies['sources']['search']>().mockResolvedValue([]);
+    const coordinator = makeCoordinator(search, [makeSource('ready-source'), makeSource('java-source')], readiness);
+
+    const initial = await coordinator.run('Movie', { profileId: 'ProfileA' });
+    expect(initial.pendingSources).toBe(1);
+    expect(search.mock.calls.map(([source]) => source.key)).toEqual(['ready-source']);
+
+    const retry = await coordinator.run('Movie', {
+      profileId: 'ProfileA',
+      sourceRefs: [{ profileId: 'ProfileA', key: 'java-source' }],
+    });
+    expect(retry.perSource.map((source) => source.key)).toEqual(['java-source']);
+    expect(search.mock.calls.map(([source]) => source.key)).toEqual(['ready-source', 'java-source']);
+
+    const cached = await coordinator.run('Movie', { profileId: 'ProfileA' });
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(cached.pendingSources).toBeUndefined();
+    expect(cached.perSource.map((source) => [source.key, source.status])).toEqual([
+      ['ready-source', 'empty'],
+      ['java-source', 'empty'],
+    ]);
+  });
+
   it('passes caller cancellation to the active source request and rejects the waiter promptly', async () => {
     let sourceSignal: AbortSignal | undefined;
     const search = vi.fn<AggregateSearchDependencies['sources']['search']>((_source, _term, _budget, signal) => {

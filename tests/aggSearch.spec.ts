@@ -1,6 +1,6 @@
 // tests/aggSearch.spec.ts — 聚合搜索汇总：不去重 / 来源标注 / 错误隔离 / 统计
 import { describe, it, expect } from 'vitest';
-import { mergeSearchReports, mergeSearchResults, SearchResultsAccumulator, isSearchableSource, type AggSearchInput } from '../src/engine/vod/aggSearch';
+import { mergeSearchReportUpdates, mergeSearchReports, mergeSearchResults, SearchResultsAccumulator, isSearchableSource, type AggSearchInput } from '../src/engine/vod/aggSearch';
 import type { VodItem } from '../src/shared/types';
 
 function v(id: string, name: string, src: string): VodItem {
@@ -8,6 +8,54 @@ function v(id: string, name: string, src: string): VodItem {
 }
 
 describe('incremental search reports', () => {
+  it('merges a targeted retry into the previous report and replaces only that source', () => {
+    const previous = mergeSearchResults([
+      { profileId: 'profile-a', key: 'ready', name: 'Ready', status: 'ok', items: [v('old-ready', 'Existing result', 'ready')] },
+      { profileId: 'profile-a', key: 'pending', name: 'Pending', status: 'error', error: '运行时就绪中' },
+      { profileId: 'profile-b', key: 'ready', name: 'Other profile', status: 'ok', items: [v('other-profile', 'Other profile result', 'ready')] },
+    ]);
+    previous.pendingSources = 1;
+    const update = mergeSearchResults([
+      { profileId: 'profile-a', key: 'pending', name: 'Pending', status: 'ok', items: [v('new-pending', 'Prepared result', 'pending')] },
+    ]);
+    const merged = mergeSearchReportUpdates(previous, update);
+
+    expect(merged.perSource.map((source) => [source.profileId, source.key])).toEqual([
+      ['profile-a', 'ready'],
+      ['profile-a', 'pending'],
+      ['profile-b', 'ready'],
+    ]);
+    expect(merged.items.map((item) => item.id)).toEqual(['old-ready', 'new-pending', 'other-profile']);
+    expect(merged.pendingSources).toBeUndefined();
+    expect(merged.failedSources).toBe(0);
+  });
+
+  it('keeps the pending count while a partial retry is streaming', () => {
+    const previous = mergeSearchResults([
+      { profileId: 'profile-a', key: 'pending', name: 'Pending', status: 'error', error: '运行时就绪中' },
+    ]);
+    previous.pendingSources = 1;
+    const partial = mergeSearchResults([
+      { profileId: 'profile-a', key: 'pending', name: 'Pending', status: 'ok', items: [v('new', 'Prepared result', 'pending')] },
+    ]);
+    expect(mergeSearchReportUpdates(previous, partial, 1).pendingSources).toBe(1);
+  });
+
+  it('uses the active profile identity for pending rows from a single-profile search', () => {
+    const previous = mergeSearchResults([
+      { key: 'pending', name: 'Pending', status: 'error', error: '运行时就绪中' },
+    ]);
+    previous.pendingSources = 1;
+    const update = mergeSearchResults([
+      { profileId: 'profile-a', key: 'pending', name: 'Pending', status: 'ok', items: [v('prepared', 'Prepared result', 'pending')] },
+    ]);
+
+    const merged = mergeSearchReportUpdates(previous, update, undefined, 'profile-a');
+    expect(merged.perSource).toHaveLength(1);
+    expect(merged.perSource[0]).toMatchObject({ profileId: 'profile-a', key: 'pending', status: 'ok' });
+    expect(merged.items.map((item) => item.id)).toEqual(['prepared']);
+  });
+
   it('orders streamed sources by requested profile and source order, not completion time', () => {
     const accumulator = new SearchResultsAccumulator();
     accumulator.add({ profileId: 'profile-b', key: 'b-late', name: 'B late', status: 'ok', items: [v('b-late', 'B late', 'b-late')] }, { profileOrder: 1, sourceOrder: 1 });

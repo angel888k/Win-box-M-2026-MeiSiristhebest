@@ -8,6 +8,7 @@ import type {
   HomeSearchPort,
 } from './homePorts';
 import type { HomeSearchViewAction, HomeSearchViewState } from './homeSearchViewState';
+import { mergeSearchReportUpdates } from '../../../../engine/vod/aggSearch';
 import { AggregateSearchRetrySchedule } from './aggregateSearchRetry';
 import { openHomeSearchFolder, resolveHomeSearchFolderExit, type HomeSearchFolderBack } from './homeSearchFolder';
 import { executeHomeSearch, type HomeSearchExecutionScope } from './homeSearchExecution';
@@ -70,6 +71,7 @@ export class HomeSearchWorkflow {
   private searchGeneration = 0;
   private activeSearchController: AbortController | null = null;
   private readonly aggregateRetry: AggregateSearchRetrySchedule;
+  private pendingAggregateReport: SearchAllReport | null = null;
   private folderBack: HomeSearchFolderBack | null = null;
 
   constructor(
@@ -88,11 +90,13 @@ export class HomeSearchWorkflow {
 
   dispose(): void {
     this.aggregateRetry.cancel();
+    this.pendingAggregateReport = null;
     this.invalidatePendingSearch();
   }
 
   cancelPendingSearch = (): void => {
     this.aggregateRetry.reset();
+    this.pendingAggregateReport = null;
     this.invalidatePendingSearch();
   };
 
@@ -172,6 +176,7 @@ export class HomeSearchWorkflow {
     forceAllScope?: boolean,
     forceAllProfileScope?: boolean,
     retrying = false,
+    retrySourceRefs?: Array<{ profileId: string; key: string }>,
   ): Promise<void> => {
     const context = this.context;
     const { route, search, browse, presentation } = context;
@@ -185,13 +190,17 @@ export class HomeSearchWorkflow {
       aggregateMode,
     } = search;
     const term = (termOverride ?? currentTerm).trim();
+    const previousReport = retrySourceRefs ? this.pendingAggregateReport ?? search.report : null;
     if (!term) {
       this.cancelPendingSearch();
       presentation.dispatchSearch({ type: 'search-preparation-cleared' });
       presentation.setSearchLoading(false);
       return;
     }
-    if (!retrying) this.aggregateRetry.reset();
+    if (!retrying) {
+      this.aggregateRetry.reset();
+      this.pendingAggregateReport = null;
+    }
 
     if (pathname !== '/search' && !navigation.isSearchWindow()) {
       this.cancelPendingSearch();
@@ -237,7 +246,7 @@ export class HomeSearchWorkflow {
     const isAggregate = scope.kind !== 'current';
     presentation.setSearchLoading(true);
     presentation.setSearchError('');
-    presentation.dispatchSearch({ type: 'search-started', scope: scope.kind, aggregate: isAggregate });
+    presentation.dispatchSearch({ type: 'search-started', scope: scope.kind, aggregate: isAggregate, retainReport: !!retrySourceRefs });
     presentation.clearBrowseResults();
     if (isAggregate) presentation.dispatchSearch({ type: 'search-progress-updated', progress: null });
 
@@ -245,6 +254,7 @@ export class HomeSearchWorkflow {
       const execution = await executeHomeSearch({
         term,
         refresh: force,
+        sourceRefs: retrySourceRefs,
         scope,
         signal,
         isCurrent: () => this.isCurrentSearchGeneration(generation),
@@ -252,7 +262,12 @@ export class HomeSearchWorkflow {
         api: this.api,
         aggregateClock: this.ports.aggregateClock,
         wallClock: this.ports.wallClock,
-        publishPartialReport: (partialReport) => presentation.dispatchSearch({ type: 'search-report-updated', report: partialReport }),
+        publishPartialReport: (partialReport) => presentation.dispatchSearch({
+          type: 'search-report-updated',
+          report: previousReport
+            ? mergeSearchReportUpdates(previousReport, partialReport, previousReport.pendingSources, searchProfileId)
+            : partialReport,
+        }),
         publishProgress: (progress) => presentation.dispatchSearch({ type: 'search-progress-updated', progress }),
       });
       if (execution.kind === 'stale') return;
@@ -270,25 +285,31 @@ export class HomeSearchWorkflow {
         return;
       }
 
-      presentation.dispatchSearch({ type: 'search-report-updated', report: execution.report });
+      const finalReport = previousReport
+        ? mergeSearchReportUpdates(previousReport, execution.report, execution.report.pendingSources, searchProfileId)
+        : execution.report;
+      presentation.dispatchSearch({ type: 'search-report-updated', report: finalReport });
       const searchedAllProfiles = execution.scope === 'all-profiles';
       this.persistSearchMemory(
         context,
         term,
-        execution.report,
+        finalReport,
         execution.scope,
         isAggregate,
         searchProfileId,
         searchedAllProfiles,
       );
-      if (isAggregate && execution.report.pendingSources && execution.report.pendingSources > 0) {
+      const pendingRefs = collectPendingSourceRefs(finalReport, searchProfileId);
+      if (isAggregate && pendingRefs.length > 0) {
+        this.pendingAggregateReport = finalReport;
         this.aggregateRetry.schedule(
           () => this.isCurrentSearchGeneration(generation)
             && browse.activeSourceKey() === sourceKey
             && browse.activeProfileId() === searchProfileId,
-          () => { void this.doSearch(true, term, allScope, allProfileScope, true); },
+          () => { void this.doSearch(true, term, allScope, allProfileScope, true, pendingRefs); },
         );
       } else {
+        this.pendingAggregateReport = null;
         this.aggregateRetry.reset();
       }
     } finally {
@@ -467,4 +488,18 @@ export class HomeSearchWorkflow {
       ...(navigation.isSearchWindow() ? { sw: '1', profileId: browse.activeProfileId() } : {}),
     } : {});
   }
+}
+
+function collectPendingSourceRefs(
+  report: SearchAllReport,
+  fallbackProfileId: string,
+): Array<{ profileId: string; key: string }> {
+  const unique = new Map<string, { profileId: string; key: string }>();
+  for (const source of report.perSource) {
+    if (source.status !== 'error' || !(source.error || '').startsWith('运行时就绪中')) continue;
+    const profileId = source.profileId || fallbackProfileId;
+    if (!profileId || !source.key) continue;
+    unique.set(JSON.stringify([profileId, source.key]), { profileId, key: source.key });
+  }
+  return [...unique.values()];
 }

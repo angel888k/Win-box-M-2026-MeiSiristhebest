@@ -12,6 +12,7 @@ export type HomeSearchExecutionScope =
 export interface HomeSearchExecutionCommand {
   term: string;
   refresh: boolean;
+  sourceRefs?: Array<{ profileId: string; key: string }>;
   scope: HomeSearchExecutionScope;
   signal?: AbortSignal;
   isCurrent(): boolean;
@@ -59,6 +60,7 @@ export async function executeHomeSearch(
   const aggregate = await executeAggregateSearchSession({
     term: command.term,
     refresh: command.refresh,
+    sourceRefs: command.sourceRefs,
     scope: command.scope.kind === 'all-profiles'
       ? { kind: 'profiles', profileIds: command.scope.profileIds }
       : { kind: 'profile', profileId: command.scope.profileId },

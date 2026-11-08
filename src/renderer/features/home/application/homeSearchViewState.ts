@@ -41,7 +41,7 @@ export type HomeSearchViewAction =
   | { type: 'search-route-requested'; term: string; allProfiles: boolean }
   | { type: 'search-memory-restored'; memory: HomeSearchMem; defaultProfileId: string }
   | { type: 'profile-scope-selected'; allProfiles: boolean }
-  | { type: 'search-started'; scope: HomeSearchScope; aggregate: boolean }
+  | { type: 'search-started'; scope: HomeSearchScope; aggregate: boolean; retainReport?: boolean }
   | { type: 'search-progress-updated'; progress: HomeSearchProgress }
   | { type: 'search-report-updated'; report: SearchAllReport }
   | { type: 'search-preparation-cleared' }
@@ -98,7 +98,7 @@ export function reduceHomeSearchViewState(
         aggregateMode: true,
         scope: action.scope,
         searchAllSources: action.scope === 'all-profiles' ? true : state.searchAllSources,
-        report: null,
+        report: action.retainReport ? state.report : null,
         ...(action.aggregate ? { progress: null, visibleLimit: 60, sourceFilter: '' } : {}),
       };
     case 'search-progress-updated':

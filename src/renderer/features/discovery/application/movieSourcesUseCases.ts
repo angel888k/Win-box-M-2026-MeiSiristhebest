@@ -22,6 +22,8 @@ export interface MovieSourcesSearchResult {
 }
 
 export interface MovieSourcesSearchStreamOptions {
+  /** Search this profile first while still including every configured profile. */
+  priorityProfileId?: string;
   /** Deliver each completed source immediately without building a full report snapshot. */
   onSource?: (report: SearchAllReport, progress: MovieSourcesProgress) => void;
   /** Forward progress-only events without materializing a full aggregate report. */
@@ -50,6 +52,12 @@ export async function searchMovieSources(
   if (signal?.aborted) throw abortError();
 
   const profileIds = [...new Set(scope.profileIds)];
+  const priorityProfileId = streamOptions.priorityProfileId?.trim();
+  const priorityIndex = priorityProfileId ? profileIds.indexOf(priorityProfileId) : -1;
+  if (priorityProfileId && priorityIndex > 0) {
+    profileIds.splice(priorityIndex, 1);
+    profileIds.unshift(priorityProfileId);
+  }
   if (!profileIds.length && !scope.hasConfiguredSources) {
     throw new Error('请先导入订阅，再搜索播放来源');
   }

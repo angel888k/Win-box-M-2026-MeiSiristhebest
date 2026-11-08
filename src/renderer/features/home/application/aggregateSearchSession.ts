@@ -9,6 +9,7 @@ export type AggregateSearchScope =
 export interface AggregateSearchSessionCommand {
   term: string;
   refresh: boolean;
+  sourceRefs?: Array<{ profileId: string; key: string }>;
   scope: AggregateSearchScope;
   signal?: AbortSignal;
   isCurrent(): boolean;
@@ -78,9 +79,10 @@ export async function executeAggregateSearchSession(
       // Progress is optional; the complete response remains authoritative.
     }
 
+    const sourceFilter = command.sourceRefs ? { sourceRefs: command.sourceRefs } : {};
     const options = command.scope.kind === 'profiles'
-      ? { refresh: command.refresh, profileIds: [...searchedProfileIds] }
-      : { refresh: command.refresh, profileId: command.scope.profileId };
+      ? { refresh: command.refresh, profileIds: [...searchedProfileIds], ...sourceFilter }
+      : { refresh: command.refresh, profileId: command.scope.profileId, ...sourceFilter };
     const report = command.signal
       ? await ports.api.searchAll(command.term, options, command.signal)
       : await ports.api.searchAll(command.term, options);

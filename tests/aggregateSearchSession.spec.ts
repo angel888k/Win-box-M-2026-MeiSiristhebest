@@ -64,6 +64,26 @@ function createPorts(searchAll: AggregateSearchSessionPorts['api']['searchAll'],
 afterEach(() => vi.useRealTimers());
 
 describe('executeAggregateSearchSession', () => {
+  it('forwards source references for bounded pending-source retries', async () => {
+    const searchAll = vi.fn(async () => report());
+    const harness = createPorts(searchAll);
+    const sourceRefs = [{ profileId: 'profile-a', key: 'pending-source' }];
+
+    await executeAggregateSearchSession({
+      term: 'show',
+      refresh: true,
+      sourceRefs,
+      scope: { kind: 'profiles', profileIds: ['profile-a', 'profile-b'] },
+      isCurrent: () => true,
+    }, harness.ports);
+
+    expect(searchAll).toHaveBeenCalledWith('show', {
+      refresh: true,
+      profileIds: ['profile-a', 'profile-b'],
+      sourceRefs,
+    });
+  });
+
   it('batches streamed sources and preserves configured profile/source order', async () => {
     vi.useFakeTimers();
     const request = deferred<SearchAllReport>();

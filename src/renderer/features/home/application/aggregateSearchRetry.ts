@@ -6,8 +6,10 @@ export interface AggregateSearchRetryPolicy {
 }
 
 const DEFAULT_POLICY: AggregateSearchRetryPolicy = {
-  delayMs: 30_000,
-  maxAttempts: 12,
+  // Retries now target only sources that are still preparing; keep the delay
+  // short enough to notice a finished conversion without replaying the profile.
+  delayMs: 10_000,
+  maxAttempts: 36,
 };
 
 /** Schedules bounded retries for sources that were still pending after a search. */

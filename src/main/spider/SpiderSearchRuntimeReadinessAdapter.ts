@@ -18,7 +18,6 @@ export class SpiderSearchRuntimeReadinessAdapter<THost> implements SourceRuntime
     return {
       state: runtime.runtimeState(),
       reason: spider.lastReason || '',
-      ...(runtime.pendingRuntime ? { waitUntilReady: () => runtime.pendingRuntime!() } : {}),
     };
   }
 }

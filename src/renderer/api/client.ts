@@ -257,7 +257,7 @@ export const client = {
   search: (a: { key: string; wd: string; profileId?: string }, signal?: AbortSignal) =>
     invokeVodRequestWithCancellation(signal, (requestId) => window.api.vod.search({ ...a, requestId }),
       (requestId) => window.api.vod.cancelSearch(requestId)),
-  searchAll: (wd: string, opts?: { refresh?: boolean; profileId?: string; profileIds?: string[] }, signal?: AbortSignal) =>
+  searchAll: (wd: string, opts?: { refresh?: boolean; profileId?: string; profileIds?: string[]; sourceRefs?: Array<{ profileId: string; key: string }> }, signal?: AbortSignal) =>
     invokeVodRequestWithCancellation(signal, (requestId) => window.api.vod.searchAll(wd, opts, requestId),
       (requestId) => window.api.vod.cancelSearchAll(requestId)),
   onSearchAllProgress: (cb: (ev: SearchAllProgressEvent) => void) => window.api.vod.onSearchAllProgress(cb as (ev: unknown) => void),

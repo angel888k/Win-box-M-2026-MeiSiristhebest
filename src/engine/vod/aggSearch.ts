@@ -122,6 +122,52 @@ export class SearchResultsAccumulator {
   }
 }
 
+/** Replace only matching source records while preserving the rest of a prior aggregate report. */
+export function mergeSearchReportUpdates(
+  previous: SearchAllReport,
+  update: SearchAllReport,
+  pendingSources: number | undefined = update.pendingSources,
+  fallbackProfileId?: string,
+): SearchAllReport {
+  const accumulator = new SearchResultsAccumulator();
+  const addReport = (report: SearchAllReport, preserveOrder: boolean): void => {
+    const itemsBySource = new Map<string, VodItem[]>();
+    for (const item of report.items) {
+      const profileId = item.sourceRef?.profileId ?? fallbackProfileId;
+      const key = item.sourceRef?.key || item.sourceKey;
+      const identity = sourceIdentityKey(profileId, key);
+      const items = itemsBySource.get(identity) ?? [];
+      items.push(item);
+      itemsBySource.set(identity, items);
+    }
+
+    const profileOrder = new Map<string, number>();
+    const nextSourceOrder = new Map<string, number>();
+    for (const source of report.perSource) {
+      const profileId = source.profileId ?? fallbackProfileId ?? '';
+      if (!profileOrder.has(profileId)) profileOrder.set(profileId, profileOrder.size);
+      const sourceOrder = nextSourceOrder.get(profileId) ?? 0;
+      nextSourceOrder.set(profileId, sourceOrder + 1);
+      accumulator.add({
+        ...(profileId ? { profileId } : {}),
+        ...(source.profileName ? { profileName: source.profileName } : {}),
+        key: source.key,
+        name: source.name,
+        status: source.status,
+        items: itemsBySource.get(sourceIdentityKey(profileId || undefined, source.key)) ?? [],
+        error: source.error,
+        ms: source.ms,
+      }, preserveOrder ? { profileOrder: profileOrder.get(profileId), sourceOrder } : undefined);
+    }
+  };
+
+  addReport(previous, true);
+  addReport(update, false);
+  const merged = accumulator.snapshot();
+  if (pendingSources && pendingSources > 0) merged.pendingSources = pendingSources;
+  return merged;
+}
+
 /** Merge independently cached profile reports without collapsing identical source keys. */
 export function mergeSearchReports(
   reports: Array<{ profileId: string; profileName: string; report: SearchAllReport }>,

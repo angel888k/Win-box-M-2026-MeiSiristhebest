@@ -11,7 +11,7 @@ export interface VodIpcPort {
   search(key: string, wd: string, profileId?: string, signal?: AbortSignal): Promise<unknown>;
   searchAll(
     wd: string,
-    options?: { refresh?: boolean; profileId?: string; profileIds?: string[] },
+    options?: { refresh?: boolean; profileId?: string; profileIds?: string[]; sourceRefs?: Array<{ profileId: string; key: string }> },
     onProgress?: (event: SearchAllProgressEvent) => void,
     signal?: AbortSignal,
   ): Promise<unknown>;
@@ -91,9 +91,10 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
     refresh?: boolean;
     profileId?: string;
     profileIds?: string[];
+    sourceRefs?: Array<{ profileId: string; key: string }>;
     requestId?: string;
   } | string) => {
-    const args: { wd: string; refresh?: boolean; profileId?: string; profileIds?: string[]; requestId?: string } =
+    const args: { wd: string; refresh?: boolean; profileId?: string; profileIds?: string[]; sourceRefs?: Array<{ profileId: string; key: string }>; requestId?: string } =
       typeof value === 'string' ? { wd: value, refresh: false } : value || { wd: '', refresh: false };
     const window = ports.windowForEvent(event);
     const onProgress = (progress: SearchAllProgressEvent): void => {
@@ -107,6 +108,7 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
       refresh: !!args.refresh,
       profileId: typeof args.profileId === 'string' ? args.profileId : undefined,
       profileIds: Array.isArray(args.profileIds) ? args.profileIds : undefined,
+      sourceRefs: Array.isArray(args.sourceRefs) ? args.sourceRefs : undefined,
     };
     return withRequestCancellation(event, args.requestId, '搜索', (signal) => signal
       ? host.searchAll(args.wd, options, onProgress, signal)
