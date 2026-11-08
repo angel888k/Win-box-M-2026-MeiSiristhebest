@@ -80,6 +80,16 @@ describe('VOD IPC adapter', () => {
       .resolves.toMatchObject({ ok: true, data: { externalLink: 'magnet:?xt=urn:btih:test' } });
   });
 
+  it('forwards playback recovery options from renderer IPC to the host', async () => {
+    const { host } = register();
+
+    await invoke(IPC.VOD_PLAY, {
+      key: 'source-a', flag: 'line-a', id: 'episode-a', profileId: 'profile-a', parseOffset: 2, fastRecovery: true,
+    });
+
+    expect(host.play).toHaveBeenCalledWith('source-a', 'line-a', 'episode-a', 'profile-a', 2, true);
+  });
+
   it('forwards cancellation to bounded next-episode prewarming', async () => {
     const { host } = register();
     vi.mocked(host.prewarm).mockImplementationOnce((_key, _flag, _id, _profileId, signal) => new Promise((_resolve, reject) => {

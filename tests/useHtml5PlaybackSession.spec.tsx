@@ -102,6 +102,7 @@ function Harness({
   pausedHandoff = false,
   onEnded = () => undefined,
   onPlaybackStarted = () => undefined,
+  onPlaybackFailure = () => undefined,
   clearAuto = () => undefined,
   tryExternalFallback,
   kernel = 'html5',
@@ -116,6 +117,7 @@ function Harness({
   pausedHandoff?: boolean;
   onEnded?: () => void;
   onPlaybackStarted?: () => void;
+  onPlaybackFailure?: (currentTime: number, reason: string) => void;
   clearAuto?: () => void;
   tryExternalFallback?: (sourceUrl: string, position: number) => Promise<{ opened: boolean; player?: string; error?: string } | null>;
   kernel?: Kernel;
@@ -209,6 +211,7 @@ function Harness({
     clearAuto,
     revealControls: () => undefined,
     recoverHtmlPlayback,
+    onPlaybackFailure,
     onPlaybackStarted,
     tryExternalFallback,
     handlePlaybackEnd: onEnded,
@@ -228,6 +231,7 @@ function Harness({
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   storedPositions.clear();
   localStorage.clear();
   hlsTestState.destroyed = 0;
@@ -411,6 +415,32 @@ describe('useHtml5PlaybackSession', () => {
 
     act(() => videoFrameCallbacks.shift()?.(performance.now(), {} as VideoFrameCallbackMetadata));
     expect(onPlaybackStarted).toHaveBeenCalledOnce();
+  });
+
+  it('starts VOD source recovery after 12 seconds without a rendered first frame', async () => {
+    vi.useFakeTimers();
+    const onPlaybackFailure = vi.fn();
+    render(<Harness onPlaybackFailure={onPlaybackFailure} />);
+    const video = screen.getByTestId('video') as HTMLVideoElement;
+
+    await act(async () => { await Promise.resolve(); });
+    expect(video.play).toHaveBeenCalledOnce();
+    await act(async () => { vi.advanceTimersByTime(11_999); });
+    expect(onPlaybackFailure).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(onPlaybackFailure).toHaveBeenCalledWith(45, 'first-frame-timeout', expect.objectContaining({ code: 'first-frame-timeout' }));
+  });
+
+  it('keeps the longer first-frame allowance for live playback', async () => {
+    vi.useFakeTimers();
+    const onPlaybackFailure = vi.fn();
+    render(<Harness liveHint onPlaybackFailure={onPlaybackFailure} />);
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { vi.advanceTimersByTime(44_999); });
+    expect(onPlaybackFailure).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(onPlaybackFailure).toHaveBeenCalledWith(45, 'first-frame-timeout', expect.objectContaining({ code: 'first-frame-timeout' }));
   });
 
   it('re-arms frame confirmation when playback pauses before the first frame', async () => {

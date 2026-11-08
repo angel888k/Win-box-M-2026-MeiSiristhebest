@@ -66,16 +66,24 @@ export class ParseService {
   ) {}
 
   /** 解析一个需网页解析的播放地址；返回 null = 解析失败（调用方保留原始提示） */
-  async resolve(parses: ParseBean[], target: string, offset = 0): Promise<ParseResolution | null> {
+  async resolve(parses: ParseBean[], target: string, offset = 0, budgetMs = TOTAL_BUDGET_MS): Promise<ParseResolution | null> {
     const url = unwrapRelayUrl((target || '').trim());
     if (!url || isErrorVideoUrl(url)) return null;
     if (isMediaUrl(url)) return { url, headers: {}, via: 'already-media' };
+
+    const boundedBudgetMs = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : TOTAL_BUDGET_MS;
+    const deadline = this.now() + boundedBudgetMs;
+    const remainingMs = (): number => Math.max(0, deadline - this.now());
+    const sniffWithRemaining = (page: string, signal?: AbortSignal) => {
+      const timeoutMs = Math.min(SNIFF_TIMEOUT_MS, remainingMs());
+      return timeoutMs > 0 ? this.sniff(page, this.logger, timeoutMs, signal) : Promise.resolve(null);
+    };
 
     // A CMS share page already owns a player. Try that page before unrelated
     // subscription parsers, and do not accept another share page as media.
     const directPage = /^https?:\/\/[^/]+\/(?:share|play)\/[^/?#]+\/?(?:[?#]|$)/i.test(url);
     if (directPage) {
-      const hit = await this.sniff(url, this.logger, SNIFF_TIMEOUT_MS);
+      const hit = await sniffWithRemaining(url);
       if (hit && !isErrorVideoUrl(hit.url) && !isPlaybackPageUrl(hit.url)) return { ...hit, via: 'sniff:direct' };
     }
 
@@ -89,13 +97,12 @@ export class ParseService {
       ? [...filtered.slice(normalizedOffset), ...filtered.slice(0, normalizedOffset)]
       : filtered;
 
-    const deadline = this.now() + TOTAL_BUDGET_MS;
-    const left = (): boolean => this.now() < deadline;
+    const left = (): boolean => remainingMs() > 0;
 
     // ① JSON 型解析接口
     for (const p of list.filter((x) => x.type === 1 || x.type === 2).slice(0, MAX_JSON_PARSES)) {
       if (!left()) break;
-      const hit = await this.tryJsonParse(p, url);
+      const hit = await this.tryJsonParse(p, url, remainingMs);
       if (hit) return hit;
     }
 
@@ -110,7 +117,7 @@ export class ParseService {
       try {
         const hit = await Promise.any(
           pageTargets.map(async ({ parse, page }) => {
-            const sniff = await this.sniff(page, this.logger, SNIFF_TIMEOUT_MS, abortController.signal);
+            const sniff = await sniffWithRemaining(page, abortController.signal);
             if (sniff && !isErrorVideoUrl(sniff.url)) {
               return { ...sniff, via: `sniff:${parse.name}` };
             }
@@ -124,13 +131,13 @@ export class ParseService {
       }
     } else if (pageTargets.length === 1 && left()) {
       const { parse, page } = pageTargets[0];
-      const sniff = await this.sniff(page, this.logger, SNIFF_TIMEOUT_MS);
+      const sniff = await sniffWithRemaining(page);
       if (sniff && !isErrorVideoUrl(sniff.url)) return { ...sniff, via: `sniff:${parse.name}` };
     }
 
     // ③ 直接嗅探原始地址（无 parses 的源站自播页）
     if (!directPage && left()) {
-      const sniff = await this.sniff(url, this.logger, SNIFF_TIMEOUT_MS);
+      const sniff = await sniffWithRemaining(url);
       if (sniff && !isErrorVideoUrl(sniff.url)) return { ...sniff, via: 'sniff:direct' };
     }
 
@@ -139,12 +146,14 @@ export class ParseService {
   }
 
   /** type 1/2：HTTP GET `接口地址+播放地址` 取 JSON；失败再用 form POST 试一次 */
-  private async tryJsonParse(p: ParseBean, target: string): Promise<ParseResolution | null> {
+  private async tryJsonParse(p: ParseBean, target: string, remainingMs: () => number): Promise<ParseResolution | null> {
     const url = buildParseUrl(p.url, target);
     if (!url) return null;
     // GET
     try {
-      const res = await this.http.request({ url, method: 'get', timeoutMs: JSON_TIMEOUT_MS });
+      const timeoutMs = Math.min(JSON_TIMEOUT_MS, remainingMs());
+      if (timeoutMs <= 0) return null;
+      const res = await this.http.request({ url, method: 'get', timeoutMs, totalTimeoutMs: timeoutMs });
       const hit = extractParseResult(this.textOf(res.content));
       if (hit) {
         this.logger.i(`parse: ${p.name} 命中（GET）`);
@@ -155,12 +164,15 @@ export class ParseService {
     }
     // POST（部分接口只收 form 的 url=）
     try {
+      const timeoutMs = Math.min(JSON_TIMEOUT_MS, remainingMs());
+      if (timeoutMs <= 0) return null;
       const res = await this.http.request({
         url: p.url,
         method: 'post',
         postType: 'form',
         data: { url: target },
-        timeoutMs: JSON_TIMEOUT_MS,
+        timeoutMs,
+        totalTimeoutMs: timeoutMs,
       });
       const hit = extractParseResult(this.textOf(res.content));
       if (hit) {

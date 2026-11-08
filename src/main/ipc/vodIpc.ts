@@ -15,7 +15,7 @@ export interface VodIpcPort {
     onProgress?: (event: SearchAllProgressEvent) => void,
     signal?: AbortSignal,
   ): Promise<unknown>;
-  play(key: string, flag: string, id: string, profileId?: string, parseOffset?: number): Promise<PlayResult>;
+  play(key: string, flag: string, id: string, profileId?: string, parseOffset?: number, fastRecovery?: boolean): Promise<PlayResult>;
   prewarm(key: string, flag: string, id: string, profileId?: string, signal?: AbortSignal): Promise<PlayResult | null>;
 }
 interface ProgressWindow {
@@ -114,8 +114,8 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
       ? host.searchAll(args.wd, options, onProgress, signal)
       : host.searchAll(args.wd, options, onProgress));
   }, logger);
-  registerHandler(IPC.VOD_PLAY, async (_event, args: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number }) => {
-    const result = await host.play(args.key, args.flag, args.id, args.profileId, args.parseOffset);
+  registerHandler(IPC.VOD_PLAY, async (_event, args: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number; fastRecovery?: boolean }) => {
+    const result = await host.play(args.key, args.flag, args.id, args.profileId, args.parseOffset, args.fastRecovery);
     if (result.externalLink) {
       try {
         ports.writeClipboard(result.externalLink);

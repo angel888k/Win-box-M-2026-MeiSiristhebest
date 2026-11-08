@@ -60,6 +60,14 @@ describe('SpiderPlaybackRequestService', () => {
     }));
   });
 
+  it('forwards fast recovery mode and parser offset to the playback use case', async () => {
+    const { service, dependencies } = createService();
+
+    await service.execute(source.key, 'HD', 'episode-id', context.profileId, 2, true);
+
+    expect(dependencies.playback.execute).toHaveBeenCalledWith(source.key, 'HD', 'episode-id', context, source, 2, true);
+  });
+
   it('prewarms only direct remote media and preserves required request headers', async () => {
     const { service, dependencies } = createService();
     const controller = new AbortController();

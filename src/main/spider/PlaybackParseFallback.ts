@@ -10,7 +10,7 @@ export interface PlaybackParseHit {
 
 /** Consumer-owned port for resolving a parse-required play result. */
 export interface PlaybackParsePort {
-  resolve(parses: ParseBean[], target: string, offset?: number): Promise<PlaybackParseHit | null>;
+  resolve(parses: ParseBean[], target: string, offset?: number, budgetMs?: number): Promise<PlaybackParseHit | null>;
 }
 
 export interface PlaybackParseFallbackPorts {
@@ -25,7 +25,7 @@ export interface PlaybackParseFallbackPorts {
 export class PlaybackParseFallback {
   constructor(private readonly ports: PlaybackParseFallbackPorts) {}
 
-  async resolve(result: PlayResult, parses: ParseBean[] = [], offset = 0): Promise<PlayResult> {
+  async resolve(result: PlayResult, parses: ParseBean[] = [], offset = 0, budgetMs?: number): Promise<PlayResult> {
     // Some spiders incorrectly label a watch page as a direct URL (parse=0).
     // A successful HTTP URL is not enough: never hand a known player page to <video>.
     const requiresResolution = result.parse === 1 || isPlaybackPageUrl(result.url);
@@ -33,8 +33,8 @@ export class PlaybackParseFallback {
 
     const target = result.url.split('#').filter(Boolean)[0] || result.url;
     try {
-      const hit = offset
-        ? await this.ports.parser.resolve(parses, target, offset)
+      const hit = offset || budgetMs !== undefined
+        ? await this.ports.parser.resolve(parses, target, offset, budgetMs)
         : await this.ports.parser.resolve(parses, target);
       if (hit?.url) {
         this.ports.logger.i(`parse: 「${result.flag}」解析成功（${hit.via}）${hit.url.slice(0, 100)}`);

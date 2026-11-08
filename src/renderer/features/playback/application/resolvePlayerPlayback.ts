@@ -6,7 +6,7 @@ export async function resolvePlayerPlayback(
   index: number,
   preparedUrl: string,
   port: PlayerPlaybackResolutionPort,
-  options?: { parseOffset?: number; preparedResult?: PlayResult },
+  options?: { parseOffset?: number; preparedResult?: PlayResult; fastRecovery?: boolean },
 ): Promise<PlayResult> {
   if (options?.preparedResult) return options.preparedResult;
   if (preparedUrl) return { url: preparedUrl, parse: 0, flag: data.flag, playUrl: '' };
@@ -18,5 +18,6 @@ export async function resolvePlayerPlayback(
     id: episode.url,
     profileId: data.meta?.profileId,
     parseOffset: options?.parseOffset,
+    fastRecovery: options?.fastRecovery,
   });
 }

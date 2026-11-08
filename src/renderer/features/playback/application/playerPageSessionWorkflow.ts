@@ -15,7 +15,6 @@ import type {
 import { resolvePlayerPageEpisode, type ResolvePlayerPageEpisodeResult } from './resolvePlayerPageEpisode';
 import type { PlayerPageResolutionState, PlayerPageSessionAction } from './playerPageSessionState';
 
-const MAX_AUTOMATIC_PARSE_SWITCHES = 3;
 const PREWARM_TTL_MS = 60_000;
 type AlternativeAttemptOutcome = 'resolved' | 'failed' | 'interrupted';
 
@@ -50,8 +49,6 @@ export function createPlayerPageSessionWorkflow(
   let currentInit: PlayerInitData | null = null;
   let pendingInit: PlayerInitData | null = null;
   let currentEpisodeIndex = 0;
-  let parseOffset = 0;
-  let automaticParseSwitches = 0;
   let fallbackSearchAttempted = false;
   let fallbackSearchPromise: Promise<boolean> | null = null;
   let fallbackSearchController: AbortController | null = null;
@@ -130,12 +127,12 @@ export function createPlayerPageSessionWorkflow(
     data: PlayerInitData,
     index: number,
     preparedUrl = '',
-    options?: { parseOffset?: number; preparedResult?: PlayResult },
+    options?: { parseOffset?: number; preparedResult?: PlayResult; fastRecovery?: boolean },
   ): Promise<ResolvePlayerPageEpisodeResult> => {
     if (!data.episodes || index < 0 || index >= data.episodes.length) return 'empty';
     const requestGeneration = generation.next();
     return resolvePlayerPageEpisode(
-      { data, index, preparedUrl, preparedResult: options?.preparedResult, parseOffset: options?.parseOffset },
+      { data, index, preparedUrl, preparedResult: options?.preparedResult, parseOffset: options?.parseOffset, fastRecovery: options?.fastRecovery },
       {
         playback: session,
         publish,
@@ -295,8 +292,6 @@ export function createPlayerPageSessionWorkflow(
     resolvedCandidateIds.delete(id);
     resolvedAlternativeId = null;
     fallbackSearchAttempted = false;
-    automaticParseSwitches = 0;
-    parseOffset = 0;
     currentEpisodeIndex = candidate.data.epIndex;
     const next = {
       ...candidate.data,
@@ -305,7 +300,7 @@ export function createPlayerPageSessionWorkflow(
     };
     publish({ type: 'source-fallback-switching', sourceName: candidate.sourceName, candidateId: id });
     updateInit(next);
-    const result = await resolve(next, currentEpisodeIndex);
+    const result = await resolve(next, currentEpisodeIndex, '', { fastRecovery: automatic });
     if (result === 'drive-bind-required') {
       if (!automatic) {
         publish({ type: 'source-fallback-unavailable', message: `${candidate.sourceName} 需要先登录网盘，绑定后可继续播放。` });
@@ -346,7 +341,7 @@ export function createPlayerPageSessionWorkflow(
 
     // A media engine has already exhausted the current URL. Cycling parser
     // strategies cannot repair a decoded/network stream failure, so search
-    // verified sources immediately. Parser rotation remains for URL failures.
+    // verified sources immediately.
     if (cause === 'media-failure') {
       lastPlaybackFailure = failure;
       resolvedAlternativeId = null;
@@ -354,21 +349,10 @@ export function createPlayerPageSessionWorkflow(
       return searchAlternativeSources(currentPosition);
     }
 
-    if (automaticParseSwitches < MAX_AUTOMATIC_PARSE_SWITCHES) {
-      automaticParseSwitches += 1;
-      parseOffset += 1;
-      const next = currentPosition > 0 ? { ...current, startTime: currentPosition } : current;
-      updateInit(next);
-      const result = await resolve(next, currentEpisodeIndex, '', { parseOffset });
-      if (result === 'failed') {
-        return autoChangeParse(currentPosition, '解析线路未返回可播放地址', 'resolution-failure');
-      }
-      if (result === 'drive-bind-required') {
-        return true;
-      }
-      return result !== 'stale' && result !== 'empty';
-    }
-
+    // The main-process play request already tries every configured parser once.
+    // Reissuing the same request with an offset repeats source and parser I/O and
+    // can add several full parser budgets before backup discovery even begins.
+    // Start exact-source discovery as soon as the first resolution attempt fails.
     return searchAlternativeSources(currentPosition);
   }
 
@@ -386,8 +370,6 @@ export function createPlayerPageSessionWorkflow(
     cancelPrewarm();
     const requestGeneration = generation.next();
     resetSourceFallback(incoming);
-    parseOffset = 0;
-    automaticParseSwitches = 0;
     pendingInit = incoming;
     currentInit = null;
     publish({ type: 'hydration-started' });
@@ -424,8 +406,6 @@ export function createPlayerPageSessionWorkflow(
       ? preparedEpisode.result : undefined;
     cancelPrewarm();
     resetSourceFallback(current);
-    parseOffset = 0;
-    automaticParseSwitches = 0;
     currentEpisodeIndex = index;
     const next = { ...current, startTime: 0, lastUrl: '', epIndex: index, deferHistoryUntilPlayback: true };
     updateInit(next);
@@ -469,8 +449,6 @@ export function createPlayerPageSessionWorkflow(
   const retryCurrent = (resolutionKind: PlayerPageResolutionState['kind']) => {
     if (resolutionKind === 'hydrating' || resolutionKind === 'resolving') return;
     cancelPrewarm();
-    automaticParseSwitches = 0;
-    parseOffset = 0;
     const pending = pendingInit;
     if (pending) {
       void applyInit(pending);

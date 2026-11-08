@@ -13,6 +13,7 @@ export interface ResolvePlayerPageEpisodeRequest {
   preparedUrl?: string;
   preparedResult?: import('../../../../shared/types').PlayResult;
   parseOffset?: number;
+  fastRecovery?: boolean;
 }
 
 export interface ResolvePlayerPageEpisodePorts {
@@ -28,7 +29,7 @@ export async function resolvePlayerPageEpisode(
   request: ResolvePlayerPageEpisodeRequest,
   ports: ResolvePlayerPageEpisodePorts,
 ): Promise<ResolvePlayerPageEpisodeResult> {
-  const { data, index, preparedUrl = '', preparedResult, parseOffset } = request;
+  const { data, index, preparedUrl = '', preparedResult, parseOffset, fastRecovery } = request;
   const episode = data.episodes[index];
   if (!episode) return 'empty';
 
@@ -38,7 +39,7 @@ export async function resolvePlayerPageEpisode(
   ports.publish({ type: 'resolution-started', epIndex: index, curName: displayName, playName: mainTitle });
 
   try {
-    const result = await resolvePlayerPlayback(data, index, preparedUrl, ports.playback, { parseOffset, preparedResult });
+    const result = await resolvePlayerPlayback(data, index, preparedUrl, ports.playback, { parseOffset, preparedResult, fastRecovery });
     if (!ports.isCurrent()) return 'stale';
     if (result.needDriveCookieBind) {
       ports.publish({ type: 'drive-bind-required', provider: result.needDriveCookieBind });

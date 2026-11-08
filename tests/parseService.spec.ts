@@ -179,6 +179,28 @@ describe('ParseService — 解析接口链', () => {
     expect(result?.via).toBe('sniff:线路2');
     expect(calls[0]).toBe('https://p2.test/?url=' + target);
   });
+
+  it('honors a short total budget across sequential JSON parser requests', async () => {
+    const target = 'https://v.qq.com/watch.html';
+    let now = 0;
+    const timeouts: number[] = [];
+    const durations = [6, 4];
+    const http: HttpClient = {
+      async request(req: HttpRequest): Promise<HttpResponse> {
+        timeouts.push(req.timeoutMs || 0);
+        now += durations.shift() || 0;
+        return { status: 200, headers: {}, content: '{}', finalUrl: req.url };
+      },
+    };
+    const svc = new ParseService(http, logger, async () => null, () => now);
+
+    await svc.resolve([
+      P({ name: 'json 1', url: 'https://jx1.test/api', type: 1 }),
+      P({ name: 'json 2', url: 'https://jx2.test/api', type: 1 }),
+    ], target, 0, 10);
+
+    expect(timeouts).toEqual([10, 4]);
+  });
 });
 
 

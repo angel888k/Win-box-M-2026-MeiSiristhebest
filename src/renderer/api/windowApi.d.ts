@@ -164,7 +164,7 @@ declare global {
   cancelSearchAll: (requestId: string) => void;
         /** ★ 聚合搜索逐源进度（边搜边出）：返回退订函数 */
         onSearchAllProgress: (cb: (ev: SearchAllProgressEvent) => void) => () => void;
-  play: (a: { key: string; flag: string; id: string; profileId?: string }) => Promise<IpcResult<PlayResult>>;
+  play: (a: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number; fastRecovery?: boolean }) => Promise<IpcResult<PlayResult>>;
     prewarmPlay: (a: { key: string; flag: string; id: string; profileId?: string; requestId?: string }) => Promise<IpcResult<PlayResult | null>>;
     cancelPrewarmPlay: (requestId: string) => void;
         /** ★ 2026-09-30（用户要求）：点播外部播放器（与磁力分开绑定）——探测本机播放器 / 用当前地址拉起 */

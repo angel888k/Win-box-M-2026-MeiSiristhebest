@@ -308,7 +308,8 @@ const ipcServices: MainIpcApplicationPorts = {
     detail: (key, ids, profileId, signal) => hostServices.sourceCatalog.detail(key, ids, profileId, signal),
     search: (key, keyword, profileId, signal) => hostServices.sourceCatalog.search(key, keyword, profileId, signal),
     searchAll: (keyword, options, onProgress, signal) => hostServices.aggregateSearchRunner.run(keyword, options, onProgress, signal),
-    play: (key, flag, id, profileId) => hostServices.playbackRequest.execute(key, flag, id, profileId),
+    play: (key, flag, id, profileId, parseOffset, fastRecovery) =>
+      hostServices.playbackRequest.execute(key, flag, id, profileId, parseOffset, fastRecovery),
     prewarm: (key, flag, id, profileId, signal) => hostServices.playbackRequest.prewarm(key, flag, id, profileId, signal),
   },
 };

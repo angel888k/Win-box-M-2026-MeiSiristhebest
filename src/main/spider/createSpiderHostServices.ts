@@ -190,7 +190,8 @@ export function createSpiderHostServices(
     panSharePlaybackPorts: dependencies.drivePanSharePlayback,
   });
   const playbackServices = createSpiderPlaybackAssembly({
-    playSpider: (source, flag, id, vipFlags) => sourceServices.gateway.play(source, flag, id, vipFlags),
+    playSpider: (source, flag, id, vipFlags, timeoutMs, signal) =>
+      sourceServices.gateway.play(source, flag, id, vipFlags, timeoutMs, signal),
     proxyPortFor: (source) => sourceServices.gateway.proxyPortFor?.(source) ?? null,
     nativeDriveSharePlayback: drivePlayback.nativeSharePlayback,
     panSharePlayback: drivePlayback.panSharePlayback,
@@ -204,7 +205,7 @@ export function createSpiderHostServices(
     resetSpidersAfterDriveChange,
     probeSelfResolveUrl: dependencies.probeSelfResolveUrl ?? ((url) => selfResolveMediaProbe.probe(url)),
     isBaiduPanDescriptor,
-    parser: { resolve: (parses, target, offset) => parseService.resolve(parses, target, offset) },
+    parser: { resolve: (parses, target, offset, budgetMs) => parseService.resolve(parses, target, offset, budgetMs) },
     torrentPlay: () => integrations.torrentPlayback,
   });
   selfResolveMediaProbe = playbackServices.mediaProbe;

@@ -105,11 +105,16 @@ describe('player page session workflow', () => {
     const workflow = createPlayerPageSessionWorkflow({ session, history, sourceMemory, publish: action => actions.push(action) });
 
     await workflow.applyInit(playbackInit());
-    await vi.waitFor(() => expect(session.play).toHaveBeenCalledTimes(5));
+    await vi.waitFor(() => expect(session.play).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(actions).toContainEqual({ type: 'resolution-succeeded', url: 'https://media.invalid/alternate.mp4' }));
 
     expect(session.discover).toHaveBeenCalledWith(expect.objectContaining({ episodeIndex: 1, position: 125 }), expect.any(AbortSignal), expect.any(Function));
-    expect(session.play).toHaveBeenNthCalledWith(5, expect.objectContaining({ key: 'source-b', id: 'other-episode-2', parseOffset: undefined }));
+    expect(session.play).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      key: 'source-b',
+      id: 'other-episode-2',
+      parseOffset: undefined,
+      fastRecovery: true,
+    }));
     expect(history.recordHistory).not.toHaveBeenCalled();
     expect(sourceMemory.rememberSource).not.toHaveBeenCalled();
 
@@ -195,7 +200,12 @@ describe('player page session workflow', () => {
     await workflow.autoChangeParse(125, 'decode failed', 'media-failure');
 
     expect(session.play).toHaveBeenCalledTimes(2);
-    expect(session.play).toHaveBeenNthCalledWith(2, expect.objectContaining({ key: 'source-b', id: 'other-episode-2', parseOffset: undefined }));
+    expect(session.play).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      key: 'source-b',
+      id: 'other-episode-2',
+      parseOffset: undefined,
+      fastRecovery: true,
+    }));
     expect(session.discover).toHaveBeenCalledOnce();
     expect(history.recordHistory).not.toHaveBeenCalled();
     expect(actions).toContainEqual(expect.objectContaining({
@@ -265,7 +275,7 @@ describe('player page session workflow', () => {
 
     await workflow.applyInit(playbackInit());
     await vi.waitFor(() => expect(actions).toContainEqual(expect.objectContaining({ type: 'source-fallback-switching', sourceName: 'Source B' })));
-    await vi.waitFor(() => expect(session.play).toHaveBeenCalledTimes(5));
+    await vi.waitFor(() => expect(session.play).toHaveBeenCalledTimes(2));
     expect(history.recordHistory).not.toHaveBeenCalled();
 
     workflow.confirmPlaybackStarted();

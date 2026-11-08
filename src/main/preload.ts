@@ -168,7 +168,7 @@ const api = {
       ipcRenderer.on(IPC.VOD_SEARCH_ALL_PROGRESS, l);
       return () => { ipcRenderer.removeListener(IPC.VOD_SEARCH_ALL_PROGRESS, l); };
     },
-    play: (a: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number }) => invoke(IPC.VOD_PLAY, a),
+    play: (a: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number; fastRecovery?: boolean }) => invoke(IPC.VOD_PLAY, a),
     prewarmPlay: (a: { key: string; flag: string; id: string; profileId?: string; requestId?: string }) => invoke(IPC.VOD_PLAY_PREWARM, a),
     cancelPrewarmPlay: (requestId: string) => ipcRenderer.send(IPC.VOD_PLAY_PREWARM_CANCEL, requestId),
     // ★ 2026-09-30（用户要求）：点播外部播放器（与磁力分开绑定）——探测本机播放器 / 用当前地址拉起

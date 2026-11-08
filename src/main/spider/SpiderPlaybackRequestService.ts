@@ -24,7 +24,7 @@ export interface PlaybackRequestDiagnostic extends Record<string, unknown> {
 export interface SpiderPlaybackRequestPorts {
   execution: SourceExecutionResolverPort;
   playback: {
-    execute(key: string, flag: string, id: string, context: SourceExecutionContextValue, source: SourceBean, parseOffset?: number): Promise<PlayResult>;
+    execute(key: string, flag: string, id: string, context: SourceExecutionContextValue, source: SourceBean, parseOffset?: number, fastRecovery?: boolean): Promise<PlayResult>;
     prewarm(source: SourceBean, flag: string, id: string, vipFlags: string[], signal?: AbortSignal): Promise<PlayResult>;
   };
   startTimer(): { ms(): number };
@@ -38,15 +38,15 @@ export interface SpiderPlaybackRequestPorts {
 export class SpiderPlaybackRequestService {
   constructor(private readonly ports: SpiderPlaybackRequestPorts) {}
 
-  async execute(key: string, flag: string, id: string, profileId?: string, parseOffset?: number): Promise<PlayResult> {
+  async execute(key: string, flag: string, id: string, profileId?: string, parseOffset?: number, fastRecovery = false): Promise<PlayResult> {
     const timer = this.ports.startTimer();
     try {
       const context = this.ports.execution.forProfile(profileId);
       const source: SourceBean | null = this.ports.execution.forSource(context, key);
       if (!source) throw new Error(`源不存在: ${key}`);
 
-      let result = parseOffset
-        ? await this.ports.playback.execute(key, flag, id, context, source, parseOffset)
+      let result = parseOffset !== undefined || fastRecovery
+        ? await this.ports.playback.execute(key, flag, id, context, source, parseOffset, fastRecovery)
         : await this.ports.playback.execute(key, flag, id, context, source);
       if (result.parse === 0) {
         const error = this.ports.directPlayUrlError(result.url);

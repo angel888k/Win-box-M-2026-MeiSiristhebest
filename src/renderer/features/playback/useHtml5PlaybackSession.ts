@@ -26,7 +26,8 @@ import {
 import { createHlsAudioTrackControllerAdapter } from './adapters/hlsAudioTrackControllerAdapter';
 import { classifyPlaybackFailure, type PlaybackFailureContext } from '../../../shared/playbackFailure';
 
-const FIRST_FRAME_TIMEOUT_MS = 45_000;
+const VOD_FIRST_FRAME_TIMEOUT_MS = 12_000;
+const LIVE_FIRST_FRAME_TIMEOUT_MS = 45_000;
 
 export interface Html5PlaybackSessionOptions {
   videoRef: MutableRefObject<HTMLVideoElement | null>;
@@ -167,17 +168,17 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
       const context = failure || classifyPlaybackFailure({ engine: 'unknown', reason });
       onPlaybackFailure?.(Math.max(0, video.currentTime || 0), reason, context);
     };
-    const armFirstFrameTimer = () => {
+    const armFirstFrameTimer = (timeoutMs = sessionState.getLivePlaybackKind() ? LIVE_FIRST_FRAME_TIMEOUT_MS : VOD_FIRST_FRAME_TIMEOUT_MS) => {
       if (cancelled || playbackConfirmed || firstFrameTimer) return;
       firstFrameTimer = setTimeout(() => {
         firstFrameTimer = null;
         if (cancelled || playbackConfirmed || video.paused) return;
         reportTerminalFailure(
-          '播放已开始请求，但 45 秒内没有显示视频画面。可检查线路权限，或等待自动查找同集备用源。',
+          `播放请求已发出，但 ${Math.round(timeoutMs / 1000)} 秒内没有显示视频画面。可检查线路权限，或等待自动查找同集备用源。`,
           'first-frame-timeout',
           { stage: 'startup', engine: 'html5', code: 'first-frame-timeout', retryable: true },
         );
-      }, FIRST_FRAME_TIMEOUT_MS);
+      }, timeoutMs);
     };
     const confirmRenderedFrame = (attempt: number) => {
       if (attempt !== playbackFrameAttempt) return;
@@ -420,6 +421,13 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
             const details = (data as unknown as { details?: { live?: boolean; edge?: number; partTarget?: number } }).details;
             const live = !!details?.live;
             sessionState.setLivePlaybackKind(live);
+            // A stream can be identified as live only after its playlist loads.
+            // If the initial hint was missing, extend the VOD startup deadline
+            // instead of prematurely failing a legitimate live stream.
+            if (live && !playbackConfirmed && firstFrameTimer) {
+              clearFirstFrameTimer();
+              armFirstFrameTimer(LIVE_FIRST_FRAME_TIMEOUT_MS);
+            }
             updatePlaybackStatus({ isLive: live });
             if (!shouldApplyLiveBufferConfig({ liveHint, playlistIsLive: live })) {
               livePlaylistStateRef.current = { isLive: false, lowLatencySupported: false };
