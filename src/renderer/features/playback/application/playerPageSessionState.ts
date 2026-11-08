@@ -17,7 +17,7 @@ interface PlayerSourceFallbackEvidence {
 export type PlayerSourceFallbackState =
   | { kind: 'idle' }
   | ({ kind: 'searching' } & PlayerSourceFallbackEvidence)
-  | ({ kind: 'switching'; sourceName: string; candidateId?: string } & PlayerSourceFallbackEvidence)
+  | ({ kind: 'switching'; sourceName: string; candidateId?: string; message?: string } & PlayerSourceFallbackEvidence)
   | ({ kind: 'unavailable'; message: string } & PlayerSourceFallbackEvidence);
 
 export type PlayerPageResolutionState =
@@ -57,7 +57,7 @@ export type PlayerPageSessionAction =
       searchIncomplete: boolean;
       truncated: boolean;
     }
-  | { type: 'source-fallback-switching'; sourceName: string; candidateId?: string }
+  | { type: 'source-fallback-switching'; sourceName: string; candidateId?: string; message?: string }
   | { type: 'source-fallback-unavailable'; message: string }
   | { type: 'source-fallback-cleared' }
   | { type: 'drive-bind-dismissed' };
@@ -178,6 +178,7 @@ export function reducePlayerPageSession(
           kind: 'switching',
           sourceName: action.sourceName,
           candidateId: action.candidateId,
+          message: action.message,
         },
       };
     }

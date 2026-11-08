@@ -61,6 +61,8 @@ export function createPlayerPageSessionWorkflow(
   let fallbackExhaustionReported = false;
   let lastFallbackPosition = 0;
   let lastPlaybackFailure: PlaybackFailureContext | undefined;
+  let lastResolutionFailureMessage = '';
+  let automaticDriveSkipCount = 0;
   let prewarmController: AbortController | null = null;
   let prewarmingKey = '';
   let preparedEpisode: { key: string; result: PlayResult; expiresAt: number } | null = null;
@@ -72,6 +74,10 @@ export function createPlayerPageSessionWorkflow(
     ? AUTOMATIC_FAILOVER_BUDGET_MS
     : Math.max(0, AUTOMATIC_FAILOVER_BUDGET_MS - (Date.now() - automaticFailoverStartedAt));
 
+  const automaticDriveSkipNote = (): string => automaticDriveSkipCount > 0
+    ? `已自动跳过 ${automaticDriveSkipCount} 个需要网盘解链或转存的候选；这些来源仍可在列表中手动选择。`
+    : '';
+
   const reportAutomaticFailoverBudget = () => {
     if (fallbackExhaustionReported) return;
     fallbackExhaustionReported = true;
@@ -81,7 +87,7 @@ export function createPlayerPageSessionWorkflow(
       : Math.max(0, Math.floor((Date.now() - automaticFailoverStartedAt) / 1000));
     publish({
       type: 'source-fallback-unavailable',
-      message: `自动换源已运行约 ${elapsedSeconds} 秒并尝试了 ${attemptedCount} 个同剧同集来源；为避免继续等待，已暂停自动试播。已核验候选仍可手动切换，也可以重新搜索。`,
+      message: `自动换源已运行约 ${elapsedSeconds} 秒并尝试了 ${attemptedCount} 个同剧同集来源；为避免继续等待，已暂停自动试播。${automaticDriveSkipNote()}已核验候选仍可手动切换，也可以重新搜索。`,
     });
   };
 
@@ -92,7 +98,7 @@ export function createPlayerPageSessionWorkflow(
     const message = resolvedCount > 0
       ? `已核验 ${candidateById.size} 个同剧同集来源，其中 ${resolvedCount} 个取得过播放地址但未能正常播放，其余来源未能解析；可以手动切换来源或重新搜索。`
       : `已核验的 ${candidateById.size} 个同剧同集来源都未能取得可播放地址；可以手动切换来源或重新搜索。`;
-    publish({ type: 'source-fallback-unavailable', message });
+    publish({ type: 'source-fallback-unavailable', message: `${automaticDriveSkipNote()}${message}` });
   };
 
   const cancelPrewarm = () => {
@@ -126,6 +132,8 @@ export function createPlayerPageSessionWorkflow(
     candidateById.clear();
     resolvedCandidateIds.clear();
     lastPlaybackFailure = undefined;
+    lastResolutionFailureMessage = '';
+    automaticDriveSkipCount = 0;
     const currentId = sourceId(data);
     if (currentId) attemptedSourceIds.add(currentId);
     publish({ type: 'source-fallback-cleared' });
@@ -140,6 +148,8 @@ export function createPlayerPageSessionWorkflow(
     queuedAlternativeAttempt = null;
     resolvedAlternativeId = null;
     fallbackExhaustionReported = false;
+    lastResolutionFailureMessage = '';
+    automaticDriveSkipCount = 0;
     candidateById.clear();
     resolvedCandidateIds.clear();
     publish({ type: 'source-fallback-cleared' });
@@ -157,7 +167,10 @@ export function createPlayerPageSessionWorkflow(
       { data, index, preparedUrl, preparedResult: options?.preparedResult, parseOffset: options?.parseOffset, fastRecovery: options?.fastRecovery },
       {
         playback: session,
-        publish,
+        publish: action => {
+          if (action.type === 'resolution-failed') lastResolutionFailureMessage = action.message;
+          publish(action);
+        },
         isCurrent: () => generation.isCurrent(requestGeneration),
       },
     );
@@ -329,7 +342,13 @@ export function createPlayerPageSessionWorkflow(
       deferHistoryUntilPlayback: true,
       fastRecovery: automatic,
     };
-    publish({ type: 'source-fallback-switching', sourceName: candidate.sourceName, candidateId: id });
+    lastResolutionFailureMessage = '';
+    publish({
+      type: 'source-fallback-switching',
+      sourceName: candidate.sourceName,
+      candidateId: id,
+      message: automaticDriveSkipCount > 0 ? `${automaticDriveSkipNote()}正在继续尝试。` : undefined,
+    });
     updateInit(next);
     const result = await resolve(next, currentEpisodeIndex, '', { fastRecovery: automatic });
     if (result === 'drive-bind-required') {
@@ -341,7 +360,12 @@ export function createPlayerPageSessionWorkflow(
       return 'failed';
     }
     if (result === 'failed') {
-      if (automatic) return 'failed';
+      if (automatic) {
+        if (lastResolutionFailureMessage.includes('自动换源跳过需要网盘解链或转存的候选')) {
+          automaticDriveSkipCount += 1;
+        }
+        return 'failed';
+      }
       // Manual selection keeps the existing parser fallback for the chosen source.
       void autoChangeParse(position, '备用源解析失败', 'resolution-failure');
       return 'resolved';

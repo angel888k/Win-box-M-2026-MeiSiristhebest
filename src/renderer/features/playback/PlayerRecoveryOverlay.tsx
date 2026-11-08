@@ -64,7 +64,7 @@ export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
           {inProgress && <span className="player-recovery-spinner" aria-hidden="true" />}
           <h2 className="player-recovery-title">{heading}</h2>
           {fallback.kind === 'searching' && <p className="player-recovery-message">正在搜索并核验同剧同集的备用播放源。</p>}
-          {fallback.kind === 'switching' && <p className="player-recovery-message">正在尝试：{fallback.sourceName}</p>}
+          {fallback.kind === 'switching' && <p className="player-recovery-message">{fallback.message || `正在尝试：${fallback.sourceName}`}</p>}
           {message && !inProgress && <p className="player-recovery-message">{safeMessage.length > 180 ? playbackFailureSummary(failure) : safeMessage}</p>}
           {hasDiagnostic && (
             <>

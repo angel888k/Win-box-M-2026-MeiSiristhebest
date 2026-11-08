@@ -125,6 +125,49 @@ describe('player page session workflow', () => {
     expect(sourceMemory.rememberSource).toHaveBeenCalledWith(expect.objectContaining({ fromKey: 'source-b', id: 'movie-b' }));
   });
 
+  it('explains when automatic recovery skips a cloud-transfer candidate before trying the next source', async () => {
+    const driveCandidate = alternateCandidate();
+    const nextCandidate = {
+      ...alternateCandidate(),
+      id: 'profile-c\u001fsource-c\u001fmovie-c',
+      sourceName: 'Source C',
+      data: {
+        ...alternateCandidate().data,
+        key: 'source-c',
+        meta: { fromKey: 'source-c', id: 'movie-c', vodId: 'movie-c', profileId: 'profile-c', sourceName: 'Source C' },
+      },
+    };
+    const actions: PlayerPageSessionAction[] = [];
+    const workflow = createPlayerPageSessionWorkflow({
+      session: {
+        play: vi.fn(async input => input.key === 'source-a'
+          ? { parse: 1, url: '', playUrl: '', flag: input.flag, message: '初始线路解析失败' }
+          : input.key === 'source-b'
+            ? { parse: 1, url: '', playUrl: '', flag: input.flag, message: '自动换源跳过需要网盘解链或转存的候选；可在备用源列表中手动选择该来源' }
+            : { parse: 0, url: 'https://media.invalid/next.mp4', playUrl: '', flag: input.flag }),
+        resolveHistorySource: vi.fn(async () => ({ profileId: 'profile-a', name: 'Source A' })),
+        loadDetail: vi.fn(async () => null),
+        discover: vi.fn(async () => ({ candidates: [driveCandidate, nextCandidate], incompleteSources: 0, truncated: false })),
+        cleanupTemporaryFiles: vi.fn(async () => undefined),
+      },
+      history: { beginPlayerHistorySession: vi.fn(), recordHistory: vi.fn(), persist: vi.fn() },
+      sourceMemory: { rememberSource: vi.fn() },
+      publish: action => actions.push(action),
+    });
+
+    await workflow.applyInit(playbackInit());
+    await vi.waitFor(() => expect(actions).toContainEqual(expect.objectContaining({
+      type: 'resolution-succeeded',
+      url: 'https://media.invalid/next.mp4',
+    })));
+
+    expect(actions).toContainEqual(expect.objectContaining({
+      type: 'source-fallback-switching',
+      sourceName: 'Source C',
+      message: expect.stringContaining('已自动跳过 1 个需要网盘解链或转存的候选'),
+    }));
+  });
+
   it('cancels the still-running source scan after the verified alternate really starts', async () => {
     const first = alternateCandidate();
     const late = {
