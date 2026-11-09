@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -39,15 +39,30 @@ async function extractNsisArchive(archive) {
 }
 
 async function findMakensis(directory) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isFile() && entry.name.toLowerCase() === 'makensis.exe') return path;
-    if (entry.isDirectory()) {
-      const found = await findMakensis(path);
-      if (found) return found;
+  const preferred = [join(directory, 'Bin', 'makensis.exe'), join(directory, 'makensis.exe')];
+  for (const path of preferred) {
+    const file = await stat(path).catch(() => null);
+    // Some Windows package managers leave a tiny launcher beside the actual
+    // compiler. Prefer the real compiler under Bin; the launcher can fail with
+    // a system DLL relocation error when invoked from a packaged workspace.
+    if (file?.isFile() && file.size >= 64 * 1024) return path;
+  }
+
+  const candidates = [];
+  async function collect(current) {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const path = join(current, entry.name);
+      if (entry.isFile() && entry.name.toLowerCase() === 'makensis.exe') {
+        const file = await stat(path).catch(() => null);
+        if (file?.isFile() && file.size >= 64 * 1024) candidates.push({ path, size: file.size });
+      } else if (entry.isDirectory()) {
+        await collect(path);
+      }
     }
   }
-  return null;
+  await collect(directory);
+  candidates.sort((left, right) => right.size - left.size);
+  return candidates[0]?.path ?? null;
 }
 
 export async function ensureNsis() {
