@@ -17,7 +17,7 @@
 .about-link:hover { border-color: var(--text-accent, var(--accent)); color: var(--text-accent); }
 .sp-hot-score { flex: 0 0 auto; font-size: 12px; margin-left: auto; }
 .about-link:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
-:root[data-theme][data-player-fullscreen] .app.pwin .titlebar { display: none; }
+
 /* Theme-wide button rules must not add padding or a background to window controls. */
 :root[data-theme][data-theme] .titlebar .tb-btn {
   padding: 0; margin: 0; border: none; box-sizing: border-box; box-shadow: none;
@@ -72,24 +72,6 @@
   color: #d5e4ff; background: #17202d; border-color: #83aaff;
   box-shadow: inset 0 -2px #83aaff;
 }
-
-/* The reserved player title row has a higher-specificity display:flex rule above.
-   Reassert fullscreen after that rule so the 46px row cannot remain as a pale strip. */
-:root[data-player-fullscreen] .app.pwin.pvwin .titlebar {
-  display: none !important;
-  flex: 0 0 0 !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-}
-:root[data-player-fullscreen],
-:root[data-player-fullscreen] body,
-:root[data-player-fullscreen] #root,
-:root[data-player-fullscreen] .app.pwin.pvwin,
-:root[data-player-fullscreen] .app.pwin.pvwin .main,
-:root[data-player-fullscreen] .app.pwin.pvwin .pwin-body,
-:root[data-player-fullscreen] .app.pwin.pvwin .pwin-stage { background: #000 !important; }
 
 /* ---- 外挂字幕渲染（原生 TextTrack + VTTCue，用 CSS 变量控制字号/位置） ---- */
 .vplayer video::cue { font-size: var(--sub-font, 20px); font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;

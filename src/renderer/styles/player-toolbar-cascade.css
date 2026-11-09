@@ -88,6 +88,175 @@
   color: #fff !important;
 }
 
+/* Canonical player-window rules. Kept in this final unlayered cascade because
+   the visual skins contain broad button and titlebar rules. */
+:root[data-player-fullscreen],
+:root[data-player-fullscreen] body,
+:root[data-player-fullscreen] #root,
+:root[data-player-fullscreen] .app.pwin.pvwin,
+:root[data-player-fullscreen] .app.pwin.pvwin > .main,
+:root:has(.app.pwin.pvwin .vplayer.vfull),
+:root:has(.app.pwin.pvwin .vplayer.vfull) body,
+:root:has(.app.pwin.pvwin .vplayer.vfull) #root,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin > .main,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin .pwin-body,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin .pwin-stage {
+  background: #000 !important;
+}
+:root[data-player-fullscreen],
+:root[data-player-fullscreen] body,
+:root[data-player-fullscreen] #root,
+:root:has(.app.pwin.pvwin .vplayer.vfull) body,
+:root:has(.app.pwin.pvwin .vplayer.vfull) #root {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+:root[data-player-fullscreen] .app.pwin.pvwin,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-direction: column !important;
+}
+:root[data-player-fullscreen] .app.pwin.pvwin .titlebar,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin .titlebar {
+  display: none !important;
+  visibility: hidden !important;
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+:root[data-player-fullscreen] .app.pwin.pvwin > .main,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin > .main {
+  box-sizing: border-box !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+:root[data-player-fullscreen] .app.pwin.pvwin .pwin-body,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin .pwin-body,
+:root[data-player-fullscreen] .app.pwin.pvwin .pwin-stage,
+:root:has(.app.pwin.pvwin .vplayer.vfull) .app.pwin.pvwin .pwin-stage {
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: #000 !important;
+}
+:root:has(.vplayer:fullscreen),
+:root:has(.vplayer:fullscreen) body,
+:root:has(.vplayer:fullscreen) #root,
+.vplayer:fullscreen,
+.vplayer:fullscreen .vp-stage,
+.vplayer:fullscreen::backdrop {
+  background: #000 !important;
+}
+
+/* The ratio picker uses a fixed dark palette across all four visual skins. */
+:root .app.pwin.pvwin .vplayer .vp-subpanel.vp-ratio-panel {
+  color: #f3f6fb !important;
+  background: #202733 !important;
+  border-color: #8493a8 !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-ratio-panel .vp-fit-hint,
+:root .app.pwin.pvwin .vplayer .vp-ratio-panel .muted {
+  color: #d5deea !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-ratio-panel .vp-fit-hint {
+  margin: 0 0 8px !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  overflow-wrap: anywhere;
+}
+:root .app.pwin.pvwin .vplayer .vp-ratio-panel button.vsp-btn {
+  appearance: none !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 7px 9px !important;
+  border: 1px solid #8493a8 !important;
+  border-radius: 8px !important;
+  color: #f3f6fb !important;
+  background: #202733 !important;
+  font: 600 13px/1.4 var(--font-ui, system-ui, sans-serif) !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  text-align: center;
+  transform: none !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-ratio-panel button.vsp-btn:hover:not(:disabled) {
+  border-color: #a8c8ff !important;
+  background: #2b3646 !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-ratio-panel button.vsp-btn:is(.active, [aria-pressed='true']) {
+  border: 2px solid #a8c8ff !important;
+  color: #fff !important;
+  background: #244b7d !important;
+}
+
+/* Episode navigation is a compact list, not oversized card buttons. */
+:root .app.pwin.pvwin .vplayer .vp-eppanel {
+  box-sizing: border-box !important;
+  width: min(400px, max(280px, 24vw), calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px) !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-eplist {
+  display: flex !important;
+  flex-flow: column nowrap !important;
+  align-items: stretch !important;
+  gap: 2px !important;
+  min-height: 0 !important;
+  padding: 4px 8px 12px !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-eplist > button.vp-epitem {
+  appearance: none !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex: 0 0 40px !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  max-height: 40px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #f3f6fb !important;
+  background: transparent !important;
+  font: 500 13px/1.25 var(--font-ui, system-ui, sans-serif) !important;
+  text-align: left !important;
+  transform: none !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-eplist > button.vp-epitem:hover { background: #2b3646 !important; }
+:root .app.pwin.pvwin .vplayer .vp-eplist > button.vp-epitem[aria-pressed='true'] {
+  color: #fff !important;
+  background: #244b7d !important;
+}
+:root .app.pwin.pvwin .vplayer .vp-eplist > button.vp-epitem:focus-visible {
+  outline: 2px solid #a8c8ff !important;
+  outline-offset: -2px;
+}
+:root .app.pwin.pvwin .vplayer .vp-eplist > button.vp-epitem .vp-epno { color: #c5cfdd !important; }
+:root .app.pwin.pvwin .vplayer .vp-eplist > button.vp-epitem[aria-pressed='true'] .vp-epno { color: #a8c8ff !important; }
 /* Selected playback controls change color only. They keep the same 38px target
    and 22px glyph as idle controls, so selection cannot collapse the icon. */
 :root .vplayer .vp-bar-group .vp-ctl:not(.vp-rate):not(.vp-ctl-label):not(.vp-kernel) {

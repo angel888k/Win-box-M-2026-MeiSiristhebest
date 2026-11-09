@@ -65,14 +65,26 @@ export function usePlayerFullscreen({
     };
   }, [nativeFullscreen, port]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
-    if (full) root.dataset.playerFullscreen = '1';
-    else delete root.dataset.playerFullscreen;
+    const playerApp = containerRef.current?.closest<HTMLElement>('.app.pwin.pvwin');
+    if (full) {
+      root.dataset.playerFullscreen = '1';
+      if (playerApp) playerApp.dataset.playerFullscreen = '1';
+    } else {
+      delete root.dataset.playerFullscreen;
+      if (playerApp) delete playerApp.dataset.playerFullscreen;
+    }
     return () => {
-      if (!nativeWindow) delete root.dataset.playerFullscreen;
+      // A native player window intentionally survives presenter remounts while
+      // changing episodes. Keep its fullscreen marker until the next presenter
+      // reports the actual native fullscreen state.
+      if (!nativeWindow) {
+        delete root.dataset.playerFullscreen;
+        if (playerApp) delete playerApp.dataset.playerFullscreen;
+      }
     };
-  }, [full, nativeWindow]);
+  }, [containerRef, full, nativeWindow]);
 
   const exitMpvFullscreen = useCallback(() => {
     void port.setNativeFullscreen(false)

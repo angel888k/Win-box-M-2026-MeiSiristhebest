@@ -32,10 +32,8 @@ export function PlayerFitControl({
           {fit !== 'contain' && <span className="vp-subdot" />}
         </button>
         <div className={`vp-fithost${open ? ' open' : ''}`}>
-          <div id={panelId} className="vp-subpanel vp-fitpanel">
-            <div className="vsp-row" style={{ marginBottom: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>画面比例（会记住选择；强制比例为拉伸显示）</span>
-            </div>
+          <div id={panelId} className="vp-subpanel vp-fitpanel vp-ratio-panel">
+            <p className="vp-fit-hint">画面比例（会记住选择；强制比例为拉伸显示）</p>
             <div className="vsp-fits">
               {PLAYER_FITS.map((option) => (
                 <button
