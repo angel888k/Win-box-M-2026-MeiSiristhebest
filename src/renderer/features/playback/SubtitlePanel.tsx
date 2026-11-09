@@ -52,15 +52,15 @@ export function SubtitlePanel({
       </button>
       {open && (
         <div ref={panelRef} className="vp-panelhost" onPointerEnter={onPanelPointerEnter} onPointerLeave={onPointerLeave}>
-          <section id={panelId} aria-label="字幕设置" className="vp-subpanel">
+          <section id={panelId} aria-label="字幕设置" className="vp-subpanel vp-subtitle-panel">
             {onSelectTrack && <div><div className="vsp-row"><span className="muted">内置字幕轨</span></div><div className="vsp-fits"><button type="button" className="vsp-btn" onClick={() => onSelectTrack(-1)}>关闭内置字幕</button>{embeddedTracks.map((track, index) => <button type="button" key={track.id} className={'vsp-btn' + (sid === track.id ? ' active' : '')} aria-pressed={sid === track.id} onClick={() => onSelectTrack(track.id)}>{[track.lang, track.title, track.codec].filter(Boolean).join(' · ') || '字幕轨 ' + (index + 1)}</button>)}</div></div>}
-            <div className="vsp-row">
+            <div className="vsp-row vsp-header">
               <button type="button" className={`vp-panel-toggle${enabled ? ' active' : ''}`} aria-pressed={enabled} onClick={onToggle}>字幕：{enabled ? '开' : '关'}</button>
-              <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>
+              <span className="muted vsp-message">
                 {activeSubtitle ? `✓ ${activeSubtitle}` : '未加载字幕'}
               </span>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-range-row">
               <span className="muted vsp-label">字号</span>
               <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-font-size', delta: -2 })}>A−</button>
               <input
@@ -69,7 +69,7 @@ export function SubtitlePanel({
               />
               <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-font-size', delta: 2 })}>A＋</button>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-range-row">
               <span className="muted vsp-label">位置</span>
               <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-bottom', delta: -8 })}>上移</button>
               <input
@@ -79,17 +79,19 @@ export function SubtitlePanel({
               />
               <button className="vsp-btn" onClick={() => onAppearanceCommand({ type: 'step-bottom', delta: 8 })}>下移</button>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-sync-row">
               <span className="muted vsp-label">同步</span>
-              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.5 })}>−0.5s</button>
-              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.1 })}>−0.1s</button>
-              <span className="muted" style={{ fontSize: 12 }}>{offset >= 0 ? '+' : ''}{offset}s</span>
-              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.1 })}>+0.1s</button>
-              <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.5 })}>+0.5s</button>
-              <button className="vsp-btn" title="重置同步" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'reset-offset' })}>重置</button>
+              <div className="vsp-sync-controls">
+                <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.5 })}>−0.5s</button>
+                <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: -0.1 })}>−0.1s</button>
+                <span className="muted vsp-sync-value">{offset >= 0 ? '+' : ''}{offset}s</span>
+                <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.1 })}>+0.1s</button>
+                <button className="vsp-btn" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'step-offset', delta: 0.5 })}>+0.5s</button>
+                <button className="vsp-btn" title="重置同步" disabled={syncCapability.state !== 'available'} onClick={() => onAppearanceCommand({ type: 'reset-offset' })}>重置</button>
+              </div>
             </div>
             <div className="vsp-hint" role="status">{syncCapability.explanation}</div>
-            <div className="vsp-row" style={{ marginBottom: 6 }}>
+            <div className="vsp-row vsp-field-row" style={{ marginBottom: 6 }}>
               <input
                 className="vsp-input"
                 aria-label="字幕剧名"
@@ -99,7 +101,7 @@ export function SubtitlePanel({
                 onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing && query.trim()) onSearch(); }}
               />
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-actions-row">
               <button className="vsp-btn primary" disabled={searching || tokenHint} onClick={onSearch}>
                 {searching ? '搜索中…' : '搜索字幕'}
               </button>

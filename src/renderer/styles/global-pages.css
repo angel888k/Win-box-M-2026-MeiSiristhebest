@@ -97,12 +97,12 @@
 .vplayer video::-webkit-media-text-track-container { bottom: var(--sub-bottom, 40px) !important; }
 /* 字幕面板 */
 .vp-subdot { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: #5be08b; }
-.vp-subpanel { position: absolute; right: 12px; bottom: 60px; width: 340px; max-height: 280px; overflow: auto; z-index: 20;
+.vp-subpanel { position: absolute; right: 12px; bottom: 60px; box-sizing: border-box; width: min(340px, calc(100vw - 24px)); max-height: 280px; overflow-x: hidden; overflow-y: auto; z-index: 20;
   color: var(--text-primary, var(--text)); background: var(--surface-elevated, var(--surface-3)); border: 1px solid var(--border-strong, var(--border)); border-radius: 10px; padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
 .vp-popup-anchor { position: relative; display: inline-flex; align-items: center; flex: none; }
 .vp-panelhost { position: absolute; left: 50%; bottom: 100%; padding-bottom: 8px; z-index: 20; }
 .vp-panelhost .vp-subpanel { position: static; box-sizing: border-box; max-width: 100%; max-height: min(380px, calc(100vh - 140px)); }
-.vsp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.vsp-row { display: flex; align-items: center; gap: 8px; min-width: 0; margin-bottom: 8px; flex-wrap: wrap; }
 .vsp-label { font-size: 12px; width: 34px; }
 .vsp-input { flex: 1; min-width: 0; font-size: 12px; padding: 4px 8px; border: 1px solid var(--border);
   border-radius: 6px; background: var(--surface-2); color: var(--text); }
@@ -133,7 +133,8 @@
 .vp-fithost.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .vp-subpanel.vp-fitpanel { position: static; width: 268px; }
 /* ★ 2026-09-28（用户要求）：弹幕面板加宽（原本 340px，长剧名读不全）；候选名最多两行 */
-.vp-subpanel.vp-dmpanel { width: 438px; max-height: 380px; }
+.vp-subpanel.vp-dmpanel { width: min(438px, calc(100vw - 24px)); max-height: 380px; container-type: inline-size; }
+.vp-subpanel.vp-subtitle-panel { max-height: 380px; container-type: inline-size; }
 /* ★ 2026-10-08（用户要求）：跳过片头片尾面板 / 进度条右键菜单 / 跳过提示 */
 .vp-subpanel.vp-skippanel { width: 320px; }
 .vp-segment-mark { font-size: 12px; font-weight: 700; letter-spacing: -.3px; }
@@ -196,7 +197,7 @@
 .vp-stats-body { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; max-height: min(52vh, 320px); overflow: auto; }
 .vp-stats-row { display: contents; }
 .vp-stats-k { color: var(--text-secondary); white-space: nowrap; }
-.vp-stats-v { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-stats-v { min-width: 0; text-align: right; overflow-wrap: anywhere; }
 .vp-keys-body { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; }
 .vp-keys-row { display: contents; }
 .vp-keys-kbd { justify-self: start; font: inherit; font-size: 12px; padding: 2px 7px; border-radius: 5px;
@@ -209,13 +210,14 @@
 .vp-dmpanel .vsp-item-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .vsp-fits { display: flex; flex-wrap: wrap; gap: 6px; }
 .vsp-fits .vsp-btn { flex: 0 0 calc(50% - 3px); text-align: center; box-sizing: border-box; }
-.vsp-hint { font-size: 12px; color: var(--text-warn, var(--warn)); margin-top: 4px; }
-.vsp-err { font-size: 12px; color: var(--text-danger, var(--danger)); margin-top: 4px; }
+.vsp-hint { display: block; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--text-warn, var(--warn)); margin-top: 4px; overflow-wrap: anywhere; }
+.vsp-err { display: block; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--text-danger, var(--danger)); margin-top: 4px; overflow-wrap: anywhere; }
 .vsp-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; border-top: 1px solid var(--border-soft); padding-top: 6px; }
 .vsp-item { text-align: left; display: flex; flex-direction: column; gap: 2px; background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 6px; padding: 6px 8px; cursor: pointer; }
 .vsp-item:hover { border-color: var(--text-accent, var(--accent)); }
-.vsp-item-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vsp-item-name { min-width: 0; font-size: 12px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: normal; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .vsp-item .muted { font-size: 12px; }
 /* ★ 2026-09-26：弹幕源面板（接口开关清单 + 自定义接口输入） */
 .vsp-dmsrc { margin: 2px 0 6px; }
@@ -225,7 +227,7 @@
   max-width: 100%; }
 .vsp-dmsrc-item input { margin: 0; }
 .vsp-dmsrc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
-.vsp-dmsrc-text { width: 100%; box-sizing: border-box; margin-top: 6px; font-size: 12px; resize: vertical;
+.vsp-dmsrc-text { width: 100%; max-width: 100%; box-sizing: border-box; margin-top: 6px; font-size: 12px; resize: vertical;
   background: var(--surface-2); color: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
 .vsp-dmsrc-tag { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px; font-size: 12px;
   color: var(--text-accent, var(--accent)); background: var(--accent-soft); vertical-align: 1px; }

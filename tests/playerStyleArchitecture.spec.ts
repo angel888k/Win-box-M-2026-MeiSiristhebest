@@ -120,8 +120,8 @@ describe('player control style architecture', () => {
     const primary = readRule(css, ':root .vplayer .vp-subpanel.vp-dmpanel .vsp-btn.primary');
     const hover = readRule(css, ":root .vplayer .vp-subpanel.vp-dmpanel .vsp-btn:hover:not(:disabled):not(.primary):not(.active):not([aria-pressed='true']),\n:root .vplayer .vp-subpanel.vp-dmpanel .vp-panel-toggle:hover:not([aria-pressed='true'])");
 
-    expect(row).toMatch(/flex-wrap:\s*nowrap/);
-    expect(label).toMatch(/flex:\s*0 0 76px !important/);
+    expect(row).toMatch(/flex-wrap:\s*wrap/);
+    expect(label).toMatch(/flex:\s*0 0 64px !important/);
     expect(label).toMatch(/font-size:\s*15px !important/);
     expect(label).toMatch(/display:\s*inline-flex/);
     expect(label).toMatch(/white-space:\s*nowrap/);
@@ -130,7 +130,8 @@ describe('player control style architecture', () => {
     expect(button).toMatch(/min-height:\s*38px !important/);
     expect(selected).toMatch(/border:\s*2px solid/);
     expect(selected).not.toMatch(/content:\s*["']✓/);
-    expect(message).toMatch(/text-overflow:\s*ellipsis/);
+    expect(message).toMatch(/white-space:\s*normal/);
+    expect(message).toMatch(/overflow-wrap:\s*anywhere/);
     expect(primary).toMatch(/background:\s*var\(--color-accent/);
     expect(hover).toMatch(/color-mix\(in srgb, var\(--color-accent/);
     expect(css).not.toContain(':root[data-theme][data-theme] .vplayer .vp-subpanel.vp-dmpanel .vsp-btn:hover:not(:disabled),');

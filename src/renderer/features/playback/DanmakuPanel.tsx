@@ -54,11 +54,11 @@ export function DanmakuPanel({
       {open && (
         <div ref={panelRef} className="vp-panelhost" onPointerEnter={onPanelPointerEnter} onPointerLeave={onPointerLeave}>
           <section id={panelId} aria-label="弹幕设置" className="vp-subpanel vp-dmpanel">
-            <div className="vsp-row">
+            <div className="vsp-row vsp-header">
               <button type="button" className={`vp-panel-toggle${enabled ? ' active' : ''}`} aria-pressed={enabled} onClick={onToggle}>弹幕：{enabled ? '开' : '关'}</button>
               <span className="muted vsp-message">{message || (activeEpisodeId != null ? '已加载' : '')}</span>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-region-row">
               <span className="muted vsp-label">区域</span>
               {(['full', 'half', 'quarter'] as const).map((region) => (
                 <button
@@ -72,7 +72,7 @@ export function DanmakuPanel({
                 </button>
               ))}
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-range-row">
               <span className="muted vsp-label">字号</span>
               <button className="vsp-btn" onClick={() => onSettingsCommand({ type: 'step-font-size', delta: -2 })}>A−</button>
               <input
@@ -81,7 +81,7 @@ export function DanmakuPanel({
               />
               <button className="vsp-btn" onClick={() => onSettingsCommand({ type: 'step-font-size', delta: 2 })}>A＋</button>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-range-row">
               <span className="muted vsp-label">透明度</span>
               <input
                 aria-label="弹幕不透明度" type="range" min={20} max={100} value={Math.round(settings.opacity * 100)}
@@ -89,7 +89,7 @@ export function DanmakuPanel({
               />
               <span className="muted vsp-value">{Math.round(settings.opacity * 100)}%</span>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-range-row">
               <span className="muted vsp-label">密度</span>
               <input
                 aria-label="弹幕密度" type="range" min={25} max={100} value={Math.round(settings.density * 100)}
@@ -97,7 +97,7 @@ export function DanmakuPanel({
               />
               <span className="muted vsp-value">{settings.density.toFixed(2)}</span>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-range-row">
               <span className="muted vsp-label">速度</span>
               <input
                 aria-label="弹幕速度" type="range" min={50} max={300} value={settings.speed}
@@ -105,20 +105,19 @@ export function DanmakuPanel({
               />
               <span className="muted vsp-value">{settings.speed}</span>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-control-row vsp-action-row">
               <span className="muted vsp-label">时间</span>
               <button className="vsp-btn" onClick={() => onSettingsCommand({ type: 'step-offset', delta: -0.5 })}>−0.5s</button>
               <span className="muted vsp-value">{settings.offset >= 0 ? '+' : ''}{settings.offset}s</span>
               <button className="vsp-btn" onClick={() => onSettingsCommand({ type: 'step-offset', delta: 0.5 })}>+0.5s</button>
               <button className="vsp-btn" title="重置" onClick={() => onSettingsCommand({ type: 'reset-offset' })}>重置</button>
             </div>
-            <div className="vsp-row">
+            <div className="vsp-row vsp-field-row">
               <input
                 type="text"
                 value={query}
                 aria-label="弹幕剧名"
                 placeholder="剧名（自动清洗；可改输常见名）…"
-                style={{ flex: 1, minWidth: 120 }}
                 onChange={(event) => onQueryChange(event.target.value)}
                 onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) onSearch(); }}
               />
@@ -128,19 +127,18 @@ export function DanmakuPanel({
                 aria-label="弹幕集号"
                 placeholder="集（如 S1E01 / 第1集 / 1）"
                 title="集号：支持 S1E01、E01、第01集、1、更新至1 等写法；填 S2 可只指定季"
-                style={{ width: 128, flex: '0 0 128px' }}
                 onChange={(event) => onEpisodeChange(event.target.value)}
                 onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) onSearch(); }}
               />
             </div>
-            <div className="vsp-row" style={{ marginBottom: 6 }}>
+            <div className="vsp-row vsp-actions-row" style={{ marginBottom: 6 }}>
               <button className="vsp-btn primary" disabled={searching || !query.trim()} onClick={onSearch}>
                 {searching ? '匹配中…' : '匹配弹幕'}
               </button>
               {!query.trim() && <span className="vsp-hint" style={{ marginTop: 0 }}>请输入剧名</span>}
               {query.trim() && enabledSourceCount === 0 && <span className="vsp-hint" style={{ marginTop: 0 }}>弹幕源已全部关闭</span>}
             </div>
-            <div className="vsp-row" style={{ marginBottom: 4 }}>
+            <div className="vsp-row vsp-actions-row" style={{ marginBottom: 4 }}>
               <button
                 className="vsp-btn"
                 onClick={onToggleSources}
@@ -154,7 +152,7 @@ export function DanmakuPanel({
               <div className="vsp-dmsrc">
                 <div className="vsp-dmsrc-list">
                   {settings.endpoints.map((endpoint, index) => (
-                    <label key={endpoint.url} className="vsp-dmsrc-item" title={endpoint.url}>
+                    <label key={endpoint.url} className="vsp-dmsrc-item" title={`${endpoint.name} · ${endpoint.url}`}>
                       <input
                         type="checkbox"
                         checked={endpoint.enabled}
