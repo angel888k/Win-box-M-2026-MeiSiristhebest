@@ -39,6 +39,10 @@
 
 .movie-overview .muted { color: var(--text-secondary); font-size: 13px; }
 
+.movie-watch-providers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
+.watch-provider-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; background: var(--surface-raised, var(--surface)); border: 1px solid var(--border-subtle, var(--border)); font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.watch-provider-logo { width: 16px; height: 16px; border-radius: 4px; object-fit: cover; }
+
 .movie-overview-text {
   max-width: 76ch;
   margin: 18px 0 0;

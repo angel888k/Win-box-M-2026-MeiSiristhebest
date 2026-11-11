@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { cloneElement, isValidElement, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { formatPlaybackTime } from './formatting';
 import { PlayerEpisodePanel } from './PlayerEpisodePanel';
 import { PlayerContextMenu } from './PlayerContextMenu';
@@ -149,7 +149,9 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
           onClick={onSurfaceClick}
           onMouseDown={onBoostMouseDown}
         />
-        {statusOverlay}
+        {isValidElement(statusOverlay)
+          ? cloneElement(statusOverlay as ReactElement<Record<string, unknown>>, { currentPosition: controls.currentTime })
+          : statusOverlay}
       </div>
       {/* 弹幕叠加层（canvas，全屏区域，不拦截鼠标；fit 决定绘制区是否避让宽银幕黑边）
           ★ 2026-10-08 MPV 内核：时间/画面尺寸由主进程事件驱动（mpv 子窗口在 Chromium 之下，覆盖层仍在其上） */}
@@ -167,7 +169,7 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
         offset={dmCfg.offset}
       />
       {/* ★ 2026-10-08（用户要求）：跳过片头片尾的短暂提示（2.5s 淡出；不拦截鼠标） */}
-      <PlayerContextMenu position={playerContextMenu.position} menuRef={playerContextMenu.menuRef} onInfo={contextActions.onInfo} onCopy={contextActions.onCopy} />
+      <PlayerContextMenu position={playerContextMenu.position} menuRef={playerContextMenu.menuRef} onInfo={contextActions.onInfo} onCopy={contextActions.onCopy} onSwitchSource={contextActions.onSwitchSource} onCast={contextActions.onCast} />
       {!mini && episodeItems?.length ? <PlayerEpisodePanel episodes={episodeItems} current={episodeIndex} open={epPanel} title={episodeTitle} page={episodePage} onPageChange={setEpisodePage} onClose={closeEpisodes} onSelect={pickEpisode} /> : null}
       <PlayerTechnicalPanels audioTracks={audioTracks} subtitles={subtitles} pluginKeys={pluginKeys} active={active} statsOpen={statsOpen} keysOpen={keysOpen} capabilitiesOpen={capabilitiesOpen} capabilitySummary={capabilitySummary} mini={panelMini} mpvTech={mpvTech} fmtNet={formatNetworkSpeed} onStatsClose={onStatsClose} onKeysClose={onKeysClose} onCapabilitiesClose={onCapabilitiesClose} />
       <PlayerInfoOverlay open={infoOpen && !mini} title={info.title} currentTime={cur} duration={dur} resolution={resText} formatTime={formatPlaybackTime} />

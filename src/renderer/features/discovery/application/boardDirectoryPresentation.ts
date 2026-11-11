@@ -1,9 +1,10 @@
-import { BOARD_CATEGORIES, DOMESTIC_BOARDS, pluginSectionToBoard, TMDB_BOARDS, type DiscoverBoard } from '../../../../shared/discoverBoards';
+import { BOARD_CATEGORIES, DOMESTIC_BOARDS, getBoardBrandBadge, pluginSectionToBoard, TMDB_BOARDS, type DiscoverBoard } from '../../../../shared/discoverBoards';
 import type { DiscoverSection } from '../../../../shared/types';
 
 export interface BoardDirectoryFilters {
   categoryId: string;
   query: string;
+  platformId?: string;
 }
 
 export interface BoardDirectoryProjection {
@@ -69,9 +70,16 @@ export function projectBoardDirectory(
     .filter((section) => section.browseId?.startsWith('plugin:') || !builtinIds.has(section.id))
     .map(pluginSectionToBoard);
   const keyword = filters.query.trim().toLocaleLowerCase();
-  const matches = (board: DiscoverBoard): boolean =>
-    (!filters.categoryId || board.category === filters.categoryId)
-    && (!keyword || `${board.title} ${board.description} ${board.provider}`.toLocaleLowerCase().includes(keyword));
+  const platform = filters.platformId && filters.platformId !== 'all' ? filters.platformId : '';
+  const matches = (board: DiscoverBoard): boolean => {
+    if (filters.categoryId && board.category !== filters.categoryId) return false;
+    if (keyword && !`${board.title} ${board.description} ${board.provider}`.toLocaleLowerCase().includes(keyword)) return false;
+    if (platform) {
+      const badge = getBoardBrandBadge(board.id, board.provider);
+      if (badge?.id !== platform) return false;
+    }
+    return true;
+  };
   const boards = [
     ...DOMESTIC_BOARDS,
     ...(hasTmdbCredentials ? TMDB_BOARDS : []),

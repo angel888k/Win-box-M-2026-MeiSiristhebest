@@ -45,7 +45,7 @@ export function HomeBrowseResultsView({
         </div>
       )}
 
-      {error && !loading && (
+      {error && !loading && hasSources && (
         <div className="home-browse-error" role="alert">
           <div>
             <strong>当前来源加载失败</strong>
@@ -99,7 +99,7 @@ export function HomeBrowseResultsView({
         </div>
       )}
 
-      {items.length === 0 ? (error && !loading ? null : (
+      {items.length === 0 ? (error && !loading && hasSources ? null : (
         <div className="empty">
           {loading
             ? '加载中…'

@@ -13,7 +13,7 @@ export default function AboutPage() {
   return (
     <>
       <div className="content about">
-        <header className="page-heading"><div><h1>关于 Win-Box</h1><p>Windows 媒体源管理与播放工具</p></div></header>
+        <header className="page-heading"><div><h1>关于 Win-Box</h1><p>Windows 媒体源管理与播放工具 · 维护者：MeiSiristhebest</p></div></header>
         <section className="about-sec">
           <h3>功能</h3>
           <p>

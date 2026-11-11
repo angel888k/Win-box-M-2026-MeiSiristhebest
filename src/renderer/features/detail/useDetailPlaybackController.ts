@@ -35,6 +35,8 @@ type DetailPlaybackControllerOptions = {
     episodes?: Episode[];
     epIndex?: number;
     flag?: string;
+    flags?: string[];
+    allEpisodes?: Record<string, Episode[]>;
     profileId?: string;
   }) => void;
   onNeedDriveCookieBind: (provider: string) => void;
@@ -115,6 +117,8 @@ export function useDetailPlaybackController({
         episodes,
         epIndex: index,
         flag,
+        flags: detail.flags,
+        allEpisodes: detail.episodes,
       });
     } catch (error) {
       if (!playGenRef.current.isCurrent(gen)) return;

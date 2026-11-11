@@ -76,8 +76,11 @@ export async function searchMovieSources(
   };
   const dispose = () => {
     if (disposed) return;
+    if (progressTimer) {
+      clearTimeout(progressTimer);
+      publishProgress();
+    }
     disposed = true;
-    if (progressTimer) clearTimeout(progressTimer);
     progressTimer = undefined;
     unsubscribe();
   };

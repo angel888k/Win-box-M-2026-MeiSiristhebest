@@ -22,6 +22,9 @@ import {
   soapActionHeader,
 } from '../src/main/dlna/dlna';
 import { parseCastTarget } from '../src/shared/dlna';
+import { DlnaService } from '../src/main/dlna/DlnaService';
+import type { Logger } from '../src/shared/types';
+import { vi } from 'vitest';
 
 describe('SSDP', () => {
   it('M-SEARCH 报文含 HOST/MAN/ST/MX', () => {
@@ -168,5 +171,38 @@ describe('parseCastTarget', () => {
     expect(parseCastTarget('', '  ', 0)).toMatchObject({ name: 'Win-Box 投屏', localRelay: true });
     expect(parseCastTarget('not a url', 'n', 0).url).toBe('not a url');
     expect(parseCastTarget('http://127.0.0.1:9978/play?url=x', '', -5).positionMs).toBe(0);
+  });
+
+  it('DlnaService.cast 自动将 127.0.0.1 替换为局域网 IP，保证电视能够访问本地中继', async () => {
+    const logger: Logger = { i: vi.fn(), w: vi.fn(), e: vi.fn() };
+    const dlnaService = new DlnaService(logger);
+
+    const calls: Array<{ url: string; action: string; body: string }> = [];
+    (dlnaService as any).post = vi.fn().mockImplementation((url: string, action: string, body: string) => {
+      calls.push({ url, action, body });
+      return Promise.resolve({ ok: true });
+    });
+
+    const device = {
+      udn: 'uuid:tv-1',
+      name: '客厅电视',
+      location: 'http://192.168.1.50:8080/desc.xml',
+      controlUrl: 'http://192.168.1.50:8080/avt_control',
+    };
+
+    const target = {
+      url: 'http://127.0.0.1:9978/bt/hash/0',
+      name: '4K 视频',
+      positionMs: 5000,
+      localRelay: true,
+    };
+
+    const res = await dlnaService.cast(device, target);
+    expect(res.ok).toBe(true);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    const setUriCall = calls.find(c => c.action === 'SetAVTransportURI');
+    expect(setUriCall).toBeDefined();
+    expect(setUriCall!.body).not.toContain('127.0.0.1');
+    expect(setUriCall!.body).toMatch(/http:\/\/(?!127\.0\.0\.1)\d+\.\d+\.\d+\.\d+:9978\/bt\/hash\/0/);
   });
 });

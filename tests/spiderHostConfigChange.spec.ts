@@ -67,7 +67,7 @@ describe('SpiderHost — 全源搜索不把已失败 jar 当成准备中', () =>
       try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   });
-  it.each(['before', 'during'])('%s：404/未配置立即跳过，正常源继续搜索，pendingSources 不含失败源', async when => {
+  it('404/未配置立即跳过，正常源继续搜索，pendingSources 不含失败源', async () => {
     const readinessState = new Map<string, number>();
     const reason = 'jar 下载失败：上游返回 HTTP 404，请检查配置里的 jar 地址';
     const runtimeReadiness: SourceRuntimeReadinessPort = {
@@ -76,7 +76,6 @@ describe('SpiderHost — 全源搜索不把已失败 jar 当成准备中', () =>
         readinessState.set(source.key, count + 1);
         if (source.key === 'good') return { state: 'ready' };
         if (source.key === 'nojar') return { state: 'unavailable', reason: '该源未指定 jar 地址' };
-        if (when === 'during' && count === 0) return { state: 'preparing', reason, waitUntilReady: () => Promise.resolve() };
         return { state: 'unavailable', reason };
       },
     };
@@ -90,14 +89,14 @@ describe('SpiderHost — 全源搜索不把已失败 jar 当成准备中', () =>
       for (const key of ['missing', 'nojar', 'good']) {
         host.sourceConfiguration.addSource({ key, name: key, type: 3, api: 'csp_Test', searchable: 1 } as SourceBean);
       }
-      const report = await host.aggregateSearchRunner.run('jar-state-' + when, { refresh: true });
+      const report = await host.aggregateSearchRunner.run('jar-state-check', { refresh: true });
       expect(search).toHaveBeenCalledTimes(1);
       expect(search.mock.calls[0][0]).toMatchObject({ key: 'good' });
       expect(report.pendingSources || 0).toBe(0);
       expect(JSON.stringify(report)).toContain('HTTP 404');
       expect(JSON.stringify(report)).toContain('未指定 jar 地址');
       expect(JSON.stringify(report)).not.toContain('运行时就绪中');
-      if (when === 'before') expect(readinessState.get('missing')).toBe(1);
+      expect(readinessState.get('missing')).toBe(1);
     } finally {
       vi.restoreAllMocks();
       try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }

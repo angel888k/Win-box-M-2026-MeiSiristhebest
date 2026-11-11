@@ -185,9 +185,10 @@ export function useAudioPlaybackSession(
         : 'playing';
   useEffect(() => {
     if (!mediaSessionPort || !url) return;
+    const invokeAction = (fn: () => void) => { fn(); };
     const detach = attachPlayerMediaSession(mediaSessionPort, { title: String(name || '音频') }, {
-      play: () => mediaSessionActionsRef.current.play(),
-      pause: () => mediaSessionActionsRef.current.pause(),
+      play: () => invokeAction(mediaSessionActionsRef.current.play),
+      pause: () => invokeAction(mediaSessionActionsRef.current.pause),
       seekBy: seconds => mediaSessionActionsRef.current.seekBy(seconds),
       seekTo: seconds => mediaSessionActionsRef.current.seekTo(seconds),
       ...(canPrev && onPrev ? { previous: () => mediaSessionActionsRef.current.previous?.() } : {}),

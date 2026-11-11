@@ -91,6 +91,17 @@ describe('rewriteM3u8 — 加密流密钥地址（KeyLoadError 修复）', () =>
     const line = '#EXT-X-KEY:METHOD=AES-128,URI=""';
     expect(rewriteUriAttrs(line, BASE, UA, REF, CK)).toBe(line);
   });
+
+  it('RFC 8216 结构化解析：URI 包含带逗号的查询参数时，不误切或破坏其余属性', () => {
+    const src = '#EXT-X-KEY:METHOD=AES-128,URI="https://auth.example.com/k?tokens=1,2,3&format=bin",IV=0xABCD,KEYFORMAT="identity"\nseg.ts';
+    const out = text(rewriteM3u8(Buffer.from(src), BASE, UA, REF, CK));
+    expect(out).toContain('METHOD=AES-128');
+    expect(out).toContain('IV=0xABCD');
+    expect(out).toContain('KEYFORMAT="identity"');
+    const keyRelay = /URI="([^"]+)"/.exec(out)![1];
+    const q = new URLSearchParams(keyRelay.split('?')[1]);
+    expect(q.get('url')).toBe('https://auth.example.com/k?tokens=1,2,3&format=bin');
+  });
 });
 
 // ★ 2026-10-08（用户报「橘汁4K · jd4k 点开就提示已播放完毕」）：jpg 伪装分片识别（[JPEG 缩略图][真 TS]）。

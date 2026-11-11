@@ -338,6 +338,12 @@ export interface MetaRecommendation {
   mediaType: 'movie' | 'tv';
 }
 
+export interface WatchProvider {
+  id: number;
+  name: string;
+  logo: string;
+}
+
 export interface MetaExtra {
   cast: MetaCastMember[];
   genres: string[];
@@ -345,6 +351,8 @@ export interface MetaExtra {
   /** ★ 2026-09-24：导演名（TMDB `credits.crew[job=Director]` / 剧集 `created_by`）；
    *  详情页在源数据缺导演时用它补展示 */
   directors: string[];
+  /** ★ 借鉴 Seerr/Jellyseerr: 正版流媒体播出平台 (Watch Providers / JustWatch) */
+  watchProviders?: WatchProvider[];
 }
 
 // ---------- 发现页（国内榜单；与播放源解耦） ----------
@@ -357,6 +365,7 @@ export interface DiscoverItem {
   backdrop?: string;
   tmdbId?: number;
   doubanId?: string;
+  imdbId?: string;
   /** 来源提供的十分制评分与实际排名；缺省时不推算。 */
   rating?: number;
   rank?: number;
@@ -734,4 +743,33 @@ export interface Logger {
   i(t: string): void;
   w(t: string): void;
   e(t: string, err?: unknown): void;
+}
+
+// ---------- 离线下载管理 ----------
+export type DownloadTaskStatus = 'pending' | 'downloading' | 'paused' | 'completed' | 'failed' | 'cancelled';
+
+export interface DownloadTask {
+  id: string;
+  title: string;
+  url: string;
+  headers?: Record<string, string>;
+  savePath: string;
+  status: DownloadTaskStatus;
+  progress: number; // 0 - 100
+  speedBytesPerSec: number;
+  totalBytes?: number;
+  downloadedBytes: number;
+  error?: string;
+  createdAt: number;
+  completedAt?: number;
+}
+
+export interface DownloadProgressEvent {
+  id: string;
+  status: DownloadTaskStatus;
+  progress: number;
+  speedBytesPerSec: number;
+  downloadedBytes: number;
+  totalBytes?: number;
+  error?: string;
 }

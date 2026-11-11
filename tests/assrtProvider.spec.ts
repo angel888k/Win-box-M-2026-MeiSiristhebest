@@ -79,6 +79,22 @@ describe('decodeSubtitle（S3：UTF-8 / GBK 判别）', () => {
     expect(out).toContain('-->');
     expect(out).not.toBe('');
   });
+  it('★ 支持繁体中文 Big5 编码字幕，避免误判为 GB18030 乱码', () => {
+    const srt = '1\r\n00:00:01,000 --> 00:00:02,000\r\n繁體中文字幕測試\r\n';
+    const big5Buf = iconv.encode(srt, 'big5');
+    const out = decodeSubtitle(big5Buf);
+    expect(out).toContain('繁體中文字幕測試');
+    expect(out).not.toContain('羉砰');
+  });
+  it('★ 支持 UTF-16BE（带 BOM）与 Windows 常见无 BOM UTF-16LE 字幕', () => {
+    const srt = '1\r\n00:00:01,000 --> 00:00:02,000\r\n双语字幕测试\r\n';
+    // UTF-16BE with BOM
+    const beBuf = Buffer.concat([Buffer.from([0xfe, 0xff]), iconv.encode(srt, 'utf-16be')]);
+    expect(decodeSubtitle(beBuf)).toContain('双语字幕测试');
+    // UTF-16LE without BOM
+    const leNoBomBuf = iconv.encode(srt, 'utf-16le');
+    expect(decodeSubtitle(leNoBomBuf)).toContain('双语字幕测试');
+  });
 });
 
 describe('isArchive（S6：压缩/归档魔数）', () => {

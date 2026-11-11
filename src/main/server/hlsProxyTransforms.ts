@@ -68,15 +68,103 @@ export function rewriteUriAttrs(line: string, baseUrl: string, ua: string, refer
   });
 }
 
+/** RFC 8216 HLS 标签属性定义 */
+export interface HlsAttribute {
+  name: string;
+  value: string;
+  isQuoted: boolean;
+}
+
+/**
+ * 严格按照 RFC 8216 Section 4.2 语法解析 Attribute-List
+ * 能够准确处理 quoted-string 内部包含逗号、转义字符等情况，避免正则破坏复杂查询参数
+ */
+export function parseHlsAttributes(attrText: string): HlsAttribute[] {
+  const attrs: HlsAttribute[] = [];
+  let i = 0;
+  const len = attrText.length;
+
+  while (i < len) {
+    while (i < len && (attrText[i] === ' ' || attrText[i] === '\t' || attrText[i] === ',')) {
+      i++;
+    }
+    if (i >= len) break;
+
+    const eq = attrText.indexOf('=', i);
+    if (eq === -1) break;
+
+    const name = attrText.slice(i, eq).trim();
+    i = eq + 1;
+
+    if (i < len && attrText[i] === '"') {
+      i++;
+      let val = '';
+      while (i < len) {
+        if (attrText[i] === '\\' && i + 1 < len) {
+          val += attrText[i + 1];
+          i += 2;
+        } else if (attrText[i] === '"') {
+          i++;
+          break;
+        } else {
+          val += attrText[i];
+          i++;
+        }
+      }
+      attrs.push({ name, value: val, isQuoted: true });
+    } else {
+      let val = '';
+      while (i < len && attrText[i] !== ',') {
+        val += attrText[i];
+        i++;
+      }
+      attrs.push({ name, value: val.trim(), isQuoted: false });
+    }
+  }
+
+  return attrs;
+}
+
+/** 将属性列表序列化回 RFC 8216 规范字符串 */
+export function serializeHlsAttributes(attrs: HlsAttribute[]): string {
+  return attrs
+    .map((attr) => {
+      if (attr.isQuoted) {
+        const escaped = attr.value.replace(/"/g, '\\"');
+        return `${attr.name}="${escaped}"`;
+      }
+      return `${attr.name}=${attr.value}`;
+    })
+    .join(',');
+}
+
 function rewriteUriAttrsWithHeaders(line: string, baseUrl: string, headers: Record<string, string>, proxyBase = LOCAL_PROXY_BASE, kind: HlsResourceKind = 'asset'): string {
-  return line.replace(/URI="([^"]*)"/gi, (whole, uri: string) => {
-    const absolute = absolutize(uri, baseUrl, proxyBase);
-    if (!absolute) return whole;
-    let hasFileExtension = false;
-    try { hasFileExtension = /\.[a-z0-9]{1,10}$/i.test(new URL(absolute).pathname.split('/').pop() || ''); } catch { /* already validated */ }
-    const resourceKind: HlsResourceKind = kind === 'asset' || (hasFileExtension && !isHlsPlaylistUrl(absolute)) ? 'asset' : 'playlist';
-    return `URI="${wrapSegmentWithHeaders(absolute, headers, proxyBase, resourceKind)}"`;
-  });
+  const colonIndex = line.indexOf(':');
+  if (colonIndex === -1) return line;
+
+  const tag = line.slice(0, colonIndex);
+  const rest = line.slice(colonIndex + 1);
+  const attrs = parseHlsAttributes(rest);
+
+  let modified = false;
+  for (const attr of attrs) {
+    if (attr.name.toUpperCase() === 'URI' && attr.value) {
+      const absolute = absolutize(attr.value, baseUrl, proxyBase);
+      if (absolute) {
+        let hasFileExtension = false;
+        try {
+          hasFileExtension = /\.[a-z0-9]{1,10}$/i.test(new URL(absolute).pathname.split('/').pop() || '');
+        } catch { /* already validated */ }
+        const resourceKind: HlsResourceKind = kind === 'asset' || (hasFileExtension && !isHlsPlaylistUrl(absolute)) ? 'asset' : 'playlist';
+        attr.value = wrapSegmentWithHeaders(absolute, headers, proxyBase, resourceKind);
+        attr.isQuoted = true;
+        modified = true;
+      }
+    }
+  }
+
+  if (!modified) return line;
+  return `${tag}:${serializeHlsAttributes(attrs)}`;
 }
 
 function wrapSegmentWithHeaders(url: string, headers: Record<string, string>, proxyBase: string, kind: HlsResourceKind): string {

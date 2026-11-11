@@ -48,11 +48,9 @@ export function HomePageView({ model, posterSize, onPosterSizeChange }: { model:
             style={{ borderLeftColor: source.driveBinding.boundNames.length ? 'var(--accent-2)' : 'var(--warn)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
           >
             <span>
-              该源用网盘取流：
-              {source.driveBinding.boundNames.length ? '全局已配置「' + source.driveBinding.boundNames.join('/') + '」' : '尚未配置所需网盘账号'}。
-              账号由本机独立保存，各子仓中兼容的源可以共用。
+              {source.driveBinding.boundNames.length ? `已绑定网盘：${source.driveBinding.boundNames.join('、')}` : '需要配置网盘账号以播放此源'}
             </span>
-            <Button variant="primary" onClick={source.driveBinding.openDialog}>管理全局网盘账号</Button>
+            <Button variant="primary" onClick={source.driveBinding.openDialog}>配置网盘账号</Button>
           </div>
         )}
         {source.homePageUrl && !search.active && (
@@ -60,7 +58,7 @@ export function HomePageView({ model, posterSize, onPosterSizeChange }: { model:
             className="banner"
             style={{ borderLeftColor: 'var(--accent-2)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
           >
-            <span>该源是网页源（自带网页界面）：列取/登录等交互在网页窗口里完成，起播仍由本应用接管。</span>
+            <span>该源提供独立网页界面</span>
             <Button variant="primary" disabled={source.openingWebSource} onClick={() => void source.openWebHome()}>
               {source.openingWebSource ? '正在打开…' : '打开网页'}
             </Button>

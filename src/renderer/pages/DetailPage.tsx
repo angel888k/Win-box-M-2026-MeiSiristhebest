@@ -39,7 +39,7 @@ export default function DetailPage({
   onPlay,
   onOpenSearch,
 }: {
-  onPlay: (url: string, name: string, fromKey: string, id: string, meta?: { pic?: string; remarks?: string; sourceName?: string; title?: string; vodId?: string; episodes?: Episode[]; epIndex?: number; flag?: string; profileId?: string }) => void;
+  onPlay: (url: string, name: string, fromKey: string, id: string, meta?: { pic?: string; remarks?: string; sourceName?: string; title?: string; vodId?: string; episodes?: Episode[]; epIndex?: number; flag?: string; flags?: string[]; allEpisodes?: Record<string, Episode[]>; profileId?: string }) => void;
   onOpenSearch: (term: string, profileId?: string) => Promise<void>;
 }) {
   const routerParams = useParams<{ key: string; id: string }>();
@@ -285,9 +285,8 @@ export default function DetailPage({
               </section>
             ) : (
               <div className="row detail-no-source-actions">
-                <span style={{ fontSize: 13 }}>该源没有「{detailName || detail.name || ''}」的资源，是否进入聚合搜索？</span>
                 <button className={presentation.playButtonClass} onClick={() => goSearch(detailName || detail.name || '')}>
-                  进入聚合搜索
+                  全网聚合搜索
                 </button>
                 {favoriteBtn}
               </div>

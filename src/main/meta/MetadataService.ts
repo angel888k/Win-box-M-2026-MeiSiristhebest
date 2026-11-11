@@ -170,7 +170,7 @@ export class MetadataService {
   async boardPage(id: string, page: number, refresh = false): Promise<DiscoverBoardPage> {
     const pluginId = id.startsWith('plugin:') ? id.slice(7) : id;
     const board = id.startsWith('plugin:') ? undefined : findDiscoverBoard(id);
-    if (board?.provider === 'douban') return this.dependencies.domestic.boardPage(id, page, refresh);
+    if (board?.provider === 'douban' || board?.provider === 'bangumi' || board?.provider === 'imdb') return this.dependencies.domestic.boardPage(id, page, refresh);
     if (board?.provider === 'tmdb') return this.dependencies.tmdb.boardPage(id, page, refresh);
     if (!id || id.length > 200) throw new Error('无效的榜单');
     const section = (await this.pluginDiscoverySections()).find((item) => item.id === pluginId);

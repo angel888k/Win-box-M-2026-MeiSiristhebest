@@ -20,7 +20,7 @@ export interface PlayerPageSession extends PlayerPageSessionPresentation {
   retryCurrent(): void;
   autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause, failure?: PlaybackFailureContext): Promise<boolean>;
   retryAlternativeSearch(currentPosition?: number): Promise<boolean>;
-  selectAlternative(id: string): boolean;
+  selectAlternative(id: string, currentPosition?: number): boolean;
   confirmPlaybackStarted(): void;
   dismissDriveBinding(): void;
   onDriveBound(): void;

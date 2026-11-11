@@ -46,12 +46,14 @@ export function FavoritesPageView(props: FavoritesPageViewProps) {
     <>
       <div className="topbar gallery-page-topbar">
         <span style={{ fontWeight: 700 }}>我的收藏</span>
-        <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-          {props.rows.length ? `${props.rows.length} 条${props.keyword ? ` · 匹配 ${props.filtered.length} 条` : ''}` : '尚未收藏任何影片'}
-        </span>
+        {props.rows.length > 0 && (
+          <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+            {props.keyword ? `${props.filtered.length}/${props.rows.length}` : `${props.rows.length}`}
+          </span>
+        )}
         <PosterSizeControl size={props.posterSize} onChange={props.onPosterSizeChange} />
         {props.rows.length > 0 && (
-          <button className="linkbtn danger" style={{ marginLeft: 'auto' }} onClick={props.onClearAll}>清空全部收藏</button>
+          <button className="linkbtn danger" style={{ marginLeft: 'auto' }} onClick={props.onClearAll}>清空</button>
         )}
       </div>
       <PluginSlot slot="favorites" />

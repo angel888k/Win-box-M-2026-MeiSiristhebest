@@ -47,7 +47,10 @@ export function PlayerPageView({ session, windowState, title, onResolutionChange
       canGoPrevious={canPrev}
       canGoNext={canNext}
       showEpisodeNavigation={!activeUrl}
-      onSelectAlternative={(id) => { session.selectAlternative(id); }}
+      onSelectAlternative={(id, pos) => {
+        if (pos !== undefined) session.selectAlternative(id, pos);
+        else session.selectAlternative(id);
+      }}
       onRetryCurrent={retryCurrent}
       onSearchAgain={() => void retryAlternativeSearch()}
       onPreviousEpisode={() => selectEpisode(epIndex - 1)}

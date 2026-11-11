@@ -11,7 +11,7 @@ import type { MetaHit, MetaExtra, DiscoverItem, DiscoverSection, DiscoverGenre, 
 import type { MetaStore } from './MetaStore';
 import type { MetaSuggestion } from '../../shared/meta';
 import type { MetaImages } from '../../shared/types';
-import { BOARD_PAGE_SIZE, TMDB_BOARDS, normalizeBoardPage, type DiscoverBoardPage } from '../../shared/discoverBoards';
+import { BOARD_PAGE_SIZE, TMDB_BOARDS, discoverBoardById, normalizeBoardPage, type DiscoverBoardPage } from '../../shared/discoverBoards';
 import { MAX_QUERY_ROUNDS, MAX_QUERY_VARIANTS, metaCacheKey, metaQueryVariants, titleMatches } from './tmdbSearchPolicy';
 import { DEFAULT_IMAGE_BASE, parseGenreList, parseGenrePage, parseTmdbExtras, parseTmdbImages, parseTmdbSearch, toDiscoverItems } from './tmdbResponseParsers';
 export { parseGenreList, parseGenrePage, parseTmdbExtras, parseTmdbImages, parseTmdbSearch, toDiscoverItems } from './tmdbResponseParsers';
@@ -341,7 +341,7 @@ export async function tmdbExtras(
     const key = `${mediaType}:${hit.tmdbId}`;
     const c = extrasCache.get(key);
     if (c && Date.now() - c.t < EXTRAS_TTL_MS) return c.data;
-    const detailUrl = `${tmdbApiBase()}/${mediaType}/${hit.tmdbId}?language=zh-CN&append_to_response=credits,recommendations`;
+    const detailUrl = `${tmdbApiBase()}/${mediaType}/${hit.tmdbId}?language=zh-CN&append_to_response=credits,recommendations,watch/providers`;
     const ad = authFor(detailUrl, cred);
     const resp = await getJson(ad.url, ad.bearer, 12000);
     if (resp.status !== 200) {
@@ -357,6 +357,15 @@ export async function tmdbExtras(
         .map((r) => ({ ...r, poster: `${IMG_PROXY}?u=${encodeURIComponent(`${tmdbImageBase()}${r.posterPath}`)}` }))
         .map(({ posterPath: _p, ...rest }) => rest),
       directors: raw.directors.slice(0, 4),
+      ...(raw.watchProviders?.length
+        ? {
+            watchProviders: raw.watchProviders.map((wp) => ({
+              id: wp.id,
+              name: wp.name,
+              logo: wp.logoPath ? `${IMG_PROXY}?u=${encodeURIComponent(`${tmdbImageBase()}${wp.logoPath}`)}` : '',
+            })),
+          }
+        : {}),
     };
     extrasCache.set(key, { t: Date.now(), data });
     return data;
@@ -482,7 +491,39 @@ const BOARD_PATHS: Readonly<Record<string, string>> = {
   'movie-popular': '/movie/popular', 'movie-upcoming': '/movie/upcoming', 'movie-top': '/movie/top_rated',
   'tv-popular': '/tv/popular', 'tv-top': '/tv/top_rated',
   'movie-now-playing': '/movie/now_playing', 'tv-airing-today': '/tv/airing_today', 'tv-on-the-air': '/tv/on_the_air',
+  // 流媒体厂牌神作专区
+  'tv-netflix': '/discover/tv?with_networks=213&sort_by=vote_average.desc&vote_count.gte=300',
+  'tv-netflix-popular': '/discover/tv?with_networks=213&sort_by=popularity.desc',
+  'tv-hbo': '/discover/tv?with_networks=49&sort_by=vote_average.desc&vote_count.gte=300',
+  'tv-apple': '/discover/tv?with_networks=2552&sort_by=vote_average.desc&vote_count.gte=100',
+  'tv-disney': '/discover/tv?with_networks=2739&sort_by=vote_average.desc&vote_count.gte=200',
+  'tv-amazon': '/discover/tv?with_networks=1024&sort_by=vote_average.desc&vote_count.gte=200',
+  // 主题神作合集
+  'movie-scifi-top': '/discover/movie?with_genres=878&sort_by=vote_average.desc&vote_count.gte=1000',
+  'movie-animation-top': '/discover/movie?with_genres=16&sort_by=vote_average.desc&vote_count.gte=800',
 };
+
+/** 解析 TMDB 榜单请求路径，支持固定路径与基于任意年份的动态年度榜单匹配。 */
+export function resolveTmdbBoardPath(id: string): string | null {
+  if (BOARD_PATHS[id]) return BOARD_PATHS[id];
+
+  const movieAnnualMatch = id.match(/^movie-annual-(\d{4})$/);
+  if (movieAnnualMatch) {
+    const yr = Number(movieAnnualMatch[1]);
+    const minVotes = yr >= new Date().getFullYear() ? 50 : 200;
+    return `/discover/movie?primary_release_year=${yr}&sort_by=vote_average.desc&vote_count.gte=${minVotes}`;
+  }
+
+  const tvAnnualMatch = id.match(/^tv-annual-(\d{4})$/);
+  if (tvAnnualMatch) {
+    const yr = Number(tvAnnualMatch[1]);
+    const minVotes = yr >= new Date().getFullYear() ? 50 : 150;
+    return `/discover/tv?first_air_date_year=${yr}&sort_by=vote_average.desc&vote_count.gte=${minVotes}`;
+  }
+
+  return null;
+}
+
 const boardPages = new Map<string, DiscoverBoardPage>();
 const boardInflight = new Map<string, Promise<DiscoverBoardPage>>();
 
@@ -507,8 +548,8 @@ function tmdbBoardItems(json: { results?: unknown }, mediaType: 'movie' | 'tv'):
 }
 
 export async function tmdbBoardPage(logger: Logger, id: string, requestedPage: number, refresh = false): Promise<DiscoverBoardPage> {
-  const board = TMDB_BOARDS.find(item => item.id === id);
-  if (!board) throw new Error('没有找到这个 TMDB 榜单');
+  const board = discoverBoardById(id);
+  if (!board || board.provider !== 'tmdb') throw new Error('没有找到这个 TMDB 榜单');
   const cred = tmdbCreds();
   if (!cred) throw new Error('请先在“设置 → 凭据”中配置自己的 TMDB 凭据');
   const page = normalizeBoardPage(requestedPage);
@@ -519,7 +560,10 @@ export async function tmdbBoardPage(logger: Logger, id: string, requestedPage: n
   if (running) return running;
   const task = (async (): Promise<DiscoverBoardPage> => {
     try {
-      const auth = authFor(`${tmdbApiBase()}${BOARD_PATHS[id]}?language=zh-CN&page=${page}`, cred);
+      const path = resolveTmdbBoardPath(id);
+      if (!path) throw new Error('没有找到这个 TMDB 榜单对应的请求接口');
+      const sep = path.includes('?') ? '&' : '?';
+      const auth = authFor(`${tmdbApiBase()}${path}${sep}language=zh-CN&page=${page}`, cred);
       const response = await getJson(auth.url, auth.bearer, 12000);
       if (response.status !== 200) throw new Error(`TMDB 榜单请求失败（HTTP ${response.status}）`);
       const json = JSON.parse(response.text);

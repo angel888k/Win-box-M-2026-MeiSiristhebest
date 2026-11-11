@@ -24,7 +24,18 @@ export function DiscoverDetailPageView(props: DiscoverDetailPageViewProps) {
         {props.extra?.genres.length ? <p>{props.extra.genres.join(' · ')}</p> : null}
         {props.extra?.directors.length ? <p>导演：{props.extra.directors.join('、')}</p> : null}
         {props.extra?.cast.length ? <p>主演：{props.extra.cast.slice(0, 12).map(person => person.name).join('、')}</p> : null}
-        <p className="movie-overview-text">{props.meta?.overview || (props.loading ? '正在获取影片简介…' : props.error || '元数据来源暂未提供简介。请选择下方片源查看详情和剧集。')}</p>
+        {props.extra?.watchProviders?.length ? (
+          <div className="movie-watch-providers" aria-label="正版流媒体播出平台">
+            <span className="muted">播出平台：</span>
+            {props.extra.watchProviders.map((wp) => (
+              <span key={wp.id} className="watch-provider-chip" title={wp.name}>
+                {wp.logo && <img src={wp.logo} alt="" className="watch-provider-logo" />}
+                <span>{wp.name}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <p className="movie-overview-text">{props.meta?.overview || (props.loading ? '加载中…' : '暂无简介')}</p>
       </div>
     </section>
     <MovieSourcesPanel key={props.title} title={props.title} poster={poster} />

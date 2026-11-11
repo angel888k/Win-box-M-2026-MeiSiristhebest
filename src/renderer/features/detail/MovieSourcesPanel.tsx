@@ -50,7 +50,7 @@ export function MovieSourcesPanel({ title: name, poster = '' }: { title: string;
   const onImageError = useCallback((item: AggVodItem, image: HTMLImageElement) => imageErrorRef.current(item, image), []);
   return <section className="movie-sources" aria-label="聚合播放来源" aria-busy={search.loading || panel.folderLoading}>
     <header className="page-heading">
-      <div><h2>播放来源</h2><p>在全部已导入子仓中查找“{search.query}”，选择片源后查看剧集并播放。</p></div>
+      <div><h2>播放来源</h2></div>
       <button type="button" onClick={() => { panel.resetForSearch(); search.refresh(); }} disabled={search.loading}>重新搜索</button>
     </header>
     {panelStatus.kind === 'searching' && <output>{search.progress ? `正在搜索 ${search.progress.done}/${search.progress.total} 个源…` : panelStatus.message}</output>}

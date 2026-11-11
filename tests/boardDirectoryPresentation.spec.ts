@@ -29,6 +29,20 @@ describe('projectBoardDirectory', () => {
     expect(projection.boards.every((board) => `${board.title} ${board.description} ${board.provider}`.toLocaleLowerCase().includes('douban'))).toBe(true);
   });
 
+  it('filters boards by brand/streaming platform', () => {
+    const doubanProj = projectBoardDirectory([], { hasCredentials: true, status: 'ready' }, { categoryId: '', query: '', platformId: 'douban' });
+    expect(doubanProj.boards.length).toBeGreaterThan(0);
+    expect(doubanProj.boards.every(b => b.provider === 'douban')).toBe(true);
+
+    const netflixProj = projectBoardDirectory([], { hasCredentials: true, status: 'ready' }, { categoryId: '', query: '', platformId: 'netflix' });
+    expect(netflixProj.boards.length).toBeGreaterThan(0);
+    expect(netflixProj.boards.every(b => b.id.startsWith('tv-netflix'))).toBe(true);
+
+    const imdbProj = projectBoardDirectory([], { hasCredentials: true, status: 'ready' }, { categoryId: '', query: '', platformId: 'imdb' });
+    expect(imdbProj.boards.length).toBeGreaterThan(0);
+    expect(imdbProj.boards.every(b => b.id.startsWith('imdb_'))).toBe(true);
+  });
+
   it.each(['loading', 'failed'] as const)('does not present cached negative credentials as current while status is %s', (status) => {
     const projection = projectBoardDirectory(sections, { hasCredentials: false, status }, { categoryId: '', query: '' });
 

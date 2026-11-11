@@ -5,9 +5,9 @@
   "version": "1.0.0",
   "apiVersion": "1.x",
   "kind": "asset",
-  "author": "Win-Box",
+  "author": "MeiSiristhebest",
   "license": "MIT",
-  "homepage": "https://github.com/yagami-hue/Win-box",
+  "homepage": "https://github.com/MeiSiristhebest/Win-box",
   "description": "Anime4K / RAVU-Lite / FSRCNNX 实时超分辨率（MPV 内核）",
   "permissions": [],
   "contributes": [

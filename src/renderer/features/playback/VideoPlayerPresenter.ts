@@ -897,6 +897,14 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
   const contextActions = {
     onInfo: () => { contextMenu.toggleInfo(); contextMenu.closeMenu(); },
     onCopy: () => { void contextMenu.copyAddress(); contextMenu.closeMenu(); },
+    onSwitchSource: props.onAutoChangeParse ? () => {
+      contextMenu.closeMenu();
+      void props.onAutoChangeParse?.(cur, '用户手动切换播放源', 'media-failure');
+    } : undefined,
+    onCast: () => {
+      contextMenu.closeMenu();
+      dlna.actions.toggle();
+    },
   };
   const onGoToBind = useCallback(() => { void dependencies.driveBindingNavigation.openBindingSettings(); }, [dependencies.driveBindingNavigation]);
   const onRetryPlayback = props.onRetryPlayback;
@@ -956,7 +964,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       episodeCount: props.epTotal,
       startTime: props.startTime,
     },
-    navigation: { canPrev, canNext, onPrev, onNext },
+    navigation: { canPrev, canNext, onPrev, onNext, onAutoChangeParse: props.onAutoChangeParse },
     surface: {
       videoRef: ref, containerRef: wrapRef, controlsVisible: ui, full, toggleFull, fit, subFont, subBottom,
       onPointerActivity: poke, onPointerLeave: hideIfNoPanel, onDoubleClick: onSurfaceDoubleClick,

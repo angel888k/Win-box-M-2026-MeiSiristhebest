@@ -201,10 +201,11 @@ declare global {
         browse: (a: { id: string; path?: string }) => Promise<IpcResult<DavBrowseResult>>;
         openExternal: (url: string) => Promise<IpcResult<{ ok: boolean; player?: string; error?: string }>>;
       };
-      /** ★ 2026-09-29 DLNA 投屏（SSDP 发现 + AVTransport 三动作） */
+      /** ★ 2026-09-29 DLNA 投屏（SSDP 发现 + AVTransport 三动作）与 DMR 接收端 */
       dlna: {
         discover: () => Promise<IpcResult<DlnaDevice[]>>;
         cast: (a: { device: DlnaDevice; target: DlnaCastTarget }) => Promise<IpcResult<DlnaCastResult>>;
+        dmrStatus: () => Promise<IpcResult<{ running: boolean; friendlyName: string; port: number }>>;
       };
       subtitle: {
         get: () => Promise<IpcResult<SubtitleSettings>>;
@@ -324,6 +325,14 @@ declare global {
       };
       quark: {
         cleanup: () => Promise<IpcResult<void>>;
+      };
+      download: {
+        list: () => Promise<IpcResult<import('../../shared/types').DownloadTask[]>>;
+        start: (options: { url: string; title: string; headers?: Record<string, string>; savePath?: string }) => Promise<IpcResult<import('../../shared/types').DownloadTask>>;
+        pause: (id: string) => Promise<IpcResult<boolean>>;
+        resume: (id: string) => Promise<IpcResult<boolean>>;
+        cancel: (id: string, deleteFile?: boolean) => Promise<IpcResult<boolean>>;
+        onProgress: (cb: (event: import('../../shared/types').DownloadProgressEvent) => void) => () => void;
       };
       // ★ 播放偏好（m3u8 去广告开关；改后本地中继 /play 即时生效）
       playerPrefs: {

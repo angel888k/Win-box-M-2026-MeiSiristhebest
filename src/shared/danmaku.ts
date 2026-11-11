@@ -19,18 +19,18 @@ export interface DanmakuApiEndpoint {
   enabled: boolean;
 }
 
-/** ★ 2026-09-26：内置接口清单 —— 默认只启用「炊烟袅袅」（其余可在播放器「弹幕源」面板按需开启） */
+/** ★ 2026-11-01：内置接口清单 —— 默认高可用全激活前 5 个源（炊烟袅袅、麦当劳、Lily、W佬、稳健） */
 export const DEFAULT_DANMAKU_ENDPOINTS: readonly DanmakuApiEndpoint[] = [
   { name: '炊烟袅袅', url: 'https://danmu.cynn.top/cynnsq', enabled: true },
+  { name: '麦当劳', url: 'https://logo.saodu.work:8888', enabled: true },
+  { name: 'Lily', url: 'https://danmu.lily.lat/lilyemby', enabled: true },
+  { name: 'W佬', url: 'https://dm.660505.xyz:8443/a123456', enabled: true },
+  { name: '稳健', url: 'https://dandan.wenjian.de/wenjian', enabled: true },
   { name: 'LogVar', url: 'https://dm.abai.ccwu.cc/abai', enabled: false },
   { name: '御坂', url: 'https://dmk.abai.ccwu.cc/api/v1/abaibai', enabled: false },
-  { name: 'Lily', url: 'https://danmu.lily.lat/lilyemby', enabled: false },
-  { name: 'Lily', url: 'https://danmu.longemby.com/lilyemby', enabled: false },
+  { name: 'Lily (备用)', url: 'https://danmu.longemby.com/lilyemby', enabled: false },
   { name: '墨云阁', url: 'https://danmu.wangziyang.top/020116', enabled: false },
-  { name: '麦当劳', url: 'https://logo.saodu.work:8888', enabled: false },
-  { name: '麦当劳', url: 'https://ybdm.saodu.wang:9999/api/v1/IN5H9udKhmMMklvDYVPs', enabled: false },
-  { name: 'W佬', url: 'https://dm.660505.xyz:8443/a123456', enabled: false },
-  { name: '稳健', url: 'https://dandan.wenjian.de/wenjian', enabled: false },
+  { name: '麦当劳 (备用)', url: 'https://ybdm.saodu.wang:9999/api/v1/IN5H9udKhmMMklvDYVPs', enabled: false },
   { name: '鸢尾 Iris', url: 'https://justdanmu.irisnb.com/iris-danmu', enabled: false },
   { name: '夏天', url: 'https://dm.wodenas.xin/xiatianemby', enabled: false },
   { name: 'Uncle Joel', url: 'https://dmfl.us.ci', enabled: false },

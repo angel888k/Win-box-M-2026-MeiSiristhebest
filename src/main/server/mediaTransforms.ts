@@ -1,3 +1,5 @@
+import { Transform } from 'node:stream';
+
 /** Pure byte-level helpers used by proxy routes to recognize wrapped media and ranges. */
 
 /** [off, off+188*3) contains MPEG-TS sync bytes at 188-byte intervals. */
@@ -76,3 +78,42 @@ export function buildSlices(start: number, end: number, chunk: number): Array<{ 
   }
   return slices;
 }
+
+/**
+ * Creates a stream transform that skips `skipBytes` and outputs up to `maxBytes`.
+ * Used when an upstream HTTP server returns 200 OK instead of 206 Partial Content,
+ * allowing the local proxy to synthesize 206 slices so players can seek smoothly.
+ */
+export function createRangeSliceStream(skipBytes: number, maxBytes?: number): Transform {
+  let skipped = 0;
+  let emitted = 0;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      if (maxBytes !== undefined && emitted >= maxBytes) {
+        return callback();
+      }
+      let buffer = chunk;
+      if (skipped < skipBytes) {
+        const needed = skipBytes - skipped;
+        if (buffer.length <= needed) {
+          skipped += buffer.length;
+          return callback();
+        }
+        buffer = buffer.subarray(needed);
+        skipped = skipBytes;
+      }
+      if (maxBytes !== undefined) {
+        const remaining = maxBytes - emitted;
+        if (buffer.length > remaining) {
+          buffer = buffer.subarray(0, remaining);
+        }
+      }
+      emitted += buffer.length;
+      callback(null, buffer);
+      if (maxBytes !== undefined && emitted >= maxBytes) {
+        this.push(null);
+      }
+    },
+  });
+}
+

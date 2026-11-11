@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { movieSearchTitle, searchTitleScore } from '../src/shared/searchTitleMatching';
+import { diceCoefficient, movieSearchTitle, searchTitleScore } from '../src/shared/searchTitleMatching';
 import { sourceIdentityKey } from '../src/shared/sourceIdentity';
 import { projectSearchResults } from '../src/renderer/features/search/application/searchResultProjection';
 import type { AggVodItem } from '../src/shared/types';
@@ -46,6 +46,15 @@ describe('movie search relevance', () => {
     expect(searchTitleScore('qyn2', '庆余年 第二季')).toBeGreaterThan(0);
     expect(searchTitleScore('qyn2', '庆余年 第一季')).toBe(0);
     expect(searchTitleScore('qyn', '庆余年')).toBeGreaterThan(searchTitleScore('qyn', '庆余年 解说'));
+  });
+
+  it('matches fuzzy title variants via dice coefficient while rejecting sequel mismatch', () => {
+    expect(diceCoefficient('Stranger Things', 'Stranger Things')).toBe(1);
+    expect(diceCoefficient('Stranger Things', 'Strange')).toBeGreaterThan(0.5);
+    // Slight punctuation or spacing differences match with positive score
+    expect(searchTitleScore('进击的巨人最终季', '进击的巨人：最终篇')).toBeGreaterThan(0);
+    // Sequel numbers must still not match
+    expect(searchTitleScore('黑客帝国2', '黑客帝国1')).toBe(0);
   });
 
   it('filters by profile and source identity without merging same-key sources', () => {

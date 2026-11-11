@@ -38,13 +38,15 @@ export function HistoryPageView(props: HistoryPageViewProps) {
     <>
       <div className="topbar gallery-page-topbar">
         <span style={{ fontWeight: 700 }}>观看历史</span>
-        <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-          {items.length ? `${items.length} 条${resumeCount ? ` · ${resumeCount} 条可续播` : ''} · 自动保存` : '尚未有播放记录'}
-        </span>
+        {items.length > 0 && (
+          <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+            {items.length}
+          </span>
+        )}
         <PosterSizeControl size={props.posterSize} onChange={props.onPosterSizeChange} />
         {items.length > 0 && (
           <button className="linkbtn danger" style={{ marginLeft: 'auto' }} onClick={props.onClearAll}>
-            清空全部
+            清空
           </button>
         )}
       </div>

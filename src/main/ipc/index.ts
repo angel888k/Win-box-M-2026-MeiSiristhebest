@@ -33,6 +33,9 @@ import { registerSubtitleIpc } from './subtitleIpc';
 import type { SubtitleIpcPort } from './subtitleIpc';
 import { registerDanmakuIpc } from './danmakuIpc';
 import type { DanmakuIpcPort } from './danmakuIpc';
+import { registerDownloadIpc } from './downloadIpc';
+import type { DownloadManager } from '../download/DownloadManager';
+import type { DlnaDmrService } from '../dlna/dmr/DlnaDmrService';
 import {
   registerLiveChannelConfigurationIpc,
   registerProfileIpc,
@@ -80,6 +83,7 @@ interface IpcFeaturePorts {
   subtitles: SubtitleIpcPort;
   danmaku: DanmakuIpcPort;
   metadata: MetadataIpcPort;
+  downloads?: DownloadManager;
 }
 
 /** ★ 本次主进程启动的会话标识（模块求值 = 应用启动一次；重启必变） */
@@ -95,6 +99,7 @@ export function registerIpc(
   engines: PlayerEngineController,
   features: IpcFeaturePorts,
   backup: Pick<SettingsBackupService, 'snapshot' | 'restore'>,
+  dlnaDmr?: DlnaDmrService,
 ): void {
   const log = fileLogger;
   /** ★ 2026-10-08 MPV 播放内核（单会话；播放器窗口关闭/退出应用会 dispose） */
@@ -210,6 +215,9 @@ export function registerIpc(
   registerSubtitleIpc(features.subtitles, log);
   registerDanmakuIpc(features.danmaku, log);
   registerMetadataIpc(features.metadata, log);
+  if (features.downloads) {
+    registerDownloadIpc(features.downloads, log);
+  }
   registerHandler(IPC.CFG_MERGE_EXPORT, (_e: any, ids: string[]) => services.profileConfiguration.exportMergedProfiles(ids), log);
   registerHandler(IPC.CFG_EXPORT_SAVE, async (_e: any, a: { content: string; defaultName?: string }) => {
     const w = winOf(_e as IpcMainInvokeEvent);
@@ -326,6 +334,25 @@ export function registerIpc(
     engines,
     onPlaybackStarted: () => services.spiderRuntime.onPlaybackStarted(),
     notifyPlayerWindowState,
+    onMediaState: (state, isPlayer) => {
+      if (isPlayer && dlnaDmr) {
+        const stateObj = (state && typeof state === 'object' ? state : {}) as Record<string, unknown>;
+        const ev = String(stateObj.event || '');
+        if (ev === 'play' || ev === 'playing') {
+          dlnaDmr.updatePlaybackState({ transportState: 'PLAYING' });
+        } else if (ev === 'pause') {
+          dlnaDmr.updatePlaybackState({ transportState: 'PAUSED_PLAYBACK' });
+        } else if (ev === 'ended') {
+          dlnaDmr.updatePlaybackState({ transportState: 'STOPPED' });
+        }
+        if (typeof stateObj.currentTime === 'number') {
+          dlnaDmr.updatePlaybackState({ position: stateObj.currentTime });
+        }
+        if (typeof stateObj.duration === 'number') {
+          dlnaDmr.updatePlaybackState({ duration: stateObj.duration });
+        }
+      }
+    },
   });
 
   // ---- 老板键（全局快捷键隐藏/恢复窗口）----
@@ -376,6 +403,12 @@ export function registerIpc(
   registerHandler(IPC.DLNA_DISCOVER, () => dlna.discover(), log);
   registerHandler(IPC.DLNA_CAST, (_e: any, a: { device: DlnaDevice; target: DlnaCastTarget }) =>
     dlna.cast(a?.device, a?.target || ({ url: '', name: '', positionMs: 0 } as DlnaCastTarget)), log);
+  // ★ 2026-11-01 DLNA DMR 手机投屏接收端服务状态
+  registerHandler(IPC.DLNA_DMR_STATUS, () => ({
+    running: dlnaDmr?.running ?? false,
+    friendlyName: dlnaDmr?.friendlyName ?? 'Win-Box 投屏',
+    port: dlnaDmr?.port ?? 9978,
+  }), log);
 
   // ★ 2026-09-29 启动更新：检查（失败不影响使用）→ 用户确认后代理加速下载 Setup（进度推送）→ 拉起安装程序
   registerHandler(IPC.UPDATE_CHECK, () => updater.check(), log);

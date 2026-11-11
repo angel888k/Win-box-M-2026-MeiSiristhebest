@@ -19,6 +19,7 @@ import { createLocalUpstream } from './globals/SandboxLocal';
 import { withTimeout } from '../util/withTimeout';
 import { SourceProblemError } from '../spider/errors';
 import { awaitWithAbort, throwIfAborted } from '../util/abort';
+import type { QuickJSContext, QuickJSHandle } from 'quickjs-emscripten';
 
 /**
  * `assets://js/lib/X.js` → dr_py 仓库的 libs/X.js（drpy2 引擎脚本头部就是这种写法）。
@@ -100,6 +101,7 @@ export class JsSandbox implements JsSpiderRuntimePort {
   private templateCache: unknown;
   private warned = new Set<string>();
   private invocationId = 0;
+  private quickJsVm: QuickJSContext | null = null;
 
   constructor(options: JsSandboxOptions) {
     this.siteKey = options.siteKey;
@@ -152,8 +154,8 @@ export class JsSandbox implements JsSpiderRuntimePort {
       throw new UnsupportedSourceError('FETCH_FAILED', `脚本文本无效（404/HTML）: ${this.api}`);
     }
     if (content.startsWith('//bb')) {
-      // utils.js 同类的 QuickJS 字节码，node:vm 无法执行（JsSpider.java:316 走 ctx.execute(bytecode)）
-      throw new UnsupportedSourceError('UNSUPPORTED_BYTECODE', 'QuickJS 字节码脚本（//bb）无法在 node:vm 执行');
+      await this.loadQuickJsBytecode(content);
+      return;
     }
     if (content.includes('__JS_SPIDER__')) {
       content = content.replace(/__JS_SPIDER__\s*=/, 'export default '); // JsSpider.java:330
@@ -328,11 +330,171 @@ export class JsSandbox implements JsSpiderRuntimePort {
     this.spider = null;
     this.ctx = null; // node:vm 无显式销毁 API，置空引用交由 GC
     this.globals = null;
+    if (this.quickJsVm) {
+      try { this.quickJsVm.dispose(); } catch { /* ignore */ }
+      this.quickJsVm = null;
+    }
     this.loadPromise = null;
     this.templateCache = undefined;
     this.moduleCache.clear();
     this.inProgress.clear();
     this.warned.clear();
+  }
+
+  // ------------------------------------------------------------------
+  // QuickJS 字节码 (//bb) 执行引擎
+  // ------------------------------------------------------------------
+  private async loadQuickJsBytecode(content: string): Promise<void> {
+    const b64 = content.replace(/^\/\/bb[\r\n]*/, '').trim();
+    if (!b64) {
+      throw new UnsupportedSourceError('UNSUPPORTED_BYTECODE', 'QuickJS 字节码内容为空');
+    }
+    let bytecode: Buffer;
+    try {
+      bytecode = Buffer.from(b64, 'base64');
+      if (bytecode.length === 0) throw new Error('Empty bytecode buffer');
+    } catch {
+      throw new UnsupportedSourceError('UNSUPPORTED_BYTECODE', 'QuickJS 字节码 Base64 解码失败');
+    }
+
+    try {
+      const { getQuickJS } = await import('quickjs-emscripten');
+      const qjs = await getQuickJS();
+      const vm = qjs.newContext();
+      this.quickJsVm = vm;
+      this.injectQuickJsGlobals(vm);
+
+      const arrayBuffer = bytecode.buffer.slice(bytecode.byteOffset, bytecode.byteOffset + bytecode.byteLength);
+      const bufHandle = vm.newArrayBuffer(arrayBuffer);
+      const decodedHandle = vm.decodeBinaryJSON(bufHandle);
+      bufHandle.dispose();
+
+      const decodedType = vm.typeof(decodedHandle);
+      if (decodedType === 'unknown' || decodedType === 'undefined') {
+        decodedHandle.dispose();
+        throw new Error('QuickJS 无法解析此字节码格式');
+      }
+
+      let spiderHandle: QuickJSHandle;
+      if (decodedType === 'function') {
+        const callRes = vm.callFunction(decodedHandle, vm.global);
+        decodedHandle.dispose();
+        if (callRes.error) {
+          const err = vm.dump(callRes.error);
+          callRes.error.dispose();
+          throw new Error(typeof err === 'string' ? err : JSON.stringify(err));
+        }
+        spiderHandle = callRes.value;
+      } else {
+        spiderHandle = decodedHandle;
+      }
+
+      // 提取导出的蜘蛛对象
+      const spider: Record<string, unknown> = {};
+      const bindMethod = (sourceHandle: QuickJSHandle, m: string) => {
+        const fnProp = vm.getProp(sourceHandle, m);
+        if (vm.typeof(fnProp) === 'function') {
+          spider[m] = async (...args: unknown[]) => {
+            return this.invokeQuickJsMethod(vm, sourceHandle, m, args);
+          };
+        }
+        fnProp.dispose();
+      };
+
+      for (const m of SPIDER_METHODS) {
+        bindMethod(spiderHandle, m);
+      }
+      for (const m of SPIDER_METHODS) {
+        if (!spider[m]) {
+          bindMethod(vm.global, m);
+        }
+      }
+
+      if (!looksLikeSpider(spider)) {
+        spiderHandle.dispose();
+        throw new Error('字节码未导出有效蜘蛛方法');
+      }
+
+      this.spider = spider;
+      this.detectStyle();
+      this.forwardInit(false);
+      this.loaded = true;
+    } catch (e) {
+      if (this.quickJsVm) {
+        try { this.quickJsVm.dispose(); } catch { /* ignore */ }
+        this.quickJsVm = null;
+      }
+      throw new UnsupportedSourceError(
+        'UNSUPPORTED_BYTECODE',
+        `QuickJS 字节码无法在当前环境执行: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  private invokeQuickJsMethod(
+    vm: QuickJSContext,
+    targetHandle: QuickJSHandle,
+    methodName: string,
+    args: unknown[],
+  ): unknown {
+    const fnHandle = vm.getProp(targetHandle, methodName);
+    if (vm.typeof(fnHandle) !== 'function') {
+      fnHandle.dispose();
+      throw new Error(`QuickJS 方法 ${methodName} 不是函数`);
+    }
+
+    const argHandles: QuickJSHandle[] = args.map((arg) => {
+      if (typeof arg === 'string') return vm.newString(arg);
+      if (typeof arg === 'number') return vm.newNumber(arg);
+      if (typeof arg === 'boolean') return arg ? vm.true : vm.false;
+      if (arg === null) return vm.null;
+      if (arg === undefined) return vm.undefined;
+      return vm.newString(JSON.stringify(arg));
+    });
+
+    try {
+      const callResult = vm.callFunction(fnHandle, targetHandle, ...argHandles);
+      if (callResult.error) {
+        const err = vm.dump(callResult.error);
+        callResult.error.dispose();
+        throw new Error(`QuickJS 执行 ${methodName} 失败: ${typeof err === 'string' ? err : JSON.stringify(err)}`);
+      }
+      const val = vm.dump(callResult.value);
+      callResult.value.dispose();
+      return val;
+    } finally {
+      fnHandle.dispose();
+      for (const h of argHandles) {
+        try { h.dispose(); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  private injectQuickJsGlobals(vm: QuickJSContext): void {
+    const consoleObj = vm.newObject();
+    const logFn = vm.newFunction('log', (...args) => {
+      const dumped = args.map((a) => String(vm.dump(a))).join(' ');
+      this.host.logger.i(`[QuickJS:${this.siteKey}] ${dumped}`);
+    });
+    vm.setProp(consoleObj, 'log', logFn);
+    logFn.dispose();
+
+    const warnFn = vm.newFunction('warn', (...args) => {
+      const dumped = args.map((a) => String(vm.dump(a))).join(' ');
+      this.host.logger.w(`[QuickJS:${this.siteKey}] ${dumped}`);
+    });
+    vm.setProp(consoleObj, 'warn', warnFn);
+    warnFn.dispose();
+
+    const errorFn = vm.newFunction('error', (...args) => {
+      const dumped = args.map((a) => String(vm.dump(a))).join(' ');
+      this.host.logger.e(`[QuickJS:${this.siteKey}] ${dumped}`);
+    });
+    vm.setProp(consoleObj, 'error', errorFn);
+    errorFn.dispose();
+
+    vm.setProp(vm.global, 'console', consoleObj);
+    consoleObj.dispose();
   }
 
   // ------------------------------------------------------------------

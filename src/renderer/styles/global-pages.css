@@ -247,6 +247,26 @@
 .live-epg > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .live-epg b { font-weight: 600; color: var(--text-dim); margin-right: 4px; }
 .live-epg-now { color: var(--text); }
+.live-epg-current-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+.live-epg-progress-track {
+  width: 100%;
+  max-width: 280px;
+  height: 4px;
+  background: var(--surface-3, rgba(255, 255, 255, 0.15));
+  border-radius: 2px;
+  overflow: hidden;
+}
+.live-epg-progress-fill {
+  height: 100%;
+  background: var(--text-accent, var(--accent, #3388ff));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.live-epg-pct {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-left: 4px;
+}
 .live-catchup-bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 12px; margin-bottom: 8px; border-radius: 6px;

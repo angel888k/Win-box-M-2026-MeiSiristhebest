@@ -17,6 +17,7 @@ import {
   UNSUPPORTED_SEARCH_CODES,
 } from '../../engine/vod/aggregateSearchPolicy';
 import { SearchCache } from '../../engine/vod/searchCache';
+import { SourceCircuitBreaker } from '../../engine/vod/sourceCircuitBreaker';
 import { awaitWithAbort } from '../../engine/util/abort';
 import { AggregateSearchRequestBroker } from './AggregateSearchRequestBroker';
 
@@ -30,6 +31,7 @@ export interface SearchReadinessPort {
     sources: readonly SourceBean[];
     unsupportedScopes: ReadonlySet<string>;
     signal?: AbortSignal;
+    profileId?: string;
   }): Promise<{ active: number[]; skipped: Array<AggSearchInput | null> }>;
 }
 
@@ -84,6 +86,7 @@ export interface AggregateSearchDependencies {
 type SearchStateVersion = { configuration: number; credentials: number };
 
 export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
+  readonly circuitBreaker = new SourceCircuitBreaker();
   private readonly requestBroker = new AggregateSearchRequestBroker();
   private readonly unsupportedScopes = new Set<string>();
   private readonly cache = new SearchCache<SearchAllReport>();
@@ -126,6 +129,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     this.cache.clear();
     this.unsupportedScopes.clear();
     this.requestBroker.clear();
+    this.circuitBreaker.reset();
   }
 
   /** Credential changes must not reuse reports or join searches using old credentials. */
@@ -231,6 +235,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
     // refresh rechecks them; network/runtime/ARM bridge errors remain retryable.
     const unsupportedScopes = new Set(this.unsupportedScopes);
     if (opts?.refresh) {
+      this.circuitBreaker.reset(profileId);
       for (const source of pool) {
         const scope = source.runtimeScope || source.key;
         unsupportedScopes.delete(scope);
@@ -244,6 +249,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
       sources: pool,
       unsupportedScopes,
       signal,
+      profileId,
     });
     const total = active.length;
     let done = 0;
@@ -295,10 +301,28 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
         progress?.({ wd: term, profileId, profileName, done, total, pending: Math.max(0, total - done) });
       } catch { /* 忽略 */ }
     }, SEARCH_ALL_QUICK_MS);
+    const searchNow = this.dependencies.timing.now();
+    const executableOrder = opts?.refresh
+      ? order
+      : order.filter((i) => {
+          const s = pool[i];
+          if (!this.circuitBreaker.isAvailable(profileId, s.key, searchNow)) {
+            const cooldownRem = Math.ceil(this.circuitBreaker.getCooldownRemainingMs(profileId, s.key, searchNow) / 60000);
+            finish(i, {
+              key: s.key,
+              name: s.name || s.key,
+              status: 'error',
+              error: `源近期连续失败已熔断，冷却中（剩余约 ${cooldownRem} 分钟），强制刷新可重试`,
+              ms: 0,
+            });
+            return false;
+          }
+          return true;
+        });
     const run = async (): Promise<void> => {
       for (;;) {
         if (signal?.aborted) return;
-        const i = order[cursor++];
+        const i = executableOrder[cursor++];
         if (i === undefined) return;
         const b = pool[i];
         const release = workerBudget && signal ? await workerBudget.acquire(profileId, signal) : undefined;
@@ -337,6 +361,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
           const items = await awaitWithAbort(timedSearchRequest, signal);
           const ms = this.dependencies.timing.now() - t0;
           this.dependencies.health.succeeded(sourceScope, ms, items.length === 0); // 空结果也记（连续空 → 下轮压预算）
+          this.circuitBreaker.recordSuccess(profileId, b.key);
           finish(i, {
             key: b.key,
             name: b.name || b.key,
@@ -348,6 +373,7 @@ export class AggregateSearchCoordinator implements AggregateSearchRunnerPort {
           if (signal?.aborted) return;
           const ms = this.dependencies.timing.now() - t0;
           const msg = (e as Error).message || String(e);
+          this.circuitBreaker.recordFailure(profileId, b.key, msg, this.dependencies.timing.now());
           // ★「桌面端不支持」类错误 → 记入跳过集（下次全源搜索不再为它花时间）
           const code = e && typeof e === 'object' && 'code' in e ? String(e.code) : '';
           if (UNSUPPORTED_SEARCH_CODES.has(code)) {

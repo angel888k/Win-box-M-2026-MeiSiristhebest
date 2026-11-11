@@ -1,6 +1,7 @@
 // tests/tmdbProvider.spec.ts — TMDB 元数据补全的纯函数测试（解析/缓存键/名称规范化，不依赖网络）
 import { describe, expect, it } from 'vitest';
-import { parseTmdbSearch, metaCacheKey, metaQueryName, metaQueryVariants, truncAtYear, parseTmdbExtras, toDiscoverItems, parseGenreList, parseGenrePage, titleMatches, parseTmdbImages } from '../src/main/meta/tmdbProvider';
+import { parseTmdbSearch, metaCacheKey, metaQueryName, metaQueryVariants, truncAtYear, parseTmdbExtras, toDiscoverItems, parseGenreList, parseGenrePage, titleMatches, parseTmdbImages, resolveTmdbBoardPath } from '../src/main/meta/tmdbProvider';
+import { TMDB_BOARDS, discoverBoardById } from '../src/shared/discoverBoards';
 
 // ★ 2026-09-24：发现页 Hero「横版剧照轮播」的图片解析（过滤 + 中文优先 + 评分排序 + 上限）
 describe('parseTmdbImages', () => {
@@ -213,6 +214,27 @@ describe('parseTmdbExtras', () => {
     expect(parseTmdbExtras(null, 'tv')).toEqual({ genres: [], cast: [], recommendations: [], directors: [] });
     expect(parseTmdbExtras({ credits: {}, recommendations: {} }, 'tv')).toEqual({ genres: [], cast: [], recommendations: [], directors: [] });
   });
+
+  it('解析 watch/providers 播出平台（借鉴 Seerr）', () => {
+    const data = {
+      genres: [],
+      credits: {},
+      recommendations: {},
+      'watch/providers': {
+        results: {
+          CN: {
+            flatrate: [
+              { provider_id: 8, provider_name: 'Netflix', logo_path: '/netflix.jpg' },
+              { provider_id: 11, provider_name: 'Tencent Video', logo_path: '/tencent.jpg' },
+            ],
+          },
+        },
+      },
+    };
+    const res = parseTmdbExtras(data, 'movie');
+    expect(res.watchProviders).toHaveLength(2);
+    expect(res.watchProviders?.[0]).toEqual({ id: 8, name: 'Netflix', logoPath: '/netflix.jpg' });
+  });
 });
 
 // ★ 2026-09-24：发现页（无源默认主页）条目映射
@@ -347,5 +369,33 @@ describe('metaQueryVariants', () => {
     expect(metaQueryVariants('2001太空漫游')).toEqual(['2001太空漫游']);
     expect(truncAtYear('神雕侠侣1995古天乐')).toBe('神雕侠侣');
     expect(truncAtYear('狂飙')).toBe('');
+  });
+});
+
+describe('TMDB 流媒体与年度高分榜单', () => {
+  it('定义了 Netflix / HBO / Apple / Disney 流媒体专区与动态年度盘点榜单', () => {
+    const netflix = TMDB_BOARDS.find(b => b.id === 'tv-netflix');
+    expect(netflix).toBeDefined();
+    expect(netflix?.mediaType).toBe('tv');
+    expect(netflix?.provider).toBe('tmdb');
+
+    const hbo = TMDB_BOARDS.find(b => b.id === 'tv-hbo');
+    expect(hbo).toBeDefined();
+
+    const currentYear = new Date().getFullYear();
+    const annualCurrent = TMDB_BOARDS.find(b => b.id === `movie-annual-${currentYear}`);
+    expect(annualCurrent).toBeDefined();
+    expect(annualCurrent?.title).toContain(String(currentYear));
+
+    // Dynamic resolution of any future or past year
+    expect(resolveTmdbBoardPath('movie-annual-2026')).toContain('primary_release_year=2026');
+    expect(resolveTmdbBoardPath('tv-annual-2027')).toContain('first_air_date_year=2027');
+    expect(resolveTmdbBoardPath('tv-netflix')).toContain('with_networks=213');
+
+    // discoverBoardById handles arbitrary years dynamically
+    const board2028 = discoverBoardById('movie-annual-2028');
+    expect(board2028).toBeDefined();
+    expect(board2028?.title).toBe('2028 年度高分电影');
+    expect(board2028?.provider).toBe('tmdb');
   });
 });

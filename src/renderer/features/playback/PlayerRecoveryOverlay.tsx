@@ -14,7 +14,8 @@ export interface PlayerRecoveryOverlayProps {
   canGoPrevious: boolean;
   canGoNext: boolean;
   showEpisodeNavigation: boolean;
-  onSelectAlternative(id: string): void;
+  onSelectAlternative(id: string, currentPosition?: number): void;
+  currentPosition?: number;
   onRetryCurrent(): void;
   onSearchAgain(): void;
   onPreviousEpisode(): void;
@@ -29,7 +30,7 @@ export interface PlayerRecoveryOverlayProps {
 export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
   const {
     fallback, placement = 'video', parseError, canRetryCurrent, canSearchAgain, canGoPrevious, canGoNext,
-    showEpisodeNavigation, onSelectAlternative, onRetryCurrent, onSearchAgain, onPreviousEpisode, onNextEpisode,
+    showEpisodeNavigation, onSelectAlternative, currentPosition, onRetryCurrent, onSearchAgain, onPreviousEpisode, onNextEpisode,
     onCopyDiagnostic, failure: reportedFailure, diagnosticHistory = [], onClearDiagnosticHistory,
   } = props;
   const message = fallback.kind === 'unavailable' ? fallback.message : parseError;
@@ -47,12 +48,12 @@ export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
   const [copyFeedback, setCopyFeedback] = useState<{ text: string; copied: boolean } | null>(null);
   const currentCopyFeedback = copyFeedback?.text === diagnosticText ? copyFeedback : null;
   const heading = fallback.kind === 'searching'
-    ? '正在核验备用来源'
+    ? '正在寻找可用片源'
     : fallback.kind === 'switching'
-      ? '正在尝试备用来源'
+      ? '正在切换片源'
       : fallback.kind === 'unavailable'
-        ? '暂时没有确认可播放的备用来源'
-        : '无法解析当前剧集';
+        ? '暂无可用的备用片源'
+        : '播放失败';
   const candidates = fallback.kind === 'idle' ? [] : (fallback.candidates || []);
   const incompleteSources = fallback.kind === 'idle' ? 0 : (fallback.incompleteSources || 0);
   const candidateId = fallback.kind === 'switching' ? fallback.candidateId : undefined;
@@ -63,7 +64,7 @@ export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
         <div className="player-recovery-live" role={inProgress ? 'status' : 'alert'} aria-live={inProgress ? 'polite' : 'assertive'} aria-atomic="true">
           {inProgress && <span className="player-recovery-spinner" aria-hidden="true" />}
           <h2 className="player-recovery-title">{heading}</h2>
-          {fallback.kind === 'searching' && <p className="player-recovery-message">正在搜索并核验同剧同集的备用播放源。</p>}
+          {fallback.kind === 'searching' && <p className="player-recovery-message">正在匹配备用片源…</p>}
           {fallback.kind === 'switching' && <p className="player-recovery-message">{fallback.message || `正在尝试：${fallback.sourceName}`}</p>}
           {message && !inProgress && <p className="player-recovery-message">{safeMessage.length > 180 ? playbackFailureSummary(failure) : safeMessage}</p>}
           {hasDiagnostic && (
@@ -78,7 +79,6 @@ export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
                   <span><b>HTTP 状态：</b>{safeFailureHttpStatus ?? '未报告'}</span>
                   <span><b>错误码：</b>{safeFailureCode ?? '未报告'}</span>
                   <span><b>可重试：</b>{failure.retryable ? '是' : '未确认'}</span>
-                  {failure.engine === 'unknown' && <small>播放器未提供足够信息时会明确标记为“暂无法确认”。</small>}
                 </div>
                 <pre>{diagnosticText}</pre>
                 {onCopyDiagnostic && (
@@ -140,7 +140,7 @@ export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
                     aria-label={`${isSwitching ? '正在尝试播放' : '尝试播放'} ${candidate.sourceName}${candidate.profileName ? `，${candidate.profileName}` : ''}`}
                     aria-current={isSwitching ? 'true' : undefined}
                     aria-disabled={isSwitching}
-                    onClick={() => { if (!isSwitching) onSelectAlternative(candidate.id); }}
+                    onClick={() => { if (!isSwitching) onSelectAlternative(candidate.id, currentPosition); }}
                   >
                     <span className="player-recovery-candidate-name">
                       <strong>{candidate.sourceName}</strong>

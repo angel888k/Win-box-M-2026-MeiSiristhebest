@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DiscoverItem } from '../../../../shared/types';
-import { BOARD_CATEGORIES, boardSourceName, type DiscoverBoard } from '../../../../shared/discoverBoards';
+import { BOARD_CATEGORIES, boardSourceName, getBoardBrandBadge, type DiscoverBoard } from '../../../../shared/discoverBoards';
 import type { DiscoverBoardPreviewPort } from '../application/discoveryPorts';
 import { useCovers } from '../../covers/useCovers';
 import { discoverCoverItem } from '../../../components/DiscoverItemCard';
@@ -36,15 +36,29 @@ export default function BoardPreviewCard({ board, seed, active, previewPort }: {
   const covers = useCovers(cover ? [cover] : [], active && visible, true);
   const poster = cover ? covers.picOf(cover) : '';
   const category = BOARD_CATEGORIES.find(option => option.id === board.category)?.label;
+  const badge = getBoardBrandBadge(board.id, board.provider);
   return <Link ref={ref} className="board-preview-card" to={'/boards/' + encodeURIComponent(board.id)} aria-label={board.title}>
     <div className="board-preview-heading">
-      <div><h3>{board.title}</h3><span className="board-preview-source">{boardSourceName(board)}{category && ' · ' + category}{preview?.total != null && ' · 共 ' + preview.total + ' 部'}{preview?.stale && ' · 缓存'}</span></div>
+      <div>
+        <div className="board-preview-title-row">
+          <h3>{board.title}</h3>
+          {badge && (
+            <span
+              className="board-brand-pill"
+              style={{ color: badge.color, backgroundColor: badge.bg, borderColor: `${badge.color}33` }}
+            >
+              {badge.label}
+            </span>
+          )}
+        </div>
+        <span className="board-preview-source">{category || boardSourceName(board)}{preview?.total != null ? ` · ${preview.total} 部` : ''}</span>
+      </div>
       <Icon name="right" size={15} />
     </div>
     <div className="board-preview-body" aria-busy={!preview && !result.error}>
       <div className="board-preview-cover">{poster && cover ? <img src={poster} alt="" loading="lazy" decoding="async" onError={event => covers.onError(cover, event.currentTarget.getAttribute('src') || '')} /> : <span>{preview || result.error ? '暂无封面' : ''}</span>}</div>
       {items.length > 0 ? <ol className="board-preview-list" aria-label="榜单预览">{items.map((item, index) => <li key={String(item.doubanId || item.tmdbId || item.title) + '-' + index}><span className="board-preview-number" aria-hidden="true">{index + 1}</span><span className="board-preview-name" title={item.title}>{item.title}</span>{item.rating ? <span className="board-preview-rating" aria-label={item.rating.toFixed(1) + ' 分'}>{item.rating.toFixed(1)}</span> : null}</li>)}</ol>
-        : result.error || preview ? <span className="board-preview-unavailable">{result.error || '暂无预览'}<span>打开榜单查看</span></span>
+        : result.error || preview ? <span className="board-preview-unavailable">{result.error || '暂无数据'}</span>
           : <span className="board-preview-skeleton" aria-label="正在读取榜单预览"><i /><i /><i /></span>}
     </div>
   </Link>;

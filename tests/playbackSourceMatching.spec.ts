@@ -85,6 +85,12 @@ describe('playback source identity matching', () => {
     })).toEqual({ kind: 'none' });
   });
 
+  it('matches variety show dates across different formats', () => {
+    expect(matchPlaybackEpisode('歌手2024 2024-05-10期', {
+      '默认线路': [{ name: '奔跑吧 20240510', url: 'variety-may10' }],
+    })).toMatchObject({ kind: 'unique', match: { index: 0 } });
+  });
+
   it('uses an exact label only when the selected episode has no explicit ordinal', () => {
     expect(matchPlaybackEpisode('预告片', {
       '正片': [{ name: '预告片', url: 'trailer' }],

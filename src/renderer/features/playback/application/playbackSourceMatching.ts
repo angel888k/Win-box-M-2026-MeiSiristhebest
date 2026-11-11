@@ -1,3 +1,4 @@
+import { normalizeEpisodeInfo } from '../../../../shared/episodeNormalizer';
 import { movieSearchTitle } from '../../../../shared/searchTitleMatching';
 import type { Episode } from '../../../../shared/types';
 
@@ -46,24 +47,28 @@ export function matchPlaybackEpisode(
   candidateEpisodes: Record<string, Episode[]>,
 ): EpisodeSourceMatchResult {
   const selectedOrdinal = episodeOrdinal(selectedName);
+  const selectedInfo = normalizeEpisodeInfo(selectedName);
   const selectedLabel = normalizeEpisodeLabel(selectedName);
   const selectedMovieKind = movieEditionKind(selectedName);
-  if (selectedOrdinal == null && !selectedLabel && !selectedMovieKind) return { kind: 'none' };
+  if (selectedOrdinal == null && !selectedLabel && !selectedMovieKind && !selectedInfo.dateOrdinal) return { kind: 'none' };
 
   const matches: EpisodeSourceMatch[] = [];
   for (const [flag, episodes] of Object.entries(candidateEpisodes)) {
     episodes.forEach((episode, index) => {
       const candidateOrdinal = episodeOrdinal(episode.name);
+      const candidateInfo = normalizeEpisodeInfo(episode.name);
       const matchesOrdinal = selectedOrdinal != null && candidateOrdinal != null
         && candidateOrdinal.episode === selectedOrdinal.episode
         // A missing season is unknown, not a wildcard. Treat it as a match only
         // when both sources omit season; otherwise auto-failover could cross seasons.
         && selectedOrdinal.season === candidateOrdinal.season;
-      const matchesMovieEdition = selectedOrdinal == null && selectedMovieKind != null
+      const matchesDate = selectedInfo.dateOrdinal != null && candidateInfo.dateOrdinal != null
+        && selectedInfo.dateOrdinal === candidateInfo.dateOrdinal;
+      const matchesMovieEdition = selectedOrdinal == null && selectedInfo.dateOrdinal == null && selectedMovieKind != null
         && movieEditionKind(episode.name) === selectedMovieKind;
-      const matchesExactLabel = selectedOrdinal == null && selectedMovieKind == null
+      const matchesExactLabel = selectedOrdinal == null && selectedInfo.dateOrdinal == null && selectedMovieKind == null
         && normalizeEpisodeLabel(episode.name) === selectedLabel;
-      if (matchesOrdinal || matchesMovieEdition || matchesExactLabel) matches.push({ flag, index, episode });
+      if (matchesOrdinal || matchesDate || matchesMovieEdition || matchesExactLabel) matches.push({ flag, index, episode });
     });
   }
 

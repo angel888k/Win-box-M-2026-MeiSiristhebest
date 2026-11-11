@@ -10,8 +10,8 @@ import {
 } from '../../shared/danmaku';
 import { endpointLabel, isBuiltinEndpoint, normalizeEndpointBase } from '../../engine/danmaku/endpoints';
 
-/** 接口清单默认开关修订号：rev2 起默认只启用「炊烟袅袅」；旧配置读取时一次性对齐 */
-export const DANMAKU_ENDPOINTS_REV = 2;
+/** 接口清单默认开关修订号：rev3 起默认高可用激活前 5 个源；旧配置读取时一次性对齐 */
+export const DANMAKU_ENDPOINTS_REV = 3;
 
 export class DanmakuStore {
   private store: JsonStore;

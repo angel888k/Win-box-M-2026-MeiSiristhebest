@@ -14,6 +14,7 @@ describe('SearchPanelView keyboard submission', () => {
     const props: ComponentProps<typeof SearchPanelView> = {
       bar: false,
       open: true,
+      panelMode: 'history',
       wrapId: 'search-wrap',
       triggerId: 'search-trigger',
       inputId: 'search-query',
@@ -28,6 +29,8 @@ describe('SearchPanelView keyboard submission', () => {
       suggestionsLoading: false,
       history: [],
       onShow: vi.fn(),
+      onShowHotSearches: vi.fn(),
+      onShowSearchHistory: vi.fn(),
       onClose: vi.fn(),
       onSearch,
       onQueryChange: vi.fn(),

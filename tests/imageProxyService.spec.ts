@@ -70,4 +70,33 @@ describe('ImageProxyService', () => {
     expect(sink.writeHead).toHaveBeenCalledWith(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
     expect(sink.end).toHaveBeenCalledWith('not found');
   });
+
+  it('serves cached images in-memory on subsequent requests without re-fetching', async () => {
+    const request = vi.fn(async () => upstream(200, 'image/jpeg', 'cached-bytes'));
+    const service = new ImageProxyService(makePorts(request));
+    const sink1 = responseSink();
+    const sink2 = responseSink();
+
+    await service.handle(new URL('http://127.0.0.1:9978/img?u=https%3A%2F%2Fcdn.example%2Fphoto.jpg'), sink1);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(sink1.end).toHaveBeenCalledWith(Buffer.from('cached-bytes'));
+
+    // Second request with same URL hits memory cache
+    await service.handle(new URL('http://127.0.0.1:9978/img?u=https%3A%2F%2Fcdn.example%2Fphoto.jpg'), sink2);
+    expect(request).toHaveBeenCalledTimes(1); // No new network request
+    expect(sink2.writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+    expect(sink2.end).toHaveBeenCalledWith(Buffer.from('cached-bytes'));
+  });
+
+  it('stops rotating Referers immediately upon definitive 404 from upstream CDN', async () => {
+    const request = vi.fn(async () => upstream(404, 'text/plain'));
+    const service = new ImageProxyService(makePorts(request));
+    const sink = responseSink();
+
+    await service.handle(new URL('http://127.0.0.1:9978/img?u=https%3A%2F%2Fcdn.example%2Fnot-found.jpg&ref=https%3A%2F%2Fcustom.ref%2F'), sink);
+
+    // Should stop on the first 404, instead of sequentially trying custom ref, origin ref, and empty ref
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(sink.writeHead).toHaveBeenCalledWith(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  });
 });

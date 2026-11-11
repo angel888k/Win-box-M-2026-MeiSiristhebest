@@ -29,6 +29,7 @@ export { buildSlices, imagePreludeLen, isTsAligned, jpegPreludeLen, parseByteRan
 export { decodeProxyHeaders, rewriteM3u8, rewriteM3u8WithHeaders, rewriteUriAttrs } from './hlsProxyTransforms';
 import { PlaybackRelayService, safeResponseHeader } from './PlaybackRelayService';
 import { RemoteControlRoutes, type RemotePushAction } from './RemoteControlRoutes';
+import type { DlnaDmrService } from '../dlna/dmr/DlnaDmrService';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 export type { RemotePushAction } from './RemoteControlRoutes';
@@ -83,6 +84,8 @@ export class LocalProxyServer {
   /** ★ 2026-10-25（局域网 Web 控制台与手机推送）：处理手机推送指令 */
   onRemoteAction?: (action: RemotePushAction) => Promise<void> | void;
   remoteControl: RemoteControlRoutes;
+  /** ★ 2026-11-01：手机投屏到电脑接收端 (DLNA DMR) 服务 */
+  dlnaDmr?: DlnaDmrService;
   private aggregateStream: RangeAggregateStream;
   private imageProxy: ImageProxyService;
   private btMediaProxy: BtMediaProxy;
@@ -369,6 +372,9 @@ export class LocalProxyServer {
       }
       if (this.remoteControl.matches(u.pathname)) {
         return await this.remoteControl.handle(u, req, res);
+      }
+      if (this.dlnaDmr?.matches(u.pathname)) {
+        return await this.dlnaDmr.handle(u, req, res);
       }
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('not found');

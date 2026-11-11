@@ -53,6 +53,8 @@ export interface TmdbExtrasRaw {
   recommendations: Array<{ title: string; year: number | ''; posterPath: string; tmdbId?: number; mediaType: 'movie' | 'tv' }>;
   /** ★ 2026-09-24：导演（电影取 crew[job=Director]；剧集再并入 created_by） */
   directors: string[];
+  /** ★ 借鉴 Seerr: 播出平台 (Watch Providers) */
+  watchProviders?: Array<{ id: number; name: string; logoPath: string }>;
 }
 
 /**
@@ -115,7 +117,28 @@ export function parseTmdbExtras(json: unknown, mediaType: 'movie' | 'tv'): TmdbE
       });
     }
   }
-  return { genres, cast, recommendations, directors };
+  const watchProviders: Array<{ id: number; name: string; logoPath: string }> = [];
+  const wpRaw = (j as Record<string, unknown> | null)?.['watch/providers'] as { results?: Record<string, { flatrate?: unknown[] }> } | undefined;
+  if (wpRaw?.results) {
+    const region = wpRaw.results['CN'] || wpRaw.results['US'] || wpRaw.results['HK'] || Object.values(wpRaw.results)[0];
+    if (Array.isArray(region?.flatrate)) {
+      for (const p of region.flatrate as Record<string, unknown>[]) {
+        const id = Number(p?.provider_id);
+        const name = String(p?.provider_name ?? '').trim();
+        const logoPath = typeof p?.logo_path === 'string' ? p.logo_path : '';
+        if (name && !watchProviders.some((x) => x.name === name)) {
+          watchProviders.push({ id, name, logoPath });
+        }
+      }
+    }
+  }
+  return {
+    genres,
+    cast,
+    recommendations,
+    directors,
+    ...(watchProviders.length ? { watchProviders } : {}),
+  };
 }
 
 /**

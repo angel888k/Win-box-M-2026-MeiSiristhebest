@@ -64,6 +64,7 @@ export interface PlayerRuntimeIpcDependencies {
   engines: PlayerEnginePort;
   onPlaybackStarted(): void;
   notifyPlayerWindowState(open: boolean): void;
+  onMediaState?(state: unknown, isPlayer: boolean): void;
 }
 
 function windowOf(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -80,6 +81,7 @@ export function registerPlayerRuntimeIpc({
   engines,
   onPlaybackStarted,
   notifyPlayerWindowState,
+  onMediaState,
 }: PlayerRuntimeIpcDependencies): void {
   app.on('before-quit', () => mediaRuntimes.cancel());
 
@@ -206,5 +208,6 @@ export function registerPlayerRuntimeIpc({
       startPlayMemWatch();
       onPlaybackStarted();
     }
+    onMediaState?.(state, isPlayer);
   });
 }

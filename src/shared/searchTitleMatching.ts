@@ -54,6 +54,33 @@ export function movieSearchTitle(value: string): string {
 
 const compact = (value: string): string => value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
+/**
+ * Sørensen–Dice coefficient for fast bigram fuzzy matching.
+ * Compares sub-word character pairs without expensive matrix allocations.
+ */
+export function diceCoefficient(a: string, b: string): number {
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
+
+  const bigramsA = new Map<string, number>();
+  for (let i = 0; i < a.length - 1; i++) {
+    const bigram = a.slice(i, i + 2);
+    bigramsA.set(bigram, (bigramsA.get(bigram) || 0) + 1);
+  }
+
+  let intersection = 0;
+  for (let i = 0; i < b.length - 1; i++) {
+    const bigram = b.slice(i, i + 2);
+    const count = bigramsA.get(bigram) || 0;
+    if (count > 0) {
+      bigramsA.set(bigram, count - 1);
+      intersection++;
+    }
+  }
+
+  return (2.0 * intersection) / ((a.length - 1) + (b.length - 1));
+}
+
 /** Related titles only. Descriptions, actors and source-provided recommendations do not imply a title match. */
 export function searchTitleScore(query: string, candidate: string): number {
   const title = movieSearchTitle(query);
@@ -68,6 +95,16 @@ export function searchTitleScore(query: string, candidate: string): number {
     if (/\p{Script=Han}/u.test(candidate)) {
       const pinyinMatch = matchPinyinScore(queryKey, candidate, cleanTitle);
       if (pinyinMatch > 0) return Math.max(1, pinyinMatch - (clip ? 15 : 0));
+    }
+    // Check sequel / season conflict before fuzzy matching
+    const digitEndA = /(?:^|\D)(\d+)$/.exec(queryKey)?.[1];
+    const digitEndB = /(?:^|\D)(\d+)$/.exec(clean)?.[1];
+    if (digitEndA !== digitEndB && (digitEndA != null || digitEndB != null)) return 0;
+
+    // Sørensen–Dice coefficient fuzzy similarity (inspired by MoviePilot)
+    const sim = diceCoefficient(queryKey, clean);
+    if (sim >= 0.75) {
+      return Math.max(1, Math.round(sim * 70) - (clip ? 15 : 0));
     }
     return 0;
   }

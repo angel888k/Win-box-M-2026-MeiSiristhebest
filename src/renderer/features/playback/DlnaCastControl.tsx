@@ -1,9 +1,34 @@
+import { useEffect, useRef } from 'react';
 import type { DlnaCastControlModel } from './presentation/PlayerControlModels';
 
 type DlnaCastControlProps = DlnaCastControlModel;
 export function DlnaCastControl({ open, busy, devices, message, onToggle, onRefresh, onCast }: DlnaCastControlProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        onToggle();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggle();
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [open, onToggle]);
+
   return (
-    <div className={'vp-cast' + (open ? ' open' : '')}>
+    <div ref={containerRef} className={'vp-cast' + (open ? ' open' : '')}>
       <div className={'vp-cpanel' + (open ? ' open' : '')}>
         <div className="vp-cpct">{busy ? '处理中…' : '投屏到'}</div>
         {devices.map((device) => (

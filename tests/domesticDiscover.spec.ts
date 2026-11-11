@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { DomesticDiscover, parseDomesticItems, parseBaiduMovieHot } from '../src/main/meta/domesticDiscover';
+import { DomesticDiscover, parseDomesticItems, parseBaiduMovieHot, parseBangumiCalendar, parseImdbItems } from '../src/main/meta/domesticDiscover';
 import { JsonStore } from '../src/main/store/JsonStore';
 
 const dirs: string[] = [];
@@ -97,5 +97,83 @@ describe('国内发现页数据契约', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect((await provider.hot()).items).toHaveLength(2);
     expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it('解析 Bangumi 每日放送日历，优先当前星期并映射评分与海报', async () => {
+    const calendar = [
+      {
+        weekday: { id: 1, cn: '星期一' },
+        items: [
+          { name: 'Anime Mon', name_cn: '周一动画', air_date: '2026-10-05', rating: { score: 8.5 }, images: { large: 'https://lain.bgm.tv/pic/cover/l/mon.jpg' } },
+        ],
+      },
+      {
+        weekday: { id: 2, cn: '星期二' },
+        items: [
+          { name: 'Anime Tue', name_cn: '周二动画', air_date: '2026-10-06', rating: { score: 7.9 }, images: { large: 'https://lain.bgm.tv/pic/cover/l/tue.jpg' } },
+        ],
+      },
+    ];
+    const items = parseBangumiCalendar(calendar);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      title: expect.stringMatching(/周[一二]动画/),
+      mediaType: 'tv',
+      year: 2026,
+    });
+    expect(items[0].poster).toContain('/img?');
+    expect(items[0].poster).toContain('ref=https%3A%2F%2Fbgm.tv%2F');
+
+    const store = fixture();
+    const fetcher = vi.fn(async (url: string) => url.includes('api.bgm.tv/calendar') ? calendar : douban);
+    const provider = new DomesticDiscover(store, log, fetcher);
+    const boardPage = await provider.boardPage('bangumi_calendar', 1);
+    expect(boardPage.board.id).toBe('bangumi_calendar');
+    expect(boardPage.total).toBe(2);
+    expect(boardPage.items).toHaveLength(2);
+  });
+
+  it('解析 IMDb Top 250 数据，提取排名、评分、海报中继与 IMDb ID 并分页', async () => {
+    const rawMovies = [
+      {
+        Rank: 1,
+        name: 'The Shawshank Redemption',
+        'IMDb Rating': 9.3,
+        link: 'https://www.imdb.com/title/tt0111161/',
+        image: 'https://m.media-amazon.com/images/M/shawshank.jpg',
+        datePublished: '1994-10-14',
+      },
+      {
+        Rank: 2,
+        name: 'The Godfather',
+        'IMDb Rating': 9.2,
+        link: 'https://www.imdb.com/title/tt0068646/',
+        image: 'https://m.media-amazon.com/images/M/godfather.jpg',
+        datePublished: '1972-03-24',
+      },
+    ];
+
+    const parsed = parseImdbItems(rawMovies, 'movie');
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toMatchObject({
+      title: 'The Shawshank Redemption',
+      rank: 1,
+      rating: 9.3,
+      year: 1994,
+      imdbId: 'tt0111161',
+      mediaType: 'movie',
+    });
+    expect(parsed[0].poster).toContain('/img?');
+    expect(parsed[0].poster).toContain('ref=https%3A%2F%2Fwww.imdb.com%2F');
+
+    const store = fixture();
+    const fetcher = vi.fn(async (url: string) => url.includes('movies.json') ? rawMovies : douban);
+    const provider = new DomesticDiscover(store, log, fetcher);
+    const boardPage = await provider.boardPage('imdb_top250_movie', 1);
+    expect(boardPage.board.id).toBe('imdb_top250_movie');
+    expect(boardPage.board.provider).toBe('imdb');
+    expect(boardPage.total).toBe(2);
+    expect(boardPage.items).toHaveLength(2);
+    expect(boardPage.items[0].title).toBe('The Shawshank Redemption');
   });
 });

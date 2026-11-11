@@ -26,6 +26,7 @@ import { hostRegexFor } from '../engine/util/m3u8Purify';
 import { TorrentPlay } from './torrent/torrentPlay';
 import { DavService } from './webdav/DavService';
 import { DlnaService } from './dlna/DlnaService';
+import { DlnaDmrService } from './dlna/dmr/DlnaDmrService';
 import { UpdateService } from './update/UpdateService';
 import { DavStore } from './store/DavStore';
 import { JsonStore } from './store/JsonStore';
@@ -37,6 +38,7 @@ import { createSubscriptionAssembly } from './subscriptions/createSubscriptionAs
 import { createSubtitleServiceAssembly } from './subtitle/createSubtitleServiceAssembly';
 import { createDanmakuServiceAssembly } from './danmaku/createDanmakuServiceAssembly';
 import { createMetadataService } from './meta/createMetadataService';
+import { DownloadManager } from './download/DownloadManager';
 import { SettingsBackupService } from './settings/SettingsBackupService';
 import { UiPreferencesService } from './store/UiPreferencesService';
 import { applyWindowSurfacePolicy, windowSurfaceColor } from './preferences/WindowSurfacePolicy';
@@ -48,7 +50,7 @@ import { PlayerEngineController } from './player/PlayerEngineController';
 import { PluginKv } from './plugin/PluginKv';
 import { createPluginSandboxApi } from './plugin/pluginHostApi';
 import { HttpClient } from './net/HttpClient';
-import { LOCAL_PROXY_BASE } from '../shared/constants';
+import { LOCAL_PROXY_BASE, LOCAL_PROXY_PORT } from '../shared/constants';
 import { pkgSubUrl } from '../engine/config/localPkg';
 import { parseLive } from '../engine/config/LiveConfigParser';
 import { localLiveUrl } from '../engine/live/localLive';
@@ -429,6 +431,49 @@ proxy.onRemoteAction = async (action) => {
   }
 };
 
+// ★ 2026-11-01：DLNA DMR 手机投屏到电脑接收端服务（对位 影视仓 MediaRenderService）
+const dlnaDmr = new DlnaDmrService({
+  port: LOCAL_PROXY_PORT,
+  logger: fileLogger,
+  friendlyName: 'Win-Box 投屏',
+});
+proxy.dlnaDmr = dlnaDmr;
+
+dlnaDmr.setCallbacks({
+  onPlayMedia: async (url, title) => {
+    fileLogger.i(`DLNA DMR: 收到手机投屏播放请求 title=${title} url=${url}`);
+    openPlayerWindow({
+      key: 'dlnaDmr',
+      flag: 'dlnaDmr',
+      title: title || '手机投屏播放',
+      episodes: [{ name: title || '投屏视频', url }],
+      epIndex: 0,
+      lastUrl: url,
+      lastName: title || '投屏视频',
+    });
+  },
+  onPlay: () => {
+    const w = playerWindow();
+    if (w && !w.isDestroyed()) w.webContents.send(IPC.PLAYER_CTL, { op: 'play' });
+  },
+  onPause: () => {
+    const w = playerWindow();
+    if (w && !w.isDestroyed()) w.webContents.send(IPC.PLAYER_CTL, { op: 'pause' });
+  },
+  onStop: () => {
+    const w = playerWindow();
+    if (w && !w.isDestroyed()) w.webContents.send(IPC.PLAYER_CTL, { op: 'stop' });
+  },
+  onSeek: (seconds) => {
+    const w = playerWindow();
+    if (w && !w.isDestroyed()) w.webContents.send(IPC.PLAYER_CTL, { op: 'seek', value: seconds });
+  },
+  onSetVolume: (vol) => {
+    const w = playerWindow();
+    if (w && !w.isDestroyed()) w.webContents.send(IPC.PLAYER_CTL, { op: 'volume', value: vol / 100 });
+  },
+});
+
 function isDev(): boolean {
   return !app.isPackaged && process.env.NODE_ENV !== 'production';
 }
@@ -723,11 +768,16 @@ app.whenReady().then(async () => {
   } catch (e) {
     fileLogger.w('插件初始化失败：' + (e instanceof Error ? e.message : String(e)));
   }
+  const downloadManager = new DownloadManager({
+    defaultDownloadDir: join(app.getPath('downloads'), 'Win-Box'),
+    logger: fileLogger,
+  });
   registerIpc(ipcServices, dav, dlna, updater, uiPreferences, plugins, playerEngines, {
     subtitles: subtitleService,
     danmaku: danmakuServices.service,
     metadata: metadataService,
-  }, settingsBackup);
+    downloads: downloadManager,
+  }, settingsBackup, dlnaDmr);
   /**
    * 显式设置 WINBOX_MEMORY_PROBE=1 时，启动后 15s 采一次空闲基线；
    *   供与「播放中」的采样对照；播放中的 60s 采样由 ipc 的 `media:state`（播放器窗口）触发。
@@ -754,6 +804,12 @@ app.whenReady().then(async () => {
   // ★ 启动时清理上次遗留的夸克落盘文件（此前关闭/退出未删成功的）
   void hostServices.driveFileCleanup.deletePending().catch(() => undefined);
   createWindow();
+  // ★ 启动 DLNA DMR 接收端服务（监听 SSDP 组播广播，允许手机投屏）
+  try {
+    dlnaDmr.startSsdp();
+  } catch (e) {
+    fileLogger.w('DLNA DMR 启动失败: ' + (e instanceof Error ? e.message : String(e)));
+  }
   // ★ 启动时自动订阅刷新（≥7 天一次，静默后台执行，失败仅记日志）
   void hostServices.subscriptionImports.refreshIfDue();
   app.on('activate', () => {
@@ -763,6 +819,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   proxy.stop();
+  dlnaDmr.stop();
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -792,6 +849,11 @@ registerAppQuitCleanup(app, {
     }
     try {
       proxy.stop();
+    } catch {
+      /* ignore */
+    }
+    try {
+      dlnaDmr.stop();
     } catch {
       /* ignore */
     }

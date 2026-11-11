@@ -165,6 +165,8 @@ export const IPC = {
   // ★ 2026-09-29 DLNA 投屏（SSDP 发现 + AVTransport 三动作）
   DLNA_DISCOVER: 'dlna:discover',
   DLNA_CAST: 'dlna:cast',
+  // ★ 2026-11-01 DLNA DMR 手机投屏接收端服务状态
+  DLNA_DMR_STATUS: 'dlna:dmr:status',
   // ★ 播放网盘资源未绑定 cookie → 从任意窗口请求主窗口跳到「点播页」（源内有「网盘绑定」入口）
   UI_GOTO_DRIVE_BIND: 'ui:gotoDriveBind',
   // 主进程 → 主窗口事件：跳到点播页（播放器窗口发起时经此跨窗口跳转）
@@ -324,4 +326,11 @@ export const IPC = {
   WEBHOME_FM_REQ: 'fm:req',
   WEBHOME_FM_PLAY: 'fm:play',
   WEBHOME_FM_COOKIE: 'fm:cookie',
+  // ★ 离线下载管理
+  DOWNLOAD_LIST: 'download:list',
+  DOWNLOAD_START: 'download:start',
+  DOWNLOAD_PAUSE: 'download:pause',
+  DOWNLOAD_RESUME: 'download:resume',
+  DOWNLOAD_CANCEL: 'download:cancel',
+  DOWNLOAD_PROGRESS: 'download:progress',
 } as const;

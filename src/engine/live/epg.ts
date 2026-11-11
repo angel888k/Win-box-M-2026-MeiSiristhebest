@@ -91,20 +91,20 @@ export interface EpgTime {
 }
 
 /**
- * XMLTV 时间串 → epoch（对齐上游 `EpgParser.parseFull`）。
- * 前 14 位为 `yyyyMMddHHmmss`；不足 14 位或缺字段 → null（上游回落到 1970，这里直接判无效以避免脏数据上屏）。
+ * XMLTV 时间串 → epoch（对齐上游 `EpgParser.parseFull`，兼容标准 14 位 yyyyMMddHHmmss 与 12 位 yyyyMMddHHmm 格式）。
+ * 支持 offset，无偏移按 timeZone 解释。不足 12 位或日期时间数值越界返回 null。
  */
 export function parseXmltvTime(source: string, timeZone: string): EpgTime | null {
   const s = (source || '').trim();
-  const digits = s.slice(0, 14);
-  const offset = s.slice(14).trim();
-  if (!/^\d{14}$/.test(digits)) return null;
-  const y = Number(digits.slice(0, 4));
-  const mo = Number(digits.slice(4, 6));
-  const d = Number(digits.slice(6, 8));
-  const h = Number(digits.slice(8, 10));
-  const mi = Number(digits.slice(10, 12));
-  const sec = Number(digits.slice(12, 14));
+  const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?(?:\s*(.*))?$/.exec(s);
+  if (!match) return null;
+  const y = Number(match[1]);
+  const mo = Number(match[2]);
+  const d = Number(match[3]);
+  const h = Number(match[4]);
+  const mi = Number(match[5]);
+  const sec = match[6] ? Number(match[6]) : 0;
+  const offset = (match[7] || '').trim();
   if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || sec > 59) return null;
   let epoch: number;
   if (offset) {

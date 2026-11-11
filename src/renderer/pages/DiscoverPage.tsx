@@ -57,11 +57,10 @@ export default function DiscoverPage() {
     <>
       <div className="content discover-content" ref={contentRef}>
         <header className="page-heading discover-page-heading">
-          <div className="discover-heading-title"><h1>发现</h1>{!err && sections?.some(section => section.stale) && <span className="discover-cache-state" title="部分推荐来自缓存，可刷新更新">缓存内容</span>}</div>
+          <div className="discover-heading-title"><h1>发现</h1></div>
           <div className="discovery-heading-actions"><PosterSizeControl size={posterSize.size} onChange={posterSize.changeSize} /><button className="gallery-icon-button" type="button" aria-label={media === null ? '刷新推荐' : '刷新分类'} title={media === null ? '刷新推荐' : '刷新分类'} disabled={media === null ? loading : gLoading} onClick={() => { covers.refresh(); if (media === null) retry(); else gRefresh(); }}><Icon name="refresh" size={16} /></button></div>
         </header>
         <div className="discover-category-row">
-          <span className="discover-category-label">内容类型</span>
           <Tabs
             items={mediaTabs}
             value={selectedMediaTab}
@@ -79,8 +78,8 @@ export default function DiscoverPage() {
         <div id="discover-panel" className="discover-results-panel" role="tabpanel" aria-labelledby={`discover-tab-${selectedMediaTab}`}>
         {media !== null && <div className="discover-filter-panel"><CascadeBar levels={levels.slice(1)} onPick={explorePick} cardStyle={cardFilterStyle} /></div>}
         <PluginSlot slot="discover" />
-        {genreError && gItems.length > 0 && gErrorPhase === 'refresh' && <div className="board-error" role="alert"><span>{genreError}</span><button type="button" onClick={gRetry}>重试刷新</button></div>}
-        {err && !!sections?.length && <output className="banner">{err}，正在保留已加载的推荐。</output>}
+        {genreError && gItems.length > 0 && gErrorPhase === 'refresh' && <div className="board-error" role="alert"><span>{genreError}</span><button type="button" onClick={gRetry}>重试</button></div>}
+        {err && !!sections?.length && <output className="banner">{err}</output>}
         {gSel ? (
           <>
             {gLoading && gItems.length === 0 ? (
@@ -97,8 +96,8 @@ export default function DiscoverPage() {
                 <div className="board-feed-tail" ref={tailRef}>
                   {gLoading ? <output className="board-feed-status" aria-live="polite"><span className="spinner" aria-hidden="true" />正在加载更多…</output>
                     : genreError && gErrorPhase !== 'refresh' ? <div className="board-feed-error" role="alert"><span>{genreError}</span><button type="button" onClick={gRetry}>重试加载</button></div>
-                      : gHasMore ? <button type="button" onClick={gLoadMore}>加载更多影片</button>
-                        : <output className="board-feed-status">已到当前分类末尾 · 已加载 {gItems.length} 部</output>}
+                      : gHasMore ? <button type="button" onClick={gLoadMore}>加载更多</button>
+                        : <output className="board-feed-status">已加载全部 {gItems.length} 部</output>}
                 </div>
               </>
             )}

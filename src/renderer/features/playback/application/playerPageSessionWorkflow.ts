@@ -34,7 +34,7 @@ export interface PlayerPageSessionWorkflow {
   retryCurrent(resolutionKind: PlayerPageResolutionState['kind']): void;
   autoChangeParse(currentPosition?: number, reason?: string, cause?: PlaybackRecoveryCause, failure?: PlaybackFailureContext): Promise<boolean>;
   retryAlternativeSearch(currentPosition?: number): Promise<boolean>;
-  selectAlternative(id: string): boolean;
+  selectAlternative(id: string, currentPosition?: number): boolean;
   confirmPlaybackStarted(): void;
   dismissDriveBinding(): void;
   onDriveBound(resolutionKind: PlayerPageResolutionState['kind']): void;
@@ -67,6 +67,7 @@ export function createPlayerPageSessionWorkflow(
   let prewarmingKey = '';
   let preparedEpisode: { key: string; result: PlayResult; expiresAt: number } | null = null;
   const attemptedSourceIds = new Set<string>();
+  const attemptedFlags = new Set<string>();
   const resolvedCandidateIds = new Set<string>();
   const candidateById = new Map<string, { data: PlayerInitData; sourceName: string }>();
 
@@ -129,6 +130,8 @@ export function createPlayerPageSessionWorkflow(
     fallbackSearchController?.abort();
     fallbackSearchController = null;
     attemptedSourceIds.clear();
+    attemptedFlags.clear();
+    if (data.flag) attemptedFlags.add(data.flag);
     candidateById.clear();
     resolvedCandidateIds.clear();
     lastPlaybackFailure = undefined;
@@ -150,6 +153,8 @@ export function createPlayerPageSessionWorkflow(
     fallbackExhaustionReported = false;
     lastResolutionFailureMessage = '';
     automaticDriveSkipCount = 0;
+    attemptedFlags.clear();
+    if (currentInit?.flag) attemptedFlags.add(currentInit.flag);
     candidateById.clear();
     resolvedCandidateIds.clear();
     publish({ type: 'source-fallback-cleared' });
@@ -378,6 +383,92 @@ export function createPlayerPageSessionWorkflow(
     return 'interrupted';
   }
 
+  /** ★ 核心自愈优化：同片多线路秒级自动轮换（免去漫长的全网跨源大爬虫搜索） */
+  async function attemptNextFlagInCurrentSource(position: number): Promise<boolean> {
+    let current = currentInit;
+    if (!current || !current.key) return false;
+
+    let flags = current.meta?.flags;
+    let allEpisodes = current.meta?.allEpisodes;
+
+    if (!flags || !allEpisodes) {
+      const vodId = current.meta?.vodId || current.meta?.id;
+      if (vodId && session.loadDetail) {
+        try {
+          const detail = await session.loadDetail({
+            key: current.key,
+            ids: [vodId],
+            profileId: current.meta?.profileId,
+          });
+          if (detail && detail.episodes) {
+            flags = detail.flags || Object.keys(detail.episodes);
+            allEpisodes = detail.episodes;
+            current = {
+              ...current,
+              meta: { ...current.meta, flags, allEpisodes },
+            };
+            updateInit(current);
+          }
+        } catch {
+          // 详情加载失败则直接跳过同片换线
+        }
+      }
+    }
+
+    if (!flags || !allEpisodes || !Array.isArray(flags)) return false;
+
+    const curEp = current.episodes[currentEpisodeIndex];
+    const curEpName = (curEp?.name || '').trim();
+
+    for (const flagName of flags) {
+      if (!flagName || attemptedFlags.has(flagName)) continue;
+      const episodesForFlag = allEpisodes[flagName];
+      if (!Array.isArray(episodesForFlag) || episodesForFlag.length === 0) continue;
+
+      let matchedIndex = -1;
+      if (curEpName) {
+        matchedIndex = episodesForFlag.findIndex((e) => e.name.trim() === curEpName);
+      }
+      if (matchedIndex < 0 && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodesForFlag.length) {
+        matchedIndex = currentEpisodeIndex;
+      }
+      if (matchedIndex < 0) continue;
+
+      attemptedFlags.add(flagName);
+      const targetEpisode = episodesForFlag[matchedIndex];
+
+      publish({
+        type: 'source-fallback-switching',
+        sourceName: `${current.meta?.sourceName || current.key} · ${flagName}`,
+        candidateId: `${current.key}:${flagName}`,
+        message: `当前线路播放遇到问题，已自动切换至【${flagName}】继续播放...`,
+      });
+
+      const nextInit: PlayerInitData = {
+        ...current,
+        flag: flagName,
+        episodes: episodesForFlag,
+        epIndex: matchedIndex,
+        lastUrl: targetEpisode.url,
+        lastName: `${current.title} - ${targetEpisode.name}`,
+        startTime: position,
+        fastRecovery: true,
+      };
+      currentEpisodeIndex = matchedIndex;
+      updateInit(nextInit);
+
+      const result = await resolve(nextInit, matchedIndex, '', { fastRecovery: true });
+      if (result === 'resolved') {
+        return true;
+      }
+      if (result === 'drive-bind-required') {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   async function autoChangeParse(
     currentPosition = 0,
     reason = '',
@@ -402,9 +493,6 @@ export function createPlayerPageSessionWorkflow(
 
     automaticFailoverStartedAt ??= Date.now();
 
-    // A media engine has already exhausted the current URL. Cycling parser
-    // strategies cannot repair a decoded/network stream failure, so search
-    // verified sources immediately.
     if (cause === 'media-failure') {
       lastPlaybackFailure = failure;
       resolvedAlternativeId = null;
@@ -413,14 +501,14 @@ export function createPlayerPageSessionWorkflow(
         reportAutomaticFailoverBudget();
         return false;
       }
-      return searchAlternativeSources(currentPosition);
     }
 
-    // The main-process play request already tries every configured parser once.
-    // Reissuing the same request with an offset repeats source and parser I/O and
-    // can add several full parser budgets before backup discovery even begins.
-    // Start exact-source discovery as soon as the first resolution attempt fails.
-    return searchAlternativeSources(currentPosition);
+    // ★ 步骤一：优先尝试当前影片自带的其他线路（flags）秒级续播！
+    const switched = await attemptNextFlagInCurrentSource(resumePosition);
+    if (switched) return true;
+
+    // ★ 步骤二：本片自带线路已全部耗尽或仅有一条线路时，再降级触发跨源全网大搜索
+    return searchAlternativeSources(resumePosition);
   }
 
   async function retryAlternativeSearch(currentPosition = lastFallbackPosition): Promise<boolean> {
@@ -476,7 +564,8 @@ export function createPlayerPageSessionWorkflow(
     cancelPrewarm();
     resetSourceFallback(current);
     currentEpisodeIndex = index;
-    const next = { ...current, startTime: 0, lastUrl: '', epIndex: index, deferHistoryUntilPlayback: true, fastRecovery: false };
+    const next = { ...current, startTime: 0, lastUrl: '', epIndex: index, deferHistoryUntilPlayback: true };
+    next.fastRecovery = false;
     updateInit(next);
     void resolveWithRecovery(next, index, '', prepared);
   };
@@ -533,13 +622,16 @@ export function createPlayerPageSessionWorkflow(
     }
   };
 
-  const selectAlternative = (id: string): boolean => {
+  const selectAlternative = (id: string, currentPosition?: number): boolean => {
     const candidate = candidateById.get(id);
     if (!candidate) return false;
     automaticFailoverStartedAt = Date.now();
     fallbackExhaustionReported = false;
     fallbackSearchAttempted = false;
-    void startAlternative(id, candidate.data.startTime || currentInit?.startTime || 0);
+    const targetPosition = currentPosition !== undefined && currentPosition > 0
+      ? currentPosition
+      : (candidate.data.startTime || currentInit?.startTime || 0);
+    void startAlternative(id, targetPosition);
     return true;
   };
 

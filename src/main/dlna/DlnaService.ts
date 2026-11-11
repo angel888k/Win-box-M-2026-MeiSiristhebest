@@ -18,6 +18,7 @@ import {
   parseSsdpResponse,
   soapActionHeader,
 } from './dlna';
+import { getLocalIpAddress } from './dmr/dmrProtocol';
 
 /** 发现窗口：发 3 次 M-SEARCH，收 3 秒（与上游一致） */
 const DISCOVER_MS = 3000;
@@ -96,16 +97,25 @@ export class DlnaService {
    */
   async cast(device: DlnaDevice, target: DlnaCastTarget): Promise<DlnaCastResult> {
     const control = combineUrl(device.location, device.controlUrl);
-    const uriBody = buildSetUriBody(target.url, buildMetaData(target));
+    // 局域网投屏地址归一化：若为 127.0.0.1 / localhost，替换为 PC 的真实局域网 IP，使电视可连通中继
+    const localIp = getLocalIpAddress();
+    let castUrl = target.url;
+    if (castUrl.includes('127.0.0.1') || castUrl.includes('localhost')) {
+      castUrl = castUrl.replace(/https?:\/\/(?:127\.0\.0\.1|localhost)(:\d+)?/i, (_match, port) => {
+        return `http://${localIp}${port || ''}`;
+      });
+    }
+    const resolvedTarget: DlnaCastTarget = { ...target, url: castUrl };
+    const uriBody = buildSetUriBody(resolvedTarget.url, buildMetaData(resolvedTarget));
     const first = await this.post(control, 'SetAVTransportURI', uriBody);
     if (!first.ok) return { ok: false, error: `设备拒绝了播放地址：${first.error}` };
     const played = await this.post(control, 'Play', buildPlayBody());
     if (!played.ok) return { ok: false, error: `已送达但起播失败：${played.error}` };
-    if (target.positionMs > 0) {
-      const seek = await this.post(control, 'Seek', buildSeekBody(formatMs(target.positionMs)));
+    if (resolvedTarget.positionMs > 0) {
+      const seek = await this.post(control, 'Seek', buildSeekBody(formatMs(resolvedTarget.positionMs)));
       if (!seek.ok) this.logger.w(`投屏: Seek 被忽略（继续按当前进度播）: ${seek.error}`);
     }
-    this.logger.i(`投屏: 已投到「${device.name}」（${target.url.slice(0, 100)}）`);
+    this.logger.i(`投屏: 已投到「${device.name}」（${resolvedTarget.url.slice(0, 100)}）`);
     return { ok: true, device: device.name };
   }
 

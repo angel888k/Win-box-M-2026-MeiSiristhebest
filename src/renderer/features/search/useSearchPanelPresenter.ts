@@ -18,7 +18,7 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!open || panelMode !== 'hot') return;
+    if (!open) return;
     let active = true;
     setHotLoading(true);
     void ports.recommendations.loadHotList()
@@ -26,7 +26,7 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
       .catch(() => undefined)
       .finally(() => { if (active) setHotLoading(false); });
     return () => { active = false; };
-  }, [open, panelMode, hotAttempt, ports]);
+  }, [open, hotAttempt, ports]);
 
   useEffect(() => {
     let active = true;
@@ -96,6 +96,7 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
   }, [ports]);
 
   const retryHotList = useCallback(() => {
+    setPanelMode('hot');
     setHotLoading(true);
     setHotAttempt((attempt) => attempt + 1);
   }, []);

@@ -42,6 +42,12 @@ describe('parseXmltvTime', () => {
     expect(parseXmltvTime('20260929040000 Z', SH)?.time).toBe('12:00');
   });
 
+  it('支持常见的 12 位 yyyyMMddHHmm 格式（秒缺省为 00）', () => {
+    const t = parseXmltvTime('202609292030 +0800', SH);
+    expect(t?.epoch).toBe(Date.UTC(2026, 8, 29, 12, 30, 0));
+    expect(t).toMatchObject({ date: '2026-09-29', time: '20:30' });
+  });
+
   it('无偏移：按 live.timeZone 解释', () => {
     expect(parseXmltvTime('20260929200000', SH)?.epoch).toBe(Date.UTC(2026, 8, 29, 12, 0, 0));
     expect(parseXmltvTime('20260929200000', 'UTC')?.epoch).toBe(Date.UTC(2026, 8, 29, 20, 0, 0));

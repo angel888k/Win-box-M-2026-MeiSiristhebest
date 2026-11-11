@@ -7,6 +7,7 @@ export function discoverDetailRoute(item: DiscoverItem): string {
   if (item.poster) query.set('pic', item.poster);
   if (item.doubanId) query.set('doubanId', item.doubanId);
   if (item.tmdbId) query.set('tmdbId', String(item.tmdbId));
+  if (item.imdbId) query.set('imdbId', item.imdbId);
   if (item.rating) query.set('rating', String(item.rating));
   return '/movie?' + query.toString();
 }

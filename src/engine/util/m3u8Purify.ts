@@ -22,6 +22,7 @@
 //   · 单级删除超过总段数 30% → 该级作废（①:224、④:290）；
 //   · 累计删除超过总段数 50% → 整体回退（purify:78）；
 //   · 洗完不满足 `isPlayableMediaPlaylist`（须有段、不得连续两个 EXTINF、不得 EXTINF 紧跟 ENDLIST）→ 整体回退（:83）。
+import { Parser } from 'm3u8-parser';
 import type { RuleItem } from '../../shared/types';
 
 // ── 标签常量（与 M3u8.java:24-31 同名同值）──
@@ -521,6 +522,21 @@ function normalizeMediaPlaylist(content: string): string {
 
 function isPlayableMediaPlaylist(content: string | null): boolean {
   if (content == null || !content.startsWith('#EXTM3U')) return false;
+
+  // 1. 标准 RFC 8216 AST 语法树结构校验
+  try {
+    const parser = new Parser();
+    parser.push(content);
+    parser.end();
+    const manifest = parser.manifest;
+    if (!manifest || !Array.isArray(manifest.segments) || manifest.segments.length === 0) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  // 2. 连续 EXTINF 与 ENDLIST 语义校验
   let mediaCount = 0;
   let pendingExtInf = false;
   for (const raw of content.replace(/\r\n/g, '\n').split('\n')) {

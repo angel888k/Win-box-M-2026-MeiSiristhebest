@@ -299,7 +299,7 @@ export function isArchive(buf: Buffer): boolean {
   return detectArchiveKind(buf) !== null;
 }
 
-// 字幕文本解码：BOM 优先，其次 UTF-8 / GB18030 双解码打分选优（S3），消除误判。
+// 字幕文本解码：BOM 优先，其次 UTF-16 无 BOM 模式检测，再由 UTF-8 / GB18030 / Big5 多候选打分选优（消除繁体与 Windows 编码乱码）。
 export function decodeSubtitle(buf: Buffer): string {
   if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
     return buf.toString('utf-8').replace(/^\uFEFF/, '');
@@ -307,13 +307,34 @@ export function decodeSubtitle(buf: Buffer): string {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
     return iconv.decode(buf.subarray(2), 'utf-16le');
   }
-  // ★ S3（修复）：UTF-8 与 GB18030 各严格解码一次，用「文本合理性得分」选优。
-  //   旧实现 `Buffer.from(utf8)==buf` 对「ASCII+GBK 混合」片（ASCII 段往返相等）会误判为
-  //   UTF-8，导致 GBK 中文被解成拉丁扩展乱码。双解码打分对「GBK 双字节恰是合法 UTF-8 序列」
-  //   的边界也正确：GBK 解出可读汉字得分高，UTF-8 解出怪异拉丁字符得分低 → 选 GBK。
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    return iconv.decode(buf.subarray(2), 'utf-16be');
+  }
+  // 检测无 BOM 的 UTF-16LE / UTF-16BE（Windows 记事本/老式 Aegisub 导出常见）
+  if (buf.length >= 4) {
+    let evenZero = 0;
+    let oddZero = 0;
+    const len = Math.min(buf.length, 256);
+    for (let i = 0; i < len; i++) {
+      if (buf[i] === 0) {
+        if (i % 2 === 0) evenZero++;
+        else oddZero++;
+      }
+    }
+    if (oddZero > 8 && evenZero === 0) return iconv.decode(buf, 'utf-16le');
+    if (evenZero > 8 && oddZero === 0) return iconv.decode(buf, 'utf-16be');
+  }
+  // UTF-8 与中文主流多字节（GB18030 / Big5）严格打分选优
   const utf8 = tryDecodeUtf8(buf);
   const gbk = iconv.decode(buf, 'gb18030');
-  return textScore(utf8) >= textScore(gbk) ? utf8 : gbk;
+  const big5 = iconv.decode(buf, 'big5');
+  const candidates = [
+    { text: utf8, score: textScore(utf8) },
+    { text: gbk, score: textScore(gbk) },
+    { text: big5, score: textScore(big5) },
+  ];
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].score > -Infinity ? candidates[0].text : gbk;
 }
 
 /** 严格 UTF-8 解码；非法序列返回原样（null 用空串避免 token 数错） */
@@ -325,27 +346,27 @@ function tryDecodeUtf8(buf: Buffer): string {
   }
 }
 
-/** 文本合理度：CJK 汉字加分、ASCII 可打印 +1、**空白/换行按正常文本计**、其它控制/替换符判负无穷。 */
+/** 文本合理度：CJK 汉字加分、ASCII 可打印 +1、**空白/换行按正常文本计**、PUA 乱码与控制符判负。 */
 export function textScore(s: string): number {
+  if (!s || !s.length) return -Infinity;
   let score = 0;
   for (const ch of s) {
     const code = ch.codePointAt(0) ?? 0;
     if (ch === '\uFFFD') return -Infinity;
-    // ★ 2026-09-24 修复：「字幕必然含换行」—— 此前 \r\n\t（≤0x1F）一律判 -Infinity，
-    //   导致 GBK 字幕（UTF-8 严格解码失败 → 空串）与 GBK 双方都得 -Infinity → 选空串（''）
-    //   → 表现为「字幕下载为空 / 挂不上」。空白字符是正常字幕内容，按低分计入。
     if (ch === '\n' || ch === '\r' || ch === '\t') {
       score += 1;
       continue;
     }
     if ((code >= 0x20 && code < 0x7f)) score += 1; // ASCII 可打印
-    else if (code >= 0x4e00 && code <= 0x9fff) score += 3; // CJK 汉字
+    else if (code >= 0x4e00 && code <= 0x9fff) score += 3; // CJK 常用汉字
+    else if (code >= 0x3400 && code <= 0x4dbf) score += 2; // CJK 扩展 A
     else if (code >= 0x3000 && code <= 0x303f) score += 1.5; // CJK 标点
     else if (code >= 0xff00 && code <= 0xffef) score += 1.5; // 全角字符
-    else if (code <= 0x1f || code === 0x7f || (code >= 0x80 && code < 0xa0)) return -Infinity; // 其它控制区/罕见
+    else if (code >= 0xe000 && code <= 0xf8ff) score -= 8; // Unicode 私用区（PUA），GBK/Big5 互解乱码典型特征
+    else if (code <= 0x1f || code === 0x7f || (code >= 0x80 && code < 0xa0)) return -Infinity; // 控制字符
     else score += 0.5;
   }
-  return s.length ? score / s.length : -Infinity;
+  return score / s.length;
 }
 
 // ---- ★ 2026-09-28：Provider 适配层（多源框架见 provider.ts / index.ts）----

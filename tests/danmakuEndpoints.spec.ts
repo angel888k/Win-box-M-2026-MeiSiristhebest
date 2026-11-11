@@ -75,8 +75,8 @@ describe('parseCustomEndpoints（自定义接口文本）', () => {
 });
 
 describe('mergeEndpoints / customEndpointsText', () => {
-  it('内置清单默认只启用「炊烟袅袅」', () => {
-    expect(DEFAULT_DANMAKU_ENDPOINTS.filter((e) => e.enabled).map((e) => e.name)).toEqual(['炊烟袅袅']);
+  it('内置清单默认高可用激活前 5 个源', () => {
+    expect(DEFAULT_DANMAKU_ENDPOINTS.filter((e) => e.enabled).map((e) => e.name)).toEqual(['炊烟袅袅', '麦当劳', 'Lily', 'W佬', '稳健']);
     expect(DEFAULT_DANMAKU_ENDPOINTS[0].url).toBe('https://danmu.cynn.top/cynnsq');
   });
 
@@ -89,7 +89,7 @@ describe('mergeEndpoints / customEndpointsText', () => {
   });
 
   it('缺失的内置项按「内置默认开关」补（不是一律打开）', () => {
-    // 只留炊烟袅袅一项 → 其余内置项补齐时应保持默认关闭
+    // 只留炊烟袅袅一项 → 其余内置项补齐时应按内置默认开关补齐
     const r = mergeEndpoints([{ ...DEFAULT_DANMAKU_ENDPOINTS[0] }], '');
     expect(r).toHaveLength(DEFAULT_DANMAKU_ENDPOINTS.length);
     expect(r.find((x) => x.url === 'https://dm.abai.ccwu.cc/abai')?.enabled).toBe(false);
@@ -107,7 +107,7 @@ describe('mergeEndpoints / customEndpointsText', () => {
   });
 });
 
-describe('DanmakuStore — 清单默认开关迁移（★ rev2 默认只开炊烟袅袅）', () => {
+describe('DanmakuStore — 清单默认开关迁移（★ rev3 默认激活前 5 个高可用源）', () => {
   const dirs: string[] = [];
   afterEach(() => {
     for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -118,9 +118,9 @@ describe('DanmakuStore — 清单默认开关迁移（★ rev2 默认只开炊�
     return join(d, 'danmaku.json');
   };
 
-  it('无存盘 → 内置默认（仅炊烟袅袅开）', () => {
+  it('无存盘 → 内置默认（前 5 个高可用源开）', () => {
     const s = new DanmakuStore(tmpFile(), NullLogger);
-    expect(s.settings.endpoints.filter((e) => e.enabled).map((e) => e.name)).toEqual(['炊烟袅袅']);
+    expect(s.settings.endpoints.filter((e) => e.enabled).map((e) => e.name)).toEqual(['炊烟袅袅', '麦当劳', 'Lily', 'W佬', '稳健']);
   });
 
   it('旧配置（全开、无 endpointsRev）→ 内置项回到默认开关，用户自定义项保留', () => {
@@ -138,17 +138,17 @@ describe('DanmakuStore — 清单默认开关迁移（★ rev2 默认只开炊�
     raw.flush();
     const s = new DanmakuStore(file, NullLogger);
     const on = s.settings.endpoints.filter((e) => e.enabled).map((e) => e.name);
-    expect(on.sort()).toEqual(['我的', '炊烟袅袅']);
+    expect(on.sort()).toEqual(['Lily', 'W佬', '我的', '炊烟袅袅', '稳健', '麦当劳']);
     expect(s.settings.fontSize).toBe(20); // 其余偏好不受迁移影响
     // 迁移后保存一次 → 记修订号；重新读取时不再重置开关
     s.update({ fontSize: 21 });
     const raw2 = new JsonStore(file).getObject<{ endpointsRev?: number }>('settings', {});
     expect(raw2.endpointsRev).toBe(DANMAKU_ENDPOINTS_REV);
     const s2 = new DanmakuStore(file, NullLogger);
-    expect(s2.settings.endpoints.filter((e) => e.enabled).map((e) => e.name).sort()).toEqual(['我的', '炊烟袅袅']);
+    expect(s2.settings.endpoints.filter((e) => e.enabled).map((e) => e.name).sort()).toEqual(['Lily', 'W佬', '我的', '炊烟袅袅', '稳健', '麦当劳']);
   });
 
-  it('rev2 配置：面板关掉炊烟袅袅后重读仍为关（不按默认重置）', () => {
+  it('rev3 配置：面板关掉炊烟袅袅后重读仍为关（不按默认重置）', () => {
     const file = tmpFile();
     const s = new DanmakuStore(file, NullLogger);
     s.update({ endpoints: s.settings.endpoints.map((e) => ({ ...e, enabled: false })) });

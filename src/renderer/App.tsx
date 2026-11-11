@@ -289,6 +289,8 @@ function AppShell() {
       episodes?: Episode[];
       epIndex?: number;
       flag?: string;
+      flags?: string[];
+      allEpisodes?: Record<string, Episode[]>;
       profileId?: string;
     },
   ) => {
@@ -331,6 +333,8 @@ function AppShell() {
           vodId: meta?.vodId,
           fromKey,
           id,
+          flags: meta?.flags,
+          allEpisodes: meta?.allEpisodes,
         },
       });
     };

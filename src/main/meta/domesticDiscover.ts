@@ -12,6 +12,11 @@ const agent = new Agent({ connect: { timeout: 8000 } });
 const dohFallback = createDohAgent();
 const DOUBAN = 'https://m.douban.com/rexxar/api/v2/';
 const HOT_URL = 'https://top.baidu.com/api/board?platform=wise&tab=movie';
+const BANGUMI_CALENDAR_URL = 'https://api.bgm.tv/calendar';
+const IMDB_MOVIE_URL = 'https://cdn.jsdelivr.net/gh/crazyuploader/IMDb-Top-50@main/data/top250/movies.json';
+const IMDB_MOVIE_FALLBACK = 'https://raw.githubusercontent.com/crazyuploader/IMDb-Top-50/main/data/top250/movies.json';
+const IMDB_TV_URL = 'https://cdn.jsdelivr.net/gh/crazyuploader/IMDb-Top-50@main/data/top250/shows.json';
+const IMDB_TV_FALLBACK = 'https://raw.githubusercontent.com/crazyuploader/IMDb-Top-50/main/data/top250/shows.json';
 const PAGE_SIZE = 20;
 const TTL = 6 * 3600 * 1000;
 const MAX_STALE = 30 * 86400 * 1000;
@@ -28,7 +33,17 @@ export async function fetchDiscoverJson(url: string): Promise<unknown> {
     try {
       const r = await request(url, {
         dispatcher,
-        headers: { 'User-Agent': 'Mozilla/5.0', accept: 'application/json', Referer: url.startsWith(DOUBAN) ? 'https://m.douban.com/' : 'https://top.baidu.com/' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinBox/1.28',
+          accept: 'application/json',
+          Referer: url.startsWith(DOUBAN)
+            ? 'https://m.douban.com/'
+            : url.startsWith('https://api.bgm.tv')
+            ? 'https://bgm.tv/'
+            : url.includes('jsdelivr') || url.includes('github')
+            ? 'https://www.imdb.com/'
+            : 'https://top.baidu.com/',
+        },
         headersTimeout: 8000, bodyTimeout: 8000,
         signal: AbortSignal.timeout(12000),
       });
@@ -69,6 +84,89 @@ export function parseDomesticItems(json: unknown, mediaType: 'movie' | 'tv'): Di
       ...(Number.isInteger(rank) && rank > 0 ? { rank } : {}),
     }];
   });
+}
+
+export function parseBangumiCalendar(json: unknown): DiscoverItem[] {
+  if (!Array.isArray(json)) return [];
+  const items: DiscoverItem[] = [];
+  const seen = new Set<string>();
+  const jsDay = new Date().getDay();
+  const currentBgmWeekday = jsDay === 0 ? 7 : jsDay;
+
+  const sortedDays = [...json].sort((a: any, b: any) => {
+    const dayA = Number(a?.weekday?.id ?? 0);
+    const dayB = Number(b?.weekday?.id ?? 0);
+    const diffA = (dayA - currentBgmWeekday + 7) % 7;
+    const diffB = (dayB - currentBgmWeekday + 7) % 7;
+    return diffA - diffB;
+  });
+
+  for (const day of sortedDays) {
+    const dayItems = Array.isArray(day?.items) ? day.items : [];
+    for (const it of dayItems) {
+      const name = String(it?.name_cn || it?.name || '').trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+
+      const raw = String(it?.images?.large || it?.images?.common || it?.images?.medium || it?.images?.small || '');
+      const poster = /^https?:\/\//i.test(raw) ? `${LOCAL_PROXY_BASE}/img?${new URLSearchParams({ u: raw, ref: 'https://bgm.tv/' })}` : '';
+      const y = String(it?.air_date || '').match(/\b(19|20)\d{2}\b/)?.[0];
+      const rating = Number(it?.rating?.score);
+
+      items.push({
+        title: name,
+        year: y ? Number(y) : '',
+        poster,
+        mediaType: 'tv',
+        ...(Number.isFinite(rating) && rating > 0 && rating <= 10 ? { rating } : {}),
+      });
+    }
+  }
+  return items;
+}
+
+export function parseImdbItems(json: unknown, mediaType: 'movie' | 'tv'): DiscoverItem[] {
+  if (!Array.isArray(json)) return [];
+  const items: DiscoverItem[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of json) {
+    if (!raw || typeof raw !== 'object') continue;
+    const it = raw as Record<string, unknown>;
+    const title = String(it.name || it.title || '').trim();
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+
+    const rankVal = Number(it.Rank || it.rank);
+    const rank = Number.isInteger(rankVal) && rankVal > 0 ? rankVal : undefined;
+    const ratingVal = Number(it['IMDb Rating'] || it.rating || (it.aggregateRating as any)?.ratingValue);
+    const rating = Number.isFinite(ratingVal) && ratingVal > 0 && ratingVal <= 10 ? ratingVal : undefined;
+
+    const rawImg = String(it.image || it.poster || '');
+    const poster = /^https?:\/\//i.test(rawImg)
+      ? `${LOCAL_PROXY_BASE}/img?${new URLSearchParams({ u: rawImg, ref: 'https://www.imdb.com/' })}`
+      : '';
+
+    const dateStr = String(it.datePublished || it.release_date || it.year || it.last_updated || '');
+    const yearMatch = dateStr.match(/\b(19|20)\d{2}\b/);
+    const year = yearMatch ? Number(yearMatch[0]) : '';
+
+    const linkStr = String(it.link || it.url || '');
+    const imdbMatch = linkStr.match(/tt\d+/);
+    const imdbId = imdbMatch ? imdbMatch[0] : undefined;
+
+    items.push({
+      title,
+      year,
+      poster,
+      mediaType,
+      ...(rank !== undefined ? { rank } : {}),
+      ...(rating !== undefined ? { rating } : {}),
+      ...(imdbId ? { imdbId } : {}),
+    });
+  }
+
+  return items;
 }
 
 export function parseBaiduMovieHot(json: unknown): MovieHotItem[] {
@@ -179,11 +277,67 @@ export class DomesticDiscover {
 
   async boardPage(id: string, requestedPage: number, refresh = false): Promise<DiscoverBoardPage> {
     const board = DOMESTIC_BOARDS.find(item => item.id === id);
-    if (!board) throw new Error('没有找到这个豆瓣榜单');
+    if (!board) throw new Error('没有找到这个国内/二次元榜单');
     const page = normalizeBoardPage(requestedPage);
     const start = (page - 1) * BOARD_PAGE_SIZE;
     const key = `board:${id}:${page}`;
     type Content = Omit<DiscoverBoardPage, 'fetchedAt' | 'stale'>;
+
+    if (board.provider === 'bangumi') {
+      const entry = await this.cached<Content | null>(key, TTL, async () => {
+        const json = await this.fetch(BANGUMI_CALENDAR_URL);
+        const allItems = parseBangumiCalendar(json);
+        const total = allItems.length;
+        const totalPages = Math.max(1, Math.ceil(total / BOARD_PAGE_SIZE));
+        const items = allItems.slice(start, start + BOARD_PAGE_SIZE);
+        const hasMore = start + items.length < total;
+        return {
+          board,
+          items,
+          page,
+          pageSize: BOARD_PAGE_SIZE,
+          total,
+          totalPages,
+          hasMore,
+        };
+      }, value => !!value && Array.isArray(value.items), null, refresh);
+      if (!entry.value || !entry.at) throw new Error('暂时无法读取 Bangumi 放送表，请稍后重试');
+      const stale = Date.now() - entry.at >= TTL || Date.now() < (this.retryAt.get(key) || 0);
+      return { ...entry.value, fetchedAt: entry.at, stale };
+    }
+
+    if (board.provider === 'imdb') {
+      const isMovie = board.mediaType === 'movie';
+      const primaryUrl = isMovie ? IMDB_MOVIE_URL : IMDB_TV_URL;
+      const fallbackUrl = isMovie ? IMDB_MOVIE_FALLBACK : IMDB_TV_FALLBACK;
+
+      const entry = await this.cached<Content | null>(key, TTL, async () => {
+        let json: unknown;
+        try {
+          json = await this.fetch(primaryUrl);
+        } catch {
+          json = await this.fetch(fallbackUrl);
+        }
+        const allItems = parseImdbItems(json, board.mediaType || 'movie');
+        const total = allItems.length;
+        const totalPages = Math.max(1, Math.ceil(total / BOARD_PAGE_SIZE));
+        const items = allItems.slice(start, start + BOARD_PAGE_SIZE);
+        const hasMore = start + items.length < total;
+        return {
+          board,
+          items,
+          page,
+          pageSize: BOARD_PAGE_SIZE,
+          total,
+          totalPages,
+          hasMore,
+        };
+      }, value => !!value && Array.isArray(value.items) && value.items.length > 0, null, refresh);
+      if (!entry.value || !entry.at) throw new Error('暂时无法读取 IMDb 榜单数据，请稍后重试');
+      const stale = Date.now() - entry.at >= TTL || Date.now() < (this.retryAt.get(key) || 0);
+      return { ...entry.value, fetchedAt: entry.at, stale };
+    }
+
     const entry = await this.cached<Content | null>(key, TTL, async () => {
       const json = await this.fetch(`${DOUBAN}subject_collection/${id}/items?start=${start}&count=${BOARD_PAGE_SIZE}`) as Record<string, unknown>;
       const raw = json?.subject_collection_items ?? json?.items;

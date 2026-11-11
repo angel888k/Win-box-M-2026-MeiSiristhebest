@@ -6,7 +6,7 @@ import { isHlsPlaylistUrl } from '../../shared/playbackResult';
 import { mergeSetCookies, setCookieList, cookiePairOf } from '../net/cookieMerge';
 import { purifyVodM3u8 } from '../../engine/util/m3u8Purify';
 import { logPlayDiag, redactUrl } from '../util/playDiag';
-import { imagePreludeLen, parseByteRange } from './mediaTransforms';
+import { createRangeSliceStream, imagePreludeLen, parseByteRange } from './mediaTransforms';
 import { partialRangeTotal, RangeAggregateStream } from './RangeAggregateStream';
 import { DEFAULT_HLS_MANIFEST_BYTES, HLS_MANIFEST_TOTAL_TIMEOUT_MS, UpstreamHttpClient } from './UpstreamHttpClient';
 import { decodeProxyHeaders, headerValue, hlsProxyTarget, rewriteM3u8WithHeaders, safeProxyRequestHeaders } from './hlsProxyTransforms';
@@ -450,20 +450,44 @@ export class PlaybackRelayService {
     const fwd: Record<string, string | string[]> = { 'Content-Type': ct };
     for (const h of ['content-length', 'content-range', 'accept-ranges', 'content-disposition', 'last-modified', 'etag', 'cache-control', 'content-encoding']) {
       const v = resp.headers[h];
-      // 百度 dlink 的 Content-Disposition 常含 UTF-8 文件名字节；Node 在存在
-      // Content-Length 时还会把它按 Latin-1 转成 Buffer 再校验，直接透传会抛出
-      // `Invalid character in header content`，导致已经拿到 206 的媒体连接被中断。
-      // 这类展示性 header 对播放不是必需的，非法值直接丢弃；长度/范围等合法
-      // header 仍然完整透传。
       const value = safeResponseHeader(h, v);
       if (value !== undefined) fwd[h] = value;
     }
-    res.writeHead(resp.status, fwd);
+
+    let outStatus = resp.status;
+    let streamTransform: NodeJS.ReadWriteStream | null = null;
+    const requestedRange = rng ? parseByteRange(rng) : null;
+    const totalLength = parseContentLength(resp.headers['content-length']);
+
+    // ★ 借鉴 FongMi/TV Proxy.java: 当客户端请求了字节范围 (如播放器 seek 跳转)，
+    // 但上游源站返回 200 OK (不支持 Range 或剥离了 Range 请求头) 时：
+    // 如果已知文件总大小且 start > 0，代理层自动跳过前 start 字节，改写状态码为 206 Partial Content，
+    // 并输出 Content-Range 与计算后的 Content-Length，防止播放器因收到 200 导致 seek 失败或死锁重放。
+    if (resp.status === 200 && requestedRange && requestedRange.start > 0 && totalLength && totalLength > requestedRange.start) {
+      outStatus = 206;
+      const end = (requestedRange.end !== undefined && requestedRange.end < totalLength)
+        ? requestedRange.end
+        : totalLength - 1;
+      const sliceLen = end - requestedRange.start + 1;
+      fwd['content-range'] = `bytes ${requestedRange.start}-${end}/${totalLength}`;
+      fwd['content-length'] = String(sliceLen);
+      streamTransform = createRangeSliceStream(requestedRange.start, sliceLen);
+    }
+
+    // 无论上游是否显式声明，媒体透传一律声明支持字节范围，告知客户端播放器可安全 seek
+    if (!fwd['accept-ranges']) {
+      fwd['accept-ranges'] = 'bytes';
+    }
+
+    res.writeHead(outStatus, fwd);
     // resp.body 是 Node 可读流（undici BodyReadable），直接管道转发 → 边收边发给播放器
     const upstream = resp.body as unknown as NodeJS.ReadableStream;
-    if (bufferedHead.length) res.write(bufferedHead);
+    if (bufferedHead.length && !streamTransform) res.write(bufferedHead);
     if ((upstream as { readableEnded?: boolean }).readableEnded) res.end();
-    else this.pipeMediaStream(upstream, res, resp.status, rng, target);
+    else {
+      const sourceStream = streamTransform ? upstream.pipe(streamTransform) : upstream;
+      this.pipeMediaStream(sourceStream, res, outStatus, rng, target);
+    }
   }
 
   /**

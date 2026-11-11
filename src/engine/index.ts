@@ -19,6 +19,7 @@ export * from './vod/CmsSource';
 export * from './vod/SourceViewModel';
 export * from './vod/aggSearch';
 export * from './vod/sourceHealth';
+export * from './vod/sourceCircuitBreaker';
 // Spider 层（T03-A 骨架 + T03-B JS 沙箱 + JVM 桥 jar/dex）
 export * from './spider/Spider';
 export * from './spider/SpiderNull';

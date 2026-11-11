@@ -44,20 +44,20 @@ export function PlayerSuperResolutionControl({ visible, active, mpvStatusResolve
                   : <p>这台设备暂时没有可用的 MPV 内核。请先在设置中安装或启用 MPV 播放组件。</p>}
             </div>
           ) : capabilityLoading ? (
-            <output className="vsp-hint" role="status" style={{ display: 'block' }}>正在检查超分着色器插件…</output>
+            <output className="vsp-hint" role="status" style={{ display: 'block' }}>正在检查插件…</output>
           ) : capabilityError ? (
-            <output className="vsp-hint err" role="alert" style={{ display: 'block' }}>读取超分插件状态失败：{capabilityError}</output>
+            <output className="vsp-hint err" role="alert" style={{ display: 'block' }}>超分插件未就绪：{capabilityError}</output>
           ) : !info?.available ? (
             <div className="vsp-hint" role="status" style={{ display: 'block' }}>
-              <p>没有就绪的着色器档位。请在设置的插件管理中启用超分插件；若已启用，请检查插件载荷是否完整。</p>
+              <p>未检测到着色器插件</p>
             </div>
           ) : <>
             <div className="vsp-fits">{['off', ...modes.map(item => item.id)].map(value => {
               const id = value as SrMode;
               return <button key={id} type="button" className={'vsp-btn' + (mode === id ? ' active' : '')} aria-pressed={mode === id} onClick={() => onSelect(id)}>{labelForMode(id)}</button>;
             })}</div>
-            <output className={feedback?.kind === 'error' ? 'vsp-hint err' : 'vsp-hint'} aria-live="polite" style={{ display: 'block' }}>{statusText}</output>
-            {renderStatusLoading && <output className="vsp-hint" role="status" style={{ display: 'block' }}>正在读取 MPV 当前渲染 pass…</output>}
+            {feedback?.kind === 'error' && <output className="vsp-hint err" aria-live="polite" style={{ display: 'block' }}>{feedback.message}</output>}
+            {renderStatusLoading && <output className="vsp-hint" role="status" style={{ display: 'block' }}>正在读取渲染状态…</output>}
             {renderStatusError && <output className="vsp-hint err" role="alert" style={{ display: 'block' }}>读取 MPV 渲染状态失败：{renderStatusError}</output>}
             {renderStatus && <output className="vsp-hint" role="status" style={{ display: 'block' }}>{formatSuperResolutionRenderStatus(renderStatus)}</output>}
           </>}

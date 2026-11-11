@@ -91,7 +91,7 @@ export function UpdateGateView(props: UpdateGateViewProps) {
                 暂不更新
               </button>
               <button className="app-dialog-action-secondary" style={{ flex: '0 0 auto' }} onClick={props.onOpenBackupDownload}>
-                网盘更新
+                备用下载
               </button>
               <button className="primary" style={{ flex: '0 0 auto' }} onClick={props.onDownload}>
                 立即更新

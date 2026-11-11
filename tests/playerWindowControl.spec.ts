@@ -16,6 +16,7 @@ describe('resolvePlayerWindowControl', () => {
   const commandCases: Array<[PlayerWindowControlMessage, PlayerWindowControlAction]> = [
     [{ op: 'play' }, { type: 'sendMpvCommand', command: { type: 'play' } }],
     [{ op: 'pause' }, { type: 'sendMpvCommand', command: { type: 'pause' } }],
+    [{ op: 'stop' }, { type: 'sendMpvCommand', command: { type: 'pause' } }],
     [{ op: 'seek', value: '12.5' }, { type: 'sendMpvCommand', command: { type: 'seek', value: 12.5 } }],
     [{ op: 'volume', value: 0.4 }, { type: 'sendMpvCommand', command: { type: 'volume', value: 0.4 } }],
     [{ op: 'audioTrack', value: '2' }, { type: 'sendMpvCommand', command: { type: 'aid', value: 2 } }],

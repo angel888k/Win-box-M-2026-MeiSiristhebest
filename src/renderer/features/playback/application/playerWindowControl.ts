@@ -31,8 +31,8 @@ export function resolvePlayerWindowControl(
     const index = currentEpisodeIndex - 1;
     return index >= 0 ? { type: 'selectEpisode', index } : null;
   }
-  if (message.op === 'play' || message.op === 'pause') {
-    return { type: 'sendMpvCommand', command: { type: message.op } };
+  if (message.op === 'play' || message.op === 'pause' || message.op === 'stop') {
+    return { type: 'sendMpvCommand', command: { type: message.op === 'stop' ? 'pause' : message.op } };
   }
 
   const value = typeof message.value === 'number' ? message.value : Number(message.value);

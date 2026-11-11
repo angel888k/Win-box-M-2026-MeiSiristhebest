@@ -288,6 +288,7 @@ export const client = {
   /** ★ 2026-09-29 DLNA 投屏 */
   dlnaDiscover: () => unwrap(window.api.dlna.discover()),
   dlnaCast: (a: { device: DlnaDevice; target: DlnaCastTarget }) => unwrap(window.api.dlna.cast(a)),
+  dlnaDmrStatus: () => unwrap(window.api.dlna.dmrStatus()),
   subtitleGet: () => unwrap(window.api.subtitle.get()),
   subtitleSet: (patch: Partial<SubtitleSettings>) => unwrap(window.api.subtitle.set(patch)),
   /** ★ 2026-09-28：各字幕源的开关/可用状态（配置页渲染） */
@@ -397,4 +398,13 @@ export const client = {
   proxyGet: () => unwrap<{ enabled: boolean; url: string }>(window.api.net.proxyGet()),
   proxySet: (patch: { enabled?: boolean; url?: string }) =>
     unwrap<{ enabled: boolean; url: string }>(window.api.net.proxySet(patch)),
+  // ★ 离线下载管理
+  downloadList: () => unwrap(window.api.download.list()),
+  downloadStart: (options: { url: string; title: string; headers?: Record<string, string>; savePath?: string }) =>
+    unwrap(window.api.download.start(options)),
+  downloadPause: (id: string) => unwrap(window.api.download.pause(id)),
+  downloadResume: (id: string) => unwrap(window.api.download.resume(id)),
+  downloadCancel: (id: string, deleteFile?: boolean) => unwrap(window.api.download.cancel(id, deleteFile)),
+  onDownloadProgress: (cb: (event: import('../../shared/types').DownloadProgressEvent) => void) =>
+    window.api.download.onProgress(cb),
 };

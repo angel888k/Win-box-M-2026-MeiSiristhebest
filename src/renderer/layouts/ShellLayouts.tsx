@@ -143,11 +143,20 @@ interface ShellPresentationDefinition {
   mainClassName: string;
 }
 
-function DesktopHeader({ pageTitle, onBack, backDisabled }: ShellChromeProps) {
+function DesktopHeader({ pageTitle, onBack, backDisabled, appIcon }: ShellChromeProps) {
   return (
     <header className="desktop-topbar">
       <div className="desktop-brand">
-        <span className="desktop-brand-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" /><circle cx="12" cy="12" r="2.1" fill="currentColor" /><circle cx="12" cy="6.8" r="1" fill="currentColor" /><circle cx="16.5" cy="9.4" r="1" fill="currentColor" /><circle cx="16.5" cy="14.6" r="1" fill="currentColor" /><circle cx="12" cy="17.2" r="1" fill="currentColor" /><circle cx="7.5" cy="14.6" r="1" fill="currentColor" /><circle cx="7.5" cy="9.4" r="1" fill="currentColor" /></svg></span>
+        <span className="desktop-brand-mark">
+          {appIcon ? (
+            <img src={appIcon} alt="" width="22" height="22" style={{ borderRadius: 6, display: 'block' }} />
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.75" />
+              <path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+            </svg>
+          )}
+        </span>
         <span>Win-Box</span>
       </div>
       <button type="button" className="desktop-back" aria-label="返回" title="返回（Alt + ←）" disabled={backDisabled} onClick={onBack}>
@@ -330,7 +339,7 @@ export const SHELL_PRESENTATIONS: Record<ShellPresentation, ShellPresentationDef
   desktop: {
     header: DesktopHeader,
     sidebar: DesktopSidebar,
-    needsAppIcon: false,
+    needsAppIcon: true,
     appClassName: () => 'app desktop-app',
     bodyClassName: 'desktop-body',
     sidebarClassName: 'desktop-sidebar',

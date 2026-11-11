@@ -57,23 +57,20 @@ export default function DiscoverBoardPage() {
     </header>
     <div className="board-list-toolbar"><div className="board-summary" aria-live="polite">
       <span className="board-source">{source}</span>
-      {data && <span>{complete ? '共 ' + data.items.length + ' 部 · 完整榜单' : data.total === null ? '已加载 ' + data.items.length + ' 部' : '已加载 ' + data.items.length + ' 部 · 原站共 ' + data.total + ' 条记录'}</span>}
-      {data && data.fetchedAt > 0 && <span>{data.stale ? '上次成功读取' : '数据读取于'} <time dateTime={new Date(data.fetchedAt).toISOString()}>{new Date(data.fetchedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></span>}
+      {data?.total != null ? <span>{data.total} 部</span> : data?.items.length ? <span>{data.items.length} 部</span> : null}
     </div></div>
-    {data?.stale && <output className="banner">正在显示缓存内容，数据可能已变化。可刷新榜单或查看原站。</output>}
-    {data?.notice && <output className="banner">{data.notice}</output>}
-    {error && (!data || errorPhase === 'refresh') && <div className="board-error" role="alert"><p>{error}</p><button type="button" disabled={loading} onClick={retry}>{errorPhase === 'refresh' ? '重试刷新' : '重试加载'}</button>{board?.provider === 'tmdb' && <Link to="/config?section=meta">检查元数据设置</Link>}</div>}
+    {error && (!data || errorPhase === 'refresh') && <div className="board-error" role="alert"><p>{error}</p><button type="button" disabled={loading} onClick={retry}>重试</button></div>}
     <section aria-label="榜单影片" aria-busy={loading}>
-      {loading && !data ? <output className="empty"><span className="spinner" aria-hidden="true" />正在加载榜单…</output>
+      {loading && !data ? <output className="empty"><span className="spinner" aria-hidden="true" />正在加载…</output>
         : data?.items.length ? <div className="grid board-items">{data.items.map((item, index) => <DiscoverItemCard key={String(item.doubanId || item.tmdbId || item.title) + '-' + index}
           it={item} poster={covers.picOf(discoverCoverItem(item))} onError={url => covers.onError(discoverCoverItem(item), url)} onOpen={() => openItem(item)} card={view.card} ratingLabel={source + '评分'} />)}</div>
-          : !error && !loading ? <div className="empty"><h2>榜单暂未返回影片</h2><button type="button" onClick={refresh}>重新加载</button></div> : null}
+          : !error && !loading ? <div className="empty"><h2>暂无内容</h2><button type="button" onClick={refresh}>重新加载</button></div> : null}
     </section>
     {data && data.items.length > 0 && <div className="board-feed-tail" ref={tailRef}>
-      {loading ? <output className="board-feed-status" aria-live="polite"><span className="spinner" aria-hidden="true" />正在加载更多…</output>
-        : error && errorPhase !== 'refresh' ? <div className="board-feed-error" role="alert"><span>{error}</span><button type="button" onClick={retry}>重试加载</button></div>
-          : data.hasMore ? <button type="button" onClick={loadMore}>加载更多影片</button>
-            : <><output className="board-feed-status">{complete ? '已显示全部 ' + data.items.length + ' 部' : '已到列表末尾'}</output><Link className="board-continue-link" to={'/?media=' + encodeURIComponent(category)}>浏览更多{categoryLabel}<Icon name="right" size={14} /></Link></>}
+      {loading ? <output className="board-feed-status" aria-live="polite"><span className="spinner" aria-hidden="true" />正在加载…</output>
+        : error && errorPhase !== 'refresh' ? <div className="board-feed-error" role="alert"><span>{error}</span><button type="button" onClick={retry}>重试</button></div>
+          : data.hasMore ? <button type="button" onClick={loadMore}>加载更多</button>
+            : <output className="board-feed-status">已显示全部 {data.items.length} 部</output>}
     </div>}
   </div>;
 }

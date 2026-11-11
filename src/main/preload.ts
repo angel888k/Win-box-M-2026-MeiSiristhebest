@@ -205,10 +205,11 @@ const api = {
     browse: (a: { id: string; path?: string }) => invoke(IPC.DAV_BROWSE, a),
     openExternal: (url: string) => invoke(IPC.DAV_OPEN_EXTERNAL, url),
   },
-  /** ★ 2026-09-29 DLNA 投屏（SSDP 发现 + AVTransport 三动作） */
+  /** ★ 2026-09-29 DLNA 投屏（SSDP 发现 + AVTransport 三动作）与 DMR 接收端 */
   dlna: {
     discover: () => invoke(IPC.DLNA_DISCOVER),
     cast: (a: unknown) => invoke(IPC.DLNA_CAST, a),
+    dmrStatus: () => invoke(IPC.DLNA_DMR_STATUS),
   },
   subtitle: {
     get: () => invoke(IPC.SUBTITLE_GET),
@@ -462,6 +463,19 @@ const api = {
       const l = (_e: unknown, p: unknown) => cb(p);
       ipcRenderer.on(IPC.UPDATE_PROGRESS, l);
       return () => ipcRenderer.removeListener(IPC.UPDATE_PROGRESS, l);
+    },
+  },
+  download: {
+    list: () => invoke<import('../shared/types').DownloadTask[]>(IPC.DOWNLOAD_LIST),
+    start: (options: { url: string; title: string; headers?: Record<string, string>; savePath?: string }) =>
+      invoke<import('../shared/types').DownloadTask>(IPC.DOWNLOAD_START, options),
+    pause: (id: string) => invoke<boolean>(IPC.DOWNLOAD_PAUSE, id),
+    resume: (id: string) => invoke<boolean>(IPC.DOWNLOAD_RESUME, id),
+    cancel: (id: string, deleteFile?: boolean) => invoke<boolean>(IPC.DOWNLOAD_CANCEL, id, deleteFile),
+    onProgress: (cb: (event: import('../shared/types').DownloadProgressEvent) => void) => {
+      const l = (_e: unknown, p: import('../shared/types').DownloadProgressEvent) => cb(p);
+      ipcRenderer.on(IPC.DOWNLOAD_PROGRESS, l);
+      return () => ipcRenderer.removeListener(IPC.DOWNLOAD_PROGRESS, l);
     },
   },
   quark: {

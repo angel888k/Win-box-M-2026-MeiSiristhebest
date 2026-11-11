@@ -42,6 +42,10 @@ export default function LivePage() {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+  const currentProg = curEpg?.current;
+  const currentProgProgress = currentProg && currentProg.endTime > currentProg.startTime
+    ? Math.max(0, Math.min(100, Math.round(((now - currentProg.startTime) / (currentProg.endTime - currentProg.startTime)) * 100)))
+    : null;
   const exportKey = JSON.stringify([profileId, liveIdx, liveName]);
   const liveExport = useLiveExportPresenter(exportKey, liveExportAdapter);
 
@@ -132,9 +136,19 @@ export default function LivePage() {
                 <div className="live-epg-section">
                   <div className="live-epg">
                     {curEpg.current && (
-                      <span className="live-epg-now">
-                        <b>正在播</b> {curEpg.current.start}~{curEpg.current.end} {curEpg.current.title || '（无标题）'}
-                      </span>
+                      <div className="live-epg-current-wrap">
+                        <span className="live-epg-now">
+                          <b>正在播</b> {curEpg.current.start}~{curEpg.current.end} {curEpg.current.title || '（无标题）'}
+                          {currentProgProgress !== null && (
+                            <span className="live-epg-pct"> ({currentProgProgress}%)</span>
+                          )}
+                        </span>
+                        {currentProgProgress !== null && (
+                          <div className="live-epg-progress-track" title={`当前节目已播出 ${currentProgProgress}%`}>
+                            <div className="live-epg-progress-fill" style={{ width: `${currentProgProgress}%` }} />
+                          </div>
+                        )}
+                      </div>
                     )}
                     {curEpg.next && (
                       <span className="muted">

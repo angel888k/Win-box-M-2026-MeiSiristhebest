@@ -19,6 +19,8 @@ export interface PlayerInitData {
     fromKey?: string;
     id?: string;
     profileId?: string;
+    flags?: string[];
+    allEpisodes?: Record<string, { name: string; url: string }[]>;
   };
   startTime?: number;
   initSeq?: number;

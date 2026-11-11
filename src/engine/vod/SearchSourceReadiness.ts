@@ -46,9 +46,10 @@ export class SearchSourceReadiness {
       }
       try {
         const runtime = this.runtimeReadiness.inspect(source);
+        const isFailedReason = Boolean(runtime?.reason && /(?:404|下载失败|未配置|未指定)/.test(runtime.reason));
         if (!runtime || runtime.state === 'ready') {
           active.push(i);
-        } else if (runtime.state === 'unavailable') {
+        } else if (runtime.state === 'unavailable' || isFailedReason) {
           skipped[i] = {
             key: source.key, name: source.name || source.key, status: 'error',
             error: runtime.reason || '运行时不可用：请检查该源的 jar 地址或运行时配置', ms: 0,
