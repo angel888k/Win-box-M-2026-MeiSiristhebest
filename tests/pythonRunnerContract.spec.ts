@@ -17,7 +17,7 @@ const python = pythonCandidates.find((command) => {
 
 describe.skipIf(!python)('Python runner capability contract', () => {
   it('distinguishes inherited stubs from empty overrides and propagates init errors', () => {
-    const script = join(process.cwd(), 'architecture-audit', 'evidence', 'python-capabilities.probe.py');
+    const script = join(process.cwd(), 'tests', 'fixtures', 'python-capabilities.probe.py');
     const result = spawnSync(python as string, [script], { encoding: 'utf8', windowsHide: true });
 
     expect(result.error).toBeUndefined();

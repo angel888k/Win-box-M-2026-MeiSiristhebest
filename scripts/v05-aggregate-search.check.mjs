@@ -21,8 +21,8 @@ test('V05 search CLI only accepts isolated .tmp/v05-search output and ten or mor
   assert.throws(() => parseV05SearchArgs(['--sources', '999', '--output-dir', '.tmp/v05-search-check']), /between 1000 and 1000/);
   assert.throws(() => parseV05SearchArgs(['--budget-working-set-mb', '0', '--output-dir', '.tmp/v05-search-check']), /positive number/);
   assert.throws(() => parseV05SearchArgs(['--budget-cpu-p95-percent', 'NaN', '--output-dir', '.tmp/v05-search-check']), /positive number/);
-  assert.throws(() => parseV05SearchArgs(['--output-dir', 'architecture-audit/evidence/v05-search-check']), /direct child/);
-  assert.throws(() => parseV05SearchArgs(['--output-dir', '.tmp/../architecture-audit/v05-search-check']), /direct child/);
+  assert.throws(() => parseV05SearchArgs(['--output-dir', 'build/v05-search-check']), /direct child/);
+  assert.throws(() => parseV05SearchArgs(['--output-dir', '.tmp/../build/v05-search-check']), /direct child/);
 });
 
 test('V05 metric percentiles use nearest-rank p50 and p95 and report the peak', () => {
