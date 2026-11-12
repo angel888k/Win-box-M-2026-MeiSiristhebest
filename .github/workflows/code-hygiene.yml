@@ -1,0 +1,52 @@
+name: Code Hygiene & Early Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig*.json"
+      - ".github/workflows/code-hygiene.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hygiene-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sanity-check:
+    name: Fast Static Check (Types, Architecture & Policy)
+    runs-on: windows-latest
+    timeout-minutes: 6
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js with pnpm Cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26.12.0'
+          cache: 'pnpm'
+
+      - name: Install Pinned Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fast TypeScript Typecheck
+        run: pnpm run typecheck
+
+      - name: Architecture Boundary Guard
+        run: pnpm run architecture:check
+
+      - name: Package App Path & Closure Policy
+        run: pnpm run test:package-app-policy

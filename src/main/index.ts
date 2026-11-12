@@ -3,6 +3,7 @@
 //   并在老用户首次启动时自动迁移 %APPDATA%\win-box（见 dataDirBootstrap.ts 头注释）。
 //   必须早于 logger / 各 Store 的模块求值，否则它们会把路径解析到旧位置。
 import { dataDirReport } from './util/dataDirBootstrap';
+import { resourcesDir } from './util/paths';
 import { registerAppQuitCleanup } from './util/appQuit';
 import { createConnection } from 'node:net';
 import { app, BrowserWindow, clipboard, ipcMain, nativeTheme, Notification, shell, webContents } from 'electron';
@@ -600,7 +601,9 @@ function createWindow(): void {
     // 无边框自定义标题栏：窗口控制（最小化/最大化/关闭）与拖拽由渲染层 TitleBar 处理
     frame: false,
     autoHideMenuBar: true,
-    icon: app.isPackaged ? undefined : join(__dirname, '..', '..', 'build', 'icon.png'),
+    icon: app.isPackaged
+      ? (existsSync(join(resourcesDir(), 'ui', 'icon.png')) ? join(resourcesDir(), 'ui', 'icon.png') : undefined)
+      : join(__dirname, '..', '..', 'build', 'icon.png'),
     ...(process.platform === 'win32' ? { backgroundMaterial: 'mica' as const } : {}),
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),

@@ -343,6 +343,8 @@ export async function buildInstallerScript({
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 !define MUI_ABORTWARNING
+!define MUI_ICON "${quote(icon)}"
+!define MUI_UNICON "${quote(icon)}"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\\Win-Box.exe"
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "卸载会移除 Win-Box 程序文件和快捷方式；安装目录中的 data（设置、观看记录、登录信息等）及其他个人文件会保留。"
 Name "Win-Box ${quote(version)}"
@@ -351,6 +353,7 @@ InstallDir "${installDir}"
 ${isolatedInstallDir ? '' : `InstallDirRegKey HKCU "${registry}" "InstallLocation"`}
 RequestExecutionLevel user
 Icon "${quote(icon)}"
+UninstallIcon "${quote(icon)}"
 VIProductVersion "${parts.join('.')}"
 VIAddVersionKey "ProductName" "Win-Box"
 VIAddVersionKey "ProductVersion" "${quote(version)}"

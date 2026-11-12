@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "resources/**"
+      - "scripts/**"
+      - "tests/**"
+      - "build/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig*.json"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "resources/**"
+      - "scripts/**"
+      - "tests/**"
+      - "build/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig*.json"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-suites:
+    name: Regression & Integration Test Suites
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js with pnpm Cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26.12.0'
+          cache: 'pnpm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Vitest Unit & Integration Suites
+        run: pnpm test
+
+      - name: Subscription Import Verification
+        run: pnpm run test:subscription-import
+
+      - name: Electron Dev Infrastructure Check
+        run: pnpm run test:dev
+
+      - name: Release Assets & JVM Stubs Check
+        run: pnpm run test:release-assets
+
+      - name: NSIS Installer Script Check
+        run: pnpm run test:installer
+
+      - name: Acceptance Tools Check
+        run: pnpm run test:acceptance-tools
+
+  build-and-acceptance:
+    name: Application Build & Playback Acceptance
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js with pnpm Cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26.12.0'
+          cache: 'pnpm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Application and Java Bridge
+        run: pnpm run build
+
+      - name: Real HTML5 and MPV Playback Acceptance
+        run: pnpm run acceptance:playback
