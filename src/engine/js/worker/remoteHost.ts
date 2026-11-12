@@ -4,19 +4,34 @@
 import type { MessagePort } from 'node:worker_threads';
 import type { JsSandboxHostPort } from '../JsSandboxPort';
 import type { HttpRequest, HttpResponse, KVStore, Logger } from '../../../shared/types';
-import { SAB_HEADER, SAB_MAX_BYTES, waitForSabReply, type HostCall, type HostReply, type SabPayload } from './protocol';
+import {
+  SAB_HEADER,
+  SAB_MAX_BYTES,
+  SAB_REUSABLE_BYTES,
+  resetSabForCall,
+  waitForSabReply,
+  type HostCall,
+  type HostReply,
+  type SabPayload,
+} from './protocol';
 
-/** 同步通道：写入请求 → Atomics.wait → 读回 JSON */
-function sabRoundTrip<T>(port: MessagePort, make: (sab: SharedArrayBuffer) => HostCall, timeoutMs: number, seq: () => number): SabPayload<T> {
-  const sab = new SharedArrayBuffer(SAB_HEADER + SAB_MAX_BYTES);
-  const call = make(sab);
-  (call as { id: number }).id = seq();
+/** 同步通道：重置状态与 Epoch → 写入请求 → Atomics.wait → 读回 JSON */
+function sabRoundTripWithBuffer<T>(
+  port: MessagePort,
+  sab: SharedArrayBuffer,
+  make: (sab: SharedArrayBuffer, id: number) => HostCall,
+  timeoutMs: number,
+  seq: () => number,
+): SabPayload<T> {
+  const id = seq();
+  resetSabForCall(sab, id);
+  const call = make(sab, id);
   try {
     port.postMessage(call);
   } catch (e) {
     return { ok: false, code: 'protocol', error: `同步通道投递失败: ${(e as Error).message}` };
   }
-  return waitForSabReply<T>(sab, timeoutMs, '同步请求超时（主进程未及时响应）');
+  return waitForSabReply<T>(sab, timeoutMs, '同步请求超时（主进程未及时响应）', id);
 }
 
 export interface RemoteHostOptions {
@@ -42,6 +57,13 @@ export function createRemoteHost(port: MessagePort, opts: RemoteHostOptions): Js
   let seq = 0;
   const nextId = (): number => ++seq;
   const pending = new Map<number, { resolve: (r: HttpResponse) => void; reject: (e: Error) => void }>();
+
+  // ★ 零分配常驻复用：每个 Worker 仅在启动时预分配唯一常驻 SAB
+  // 单个 Worker 内同步阻塞严格串行（Atomics.wait 挂起），绝无并发重入冲突。
+  // 99.9% 的普通同步 HTTP 请求使用 2MB 常驻缓冲区，消灭每次请求 new 8MB 的剧烈 GC 抖动。
+  const reusableHttpSab = new SharedArrayBuffer(SAB_HEADER + SAB_REUSABLE_BYTES);
+  // KV 存储仅存放简短字符串/Token，分配 64KB 常驻缓冲区即可。
+  const reusableKvSab = new SharedArrayBuffer(SAB_HEADER + 64 * 1024);
 
   port.on('message', (msg: HostReply) => {
     if (!msg || (msg.t !== 'httpRes' && msg.t !== 'httpErr')) return;
@@ -75,27 +97,66 @@ export function createRemoteHost(port: MessagePort, opts: RemoteHostOptions): Js
 
   const kv: KVStore = {
     get: (key: string): string => {
-      const r = sabRoundTrip<string>(port, (sab) => ({ t: 'kv', id: 0, op: 'get', key, sab } as HostCall), 5000, nextId);
+      const r = sabRoundTripWithBuffer<string>(
+        port,
+        reusableKvSab,
+        (sab, id) => ({ t: 'kv', id, op: 'get', key, sab }),
+        5000,
+        nextId,
+      );
       if (!r.ok) logger.w(`同步 KV 读取失败（${key.slice(0, 100)}）：${r.error || '未知原因'}`);
       return r.ok && typeof r.value === 'string' ? r.value : '';
     },
     set: (key: string, val: string): void => {
-      const r = sabRoundTrip<string>(port, (sab) => ({ t: 'kv', id: 0, op: 'set', key, val, sab } as HostCall), 5000, nextId);
+      const r = sabRoundTripWithBuffer<string>(
+        port,
+        reusableKvSab,
+        (sab, id) => ({ t: 'kv', id, op: 'set', key, val, sab }),
+        5000,
+        nextId,
+      );
       if (!r.ok) logger.w(`同步 KV 写入失败（${key.slice(0, 100)}）：${r.error || '未知原因'}`);
     },
     delete: (key: string): void => {
-      const r = sabRoundTrip<string>(port, (sab) => ({ t: 'kv', id: 0, op: 'delete', key, sab } as HostCall), 5000, nextId);
+      const r = sabRoundTripWithBuffer<string>(
+        port,
+        reusableKvSab,
+        (sab, id) => ({ t: 'kv', id, op: 'delete', key, sab }),
+        5000,
+        nextId,
+      );
       if (!r.ok) logger.w(`同步 KV 删除失败（${key.slice(0, 100)}）：${r.error || '未知原因'}`);
     },
   };
 
   /**
    * 同步 HTTP —— worker 侧阻塞等待（`Atomics.wait`），主进程异步执行后写入 SAB。
-   * 错误保持成明确的 HTTP 状态和诊断头，不把超大/超时响应伪装成空的 HTTP 200。
+   * 优先使用 2MB 常驻缓冲；若命中超长响应（SAB_OVERSIZED），回退到一次性 8MB 临时缓冲区拉取主进程缓存。
    */
   const httpSync = (req: HttpRequest): HttpResponse => {
     const budget = Math.min((req.timeoutMs ?? 10000) + 2000, 60_000);
-    const r = sabRoundTrip<HttpResponse>(port, (sab) => ({ t: 'httpSync', id: 0, req, sab } as HostCall), budget, nextId);
+    let callId = 0;
+    let r = sabRoundTripWithBuffer<HttpResponse>(
+      port,
+      reusableHttpSab,
+      (sab, id) => {
+        callId = id;
+        return { t: 'httpSync', id, req, sab };
+      },
+      budget,
+      nextId,
+    );
+    if (r.code === 'oversized') {
+      // 遇到大于 2MB 的极少数响应：回退到一次性 8MB 缓冲区，向主进程请求转储已缓存的完整结果
+      const tempSab = new SharedArrayBuffer(SAB_HEADER + SAB_MAX_BYTES);
+      resetSabForCall(tempSab, callId);
+      try {
+        port.postMessage({ t: 'httpSyncOversized', id: callId, sab: tempSab } satisfies HostCall);
+        r = waitForSabReply<HttpResponse>(tempSab, budget, '超大响应同步拉取超时', callId);
+      } catch (e) {
+        r = { ok: false, code: 'protocol', error: `超大同步响应获取失败: ${(e as Error).message}` };
+      }
+    }
     if (r.ok && r.value) return r.value;
     logger.w(`同步请求失败（${req.url.slice(0, 100)}）：${r.error || '未知原因'}`);
     return responseForSabFailure(req.url, r);

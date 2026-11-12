@@ -37,7 +37,7 @@ function auditItem(
   const extEmpty = !String(source.ext || '').trim();
   const items = result?.items.length ?? 0;
   const classes = result?.sortClasses.length ?? 0;
-  const health = classifyHealth({ kind, items, classes, extEmpty, error });
+  const health = classifyHealth({ kind, items, classes, extEmpty, error, api: source.api });
 
   return {
     key: source.key,

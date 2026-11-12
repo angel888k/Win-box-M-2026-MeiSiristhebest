@@ -1,6 +1,6 @@
 // tests/sourceHealth.spec.ts — 逐源体检判定 + CMS 首页自动回退
 import { describe, it, expect } from 'vitest';
-import { classifyHealth } from '../src/engine/vod/sourceHealth';
+import { classifyHealth, resolveFamilyHint } from '../src/engine/vod/sourceHealth';
 import { CmsSource } from '../src/engine/vod/CmsSource';
 import type { HttpClient, HttpRequest, HttpResponse } from '../src/shared/types';
 
@@ -38,6 +38,22 @@ describe('classifyHealth — 有效/失效判定与 ext 规则', () => {
     expect(r.needsExt).toBe(true);
     expect(r.usable).toBe(false);
     expect(r.advice).toContain('siteUrl');
+  });
+  it('spider 根据 api 区分 hiker、xpath、xbpq 与 generic 细分模板提示', () => {
+    const hiker = classifyHealth({ kind: 'js', items: 0, classes: 0, extEmpty: true, api: 'drpy_libs/hiker.js' });
+    expect(hiker.advice).toContain('海阔');
+
+    const xpath = classifyHealth({ kind: 'jar', items: 0, classes: 0, extEmpty: true, api: 'csp_XPath' });
+    expect(xpath.advice).toContain('XPath');
+
+    const xbpq = classifyHealth({ kind: 'jar', items: 0, classes: 0, extEmpty: true, api: 'csp_XBPQ' });
+    expect(xbpq.advice).toContain('XBPQ');
+
+    const generic = classifyHealth({ kind: 'js', items: 0, classes: 0, extEmpty: true, api: 'drpy_libs/douban.js' });
+    expect(generic.advice).toContain('通用站点地址');
+
+    expect(resolveFamilyHint('csp_XyqFilter')).toContain('海阔');
+    expect(resolveFamilyHint('csp_BpqFilter')).toContain('XBPQ');
   });
   it('报错 → error；有 ext 仍空 → empty', () => {
     expect(classifyHealth({ kind: 'cms-xml', items: 0, classes: 0, extEmpty: true, error: 'HTTP 404' }).health).toBe('error');

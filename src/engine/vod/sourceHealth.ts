@@ -14,6 +14,8 @@ export interface HealthInput {
   classes: number;
   extEmpty: boolean;
   error?: string;
+  api?: string;
+  family?: string;
 }
 
 export interface HealthOutcome {
@@ -32,6 +34,15 @@ const FAMILY_HINT: Record<string, string> = {
   xbpq: 'XBPQ 采集模板蜘蛛：ext 应为 {siteUrl,…} 形式的采集规则',
   generic: '通用站点蜘蛛：先试模板「通用站点地址」填入 {siteUrl}；若仍空则该源在安卓同样为空（源站失效或需私有配置）',
 };
+
+/** 根据 api 路径或家族标头推断对应蜘蛛规则模板，激活细分提示 */
+export function resolveFamilyHint(api = '', family = ''): string {
+  const norm = `${api} ${family}`.toLowerCase();
+  if (norm.includes('hiker') || norm.includes('xyq')) return FAMILY_HINT.hiker;
+  if (norm.includes('xpath')) return FAMILY_HINT.xpath;
+  if (norm.includes('xbpq') || norm.includes('bpq')) return FAMILY_HINT.xbpq;
+  return FAMILY_HINT.generic;
+}
 
 export function classifyHealth(inp: HealthInput): HealthOutcome {
   if (inp.error) {
@@ -54,7 +65,7 @@ export function classifyHealth(inp: HealthInput): HealthOutcome {
     };
   }
   if ((inp.kind === 'js' || inp.kind === 'jar') && inp.extEmpty) {
-    const hint = inp.kind === 'jar' ? FAMILY_HINT.generic : FAMILY_HINT.generic;
+    const hint = resolveFamilyHint(inp.api, inp.family);
     return {
       health: 'needs-ext',
       usable: false,

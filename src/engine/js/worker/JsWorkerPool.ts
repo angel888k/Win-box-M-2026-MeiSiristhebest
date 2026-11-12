@@ -8,9 +8,10 @@
 //   超时即 `terminate()` 杀掉重建（旧实现只能干等到 V8 返回）。
 import { Worker } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
-import type { KVStore, Logger } from '../../../shared/types';
+import os from 'node:os';
+import type { HttpResponse, KVStore, Logger } from '../../../shared/types';
 import type { JsSandboxHostPort, JsSpiderRuntimePort, SpiderStyle } from '../JsSandboxPort';
-import { publishSabReply, type HostCall, type WorkerReply, type WorkerTask } from './protocol';
+import { SAB_OVERSIZED, publishSabReply, type HostCall, type WorkerReply, type WorkerTask } from './protocol';
 import { SourceProblemError } from '../../spider/errors';
 import { UnsupportedSourceError } from '../../util/errors';
 import { abortError, throwIfAborted } from '../../util/abort';
@@ -26,10 +27,19 @@ export type PooledSandboxFactory = ((init: { siteKey: string; api: string; ext: 
 };
 
 /**
- * 池容量：★ 2026-10-17（B2）由 4 下调到 3（用户报「后台跑着五六个子进程、太臃肿」）。
- * 每个 worker 一份独立 V8 堆（带 js-lib 时更贵）；3 台已够常见并发，第 4 源起改为排队而非再开一台。
+ * 池容量：自适应 [4, 6] 个 Worker。
+ * 根据系统可用 CPU 核心数按 75% 弹性分配，防止 3 线程在全源并发搜索时发生队头阻塞。
  */
-const POOL_SIZE = 3;
+function computeWorkerPoolSize(): number {
+  const cores = os.availableParallelism?.() ?? os.cpus().length ?? 4;
+  return Math.max(4, Math.min(6, Math.floor(cores * 0.75)));
+}
+
+/** 综合负载分：正在执行(10分) + 排队任务(每项5分) + 绑定源数量(每项1分) */
+function workerLoadScore(w: PoolWorker): number {
+  return (w.running ? 10 : 0) + w.queue.length * 5 + w.keys.size;
+}
+
 /** 打开/切换类任务超时 */
 const OPEN_TIMEOUT = 25_000;
 /** ★ 2026-10-17（B2）：空闲回收 —— 某 worker 无任务超过这么久就 terminate（下次 pick 自动重建） */
@@ -133,6 +143,8 @@ export class JsWorkerPool {
   private openedOn = new Map<string, PoolWorker>();
   /** key → 已打开脚本的风格；底层 open 回执可能晚于已取消的调用方到达。 */
   private openedStyle = new Map<string, SpiderStyle>();
+  /** 超大同步 HTTP 响应缓存（msg.id → 结果，供 worker 第二阶段用 8MB 临时缓冲区拉取） */
+  private oversizedResponses = new Map<number, { res: HttpResponse; timer: ReturnType<typeof setTimeout> }>();
 
   /** ★ 2026-10-17（B2）：空闲回收定时器（`unref`，不阻进程退出） */
   private reclaimTimer: ReturnType<typeof setInterval> | null = null;
@@ -201,12 +213,35 @@ export class JsWorkerPool {
       case 'httpSync': {
         // 同步通道的超时与 HTTP 结果通过 SAB CAS 竞争；第一个回执获胜，迟到结果不会覆写。
         const budget = Math.min((msg.req.timeoutMs ?? 10000) + 1000, 60_000);
-        const timer = setTimeout(() => this.writeSab(msg.sab, { ok: false, code: 'timeout', error: `上游超时（>${budget}ms）` }), budget);
+        const timer = setTimeout(() => this.writeSab(msg.sab, { ok: false, code: 'timeout', error: `上游超时（>${budget}ms）` }, msg.id), budget);
         timer.unref?.();
         this.host.http
           .request(msg.req)
-          .then((res) => { clearTimeout(timer); this.writeSab(msg.sab, { ok: true, value: res }); })
-          .catch((e: Error) => { clearTimeout(timer); this.writeSab(msg.sab, { ok: false, code: 'http-error', error: e.message }); });
+          .then((res) => {
+            clearTimeout(timer);
+            this.writeSab(msg.sab, { ok: true, value: res }, msg.id);
+            const control = new Int32Array(msg.sab, 0, 4);
+            if (Atomics.load(control, 0) === SAB_OVERSIZED) {
+              const expTimer = setTimeout(() => this.oversizedResponses.delete(msg.id), 15_000);
+              expTimer.unref?.();
+              this.oversizedResponses.set(msg.id, { res, timer: expTimer });
+            }
+          })
+          .catch((e: Error) => {
+            clearTimeout(timer);
+            this.writeSab(msg.sab, { ok: false, code: 'http-error', error: e.message }, msg.id);
+          });
+        return;
+      }
+      case 'httpSyncOversized': {
+        const cached = this.oversizedResponses.get(msg.id);
+        if (cached) {
+          clearTimeout(cached.timer);
+          this.oversizedResponses.delete(msg.id);
+          this.writeSab(msg.sab, { ok: true, value: cached.res }, msg.id);
+        } else {
+          this.writeSab(msg.sab, { ok: false, code: 'protocol', error: '超大响应缓存已失效或不存在' }, msg.id);
+        }
         return;
       }
       case 'kv':
@@ -216,9 +251,9 @@ export class JsWorkerPool {
           if (msg.op === 'get') out = kv.get(msg.key);
           else if (msg.op === 'set') kv.set(msg.key, msg.val ?? '');
           else kv.delete(msg.key);
-          this.writeSab(msg.sab, { ok: true, value: out });
+          this.writeSab(msg.sab, { ok: true, value: out }, msg.id);
         } catch (e) {
-          this.writeSab(msg.sab, { ok: false, error: (e as Error).message });
+          this.writeSab(msg.sab, { ok: false, error: (e as Error).message }, msg.id);
         }
         return;
       case 'log': {
@@ -240,9 +275,9 @@ export class JsWorkerPool {
     }
   }
 
-  /** SAB 写回（布局见 protocol.ts）：[0]=状态 [1]=长度 [8..]=UTF-8 JSON */
-  private writeSab(sab: SharedArrayBuffer, payload: unknown): void {
-    publishSabReply(sab, payload);
+  /** SAB 写回（布局见 protocol.ts）：[0]=状态 [1]=长度 [2]=callId [8..]=UTF-8 JSON */
+  private writeSab(sab: SharedArrayBuffer, payload: unknown, expectedCallId?: number): boolean {
+    return publishSabReply(sab, payload, expectedCallId);
   }
 
   /** worker 崩溃/被终止：清账 + 摘除（下次任务自动重建）；重复触发只生效一次 */
@@ -273,9 +308,24 @@ export class JsWorkerPool {
     if (this.disposed) throw new Error('JS worker 池已销毁');
     const routed = this.route.get(key);
     if (routed && !routed.down && this.workers.includes(routed)) return routed;
-    while (this.workers.length < POOL_SIZE) this.workers.push(this.spawn());
+
+    const maxPoolSize = computeWorkerPoolSize();
+    const hasIdleWorker = this.workers.some((w) => !w.down && !w.running && w.queue.length === 0);
+    if (this.workers.length < maxPoolSize && (!hasIdleWorker || this.workers.length === 0)) {
+      this.workers.push(this.spawn());
+    }
+
     let best = this.workers[0];
-    for (const w of this.workers) if (w.keys.size < best.keys.size) best = w;
+    let bestScore = workerLoadScore(best);
+    for (let i = 1; i < this.workers.length; i++) {
+      const w = this.workers[i];
+      if (w.down) continue;
+      const score = workerLoadScore(w);
+      if (score < bestScore) {
+        best = w;
+        bestScore = score;
+      }
+    }
     best.keys.add(key);
     this.route.set(key, best);
     return best;
@@ -287,7 +337,20 @@ export class JsWorkerPool {
       let started = false;
       let callerSettled = false;
       let entry: QueuedWorkerTask;
+
+      const advanceQueue = (): void => {
+        if (pw.running || pw.down) return;
+        while (pw.queue.length > 0) {
+          const next = pw.queue.shift();
+          if (next) {
+            next.start();
+            if (pw.running) break;
+          }
+        }
+      };
+
       const removeAbortListener = (): void => signal?.removeEventListener('abort', cancel);
+
       const cancel = (): void => {
         if (callerSettled) return;
         callerSettled = true;
@@ -297,7 +360,11 @@ export class JsWorkerPool {
         }
         removeAbortListener();
         reject(signal ? abortError(signal) : new Error('操作已取消'));
+        if (!started && !pw.running) {
+          advanceQueue();
+        }
       };
+
       const fail = (error: Error): void => {
         if (callerSettled) return;
         callerSettled = true;
@@ -307,7 +374,11 @@ export class JsWorkerPool {
         }
         removeAbortListener();
         reject(error);
+        if (!started && !pw.running) {
+          advanceQueue();
+        }
       };
+
       const start = (): void => {
         if (started || callerSettled) return;
         if (signal?.aborted) {
@@ -344,9 +415,10 @@ export class JsWorkerPool {
             // Keep the serialized slot until its real reply/timeout, even if the caller left.
             removeAbortListener();
             pw.running = false;
-            pw.queue.shift()?.start();
+            advanceQueue();
           });
       };
+
       entry = { start, cancel, fail };
       if (signal?.aborted) {
         cancel();
@@ -497,6 +569,10 @@ export class JsWorkerPool {
       clearInterval(this.reclaimTimer);
       this.reclaimTimer = null;
     }
+    for (const [, cached] of this.oversizedResponses) {
+      clearTimeout(cached.timer);
+    }
+    this.oversizedResponses.clear();
     const workers = this.workers.slice();
     for (const w of workers) {
       this.onDown(w, 'worker pool disposed');

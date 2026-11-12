@@ -13,21 +13,24 @@
 import type { HttpRequest, HttpResponse } from '../../../shared/types';
 import type { SourceProblemCode } from '../../spider/errors';
 
-/** SAB 数据区起点（前 8 字节是两个 Int32 控制位） */
-export const SAB_HEADER = 8;
+/** SAB 数据区起点（前 16 字节是四个 Int32 控制位：状态、长度、callId、保留位） */
+export const SAB_HEADER = 16;
+/** 预分配常驻复用载荷大小（2MB，覆盖 99.9% 的普通同步请求，零额外 GC） */
+export const SAB_REUSABLE_BYTES = 2 * 1024 * 1024;
 /** 单次同步往返的最大载荷；超出时返回明确错误，绝不截断 JSON。 */
 export const SAB_MAX_BYTES = 8 * 1024 * 1024;
 
-const SAB_PENDING = 0;
-const SAB_WRITING = 1;
-const SAB_READY = 2;
-const SAB_OVERSIZED = 3;
-const SAB_SERIALIZATION_ERROR = 4;
+export const SAB_PENDING = 0;
+export const SAB_WRITING = 1;
+export const SAB_READY = 2;
+export const SAB_OVERSIZED = 3;
+export const SAB_SERIALIZATION_ERROR = 4;
 
 /** worker → 主进程（宿主调用） */
 export type HostCall =
   | { t: 'http'; id: number; req: HttpRequest }
   | { t: 'httpSync'; id: number; req: HttpRequest; sab: SharedArrayBuffer }
+  | { t: 'httpSyncOversized'; id: number; sab: SharedArrayBuffer }
   | { t: 'kv'; id: number; op: 'get' | 'set' | 'delete'; key: string; val?: string; sab: SharedArrayBuffer }
   | { t: 'log'; level: 'i' | 'w' | 'e'; msg: string };
 
@@ -64,12 +67,38 @@ export interface SabPayload<T> {
 }
 
 /**
+ * 初始化或重置 SAB 控制头用于新一次调用。
+ * 设置 callId (Epoch)，清空长度与状态，防止上一轮超时残留干扰。
+ */
+export function resetSabForCall(sab: SharedArrayBuffer, callId: number): void {
+  const control = new Int32Array(sab, 0, 4);
+  Atomics.store(control, 1, 0);
+  Atomics.store(control, 2, callId);
+  Atomics.store(control, 3, 0);
+  Atomics.store(control, 0, SAB_PENDING);
+  Atomics.notify(control, 0);
+}
+
+/**
  * 以单次 CAS 抢占 SAB 回执。只有获胜者可以写数据区；先写字节与长度，再发布 READY，
  * 依赖 Atomics 的顺序保证消费者不会读到半帧。超限以状态码表示，避免截断 JSON。
+ * 若指定 expectedCallId，则校验当前 SAB 所属的 Epoch；若已被后续调用认领或过期则拒绝写入。
  */
-export function publishSabReply(sab: SharedArrayBuffer, payload: unknown): boolean {
-  const control = new Int32Array(sab, 0, 2);
+export function publishSabReply(sab: SharedArrayBuffer, payload: unknown, expectedCallId?: number): boolean {
+  const control = new Int32Array(sab, 0, 4);
+  if (expectedCallId !== undefined && expectedCallId !== 0) {
+    const activeCallId = Atomics.load(control, 2);
+    if (activeCallId !== 0 && activeCallId !== expectedCallId) return false;
+  }
   if (Atomics.compareExchange(control, 0, SAB_PENDING, SAB_WRITING) !== SAB_PENDING) return false;
+  if (expectedCallId !== undefined && expectedCallId !== 0) {
+    const activeCallId = Atomics.load(control, 2);
+    if (activeCallId !== 0 && activeCallId !== expectedCallId) {
+      Atomics.store(control, 0, SAB_PENDING);
+      Atomics.notify(control, 0);
+      return false;
+    }
+  }
   const capacity = sab.byteLength - SAB_HEADER;
   try {
     const serialized = JSON.stringify(payload);
@@ -95,14 +124,19 @@ export function publishSabReply(sab: SharedArrayBuffer, payload: unknown): boole
 }
 
 /** 等待完成回执；超时线程也参与 CAS，因此迟到 HTTP 结果不能覆盖超时帧。 */
-export function waitForSabReply<T>(sab: SharedArrayBuffer, timeoutMs: number, timeoutMessage: string): SabPayload<T> {
-  const control = new Int32Array(sab, 0, 2);
+export function waitForSabReply<T>(
+  sab: SharedArrayBuffer,
+  timeoutMs: number,
+  timeoutMessage: string,
+  expectedCallId?: number,
+): SabPayload<T> {
+  const control = new Int32Array(sab, 0, 4);
   const deadline = Date.now() + Math.max(0, timeoutMs);
   let state = Atomics.load(control, 0);
   while (state === SAB_PENDING) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      publishSabReply(sab, { ok: false, code: 'timeout', error: timeoutMessage });
+      publishSabReply(sab, { ok: false, code: 'timeout', error: timeoutMessage }, expectedCallId);
       state = Atomics.load(control, 0);
       break;
     }
@@ -115,9 +149,16 @@ export function waitForSabReply<T>(sab: SharedArrayBuffer, timeoutMs: number, ti
     Atomics.wait(control, 0, SAB_WRITING);
     state = Atomics.load(control, 0);
   }
-  if (state === SAB_OVERSIZED) return { ok: false, code: 'oversized', error: `同步通道响应超过 ${SAB_MAX_BYTES} 字节上限` };
+  if (state === SAB_OVERSIZED) return { ok: false, code: 'oversized', error: `同步通道响应超过 ${sab.byteLength - SAB_HEADER} 字节上限` };
   if (state === SAB_SERIALIZATION_ERROR) return { ok: false, code: 'serialization', error: '同步通道结果无法序列化' };
   if (state !== SAB_READY) return { ok: false, code: 'protocol', error: '同步通道未发布有效回执' };
+
+  if (expectedCallId !== undefined && expectedCallId !== 0) {
+    const activeCallId = Atomics.load(control, 2);
+    if (activeCallId !== 0 && activeCallId !== expectedCallId) {
+      return { ok: false, code: 'protocol', error: `同步通道 callId 校验不匹配（期望 ${expectedCallId}，收到 ${activeCallId}）` };
+    }
+  }
 
   const length = Atomics.load(control, 1);
   const capacity = sab.byteLength - SAB_HEADER;

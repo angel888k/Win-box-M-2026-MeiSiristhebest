@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SAB_HEADER, publishSabReply, waitForSabReply } from '../src/engine/js/worker/protocol';
+import { SAB_HEADER, publishSabReply, resetSabForCall, waitForSabReply } from '../src/engine/js/worker/protocol';
 import { responseForSabFailure } from '../src/engine/js/worker/remoteHost';
 
 function channel(capacity = 512): SharedArrayBuffer {
@@ -60,6 +60,33 @@ describe('shared-memory worker reply protocol', () => {
       ok: false,
       code: 'protocol',
       error: '同步通道回执长度无效',
+    });
+  });
+
+  it('validates callId epoch token and rejects stale writes from previous timed-out calls', () => {
+    const sab = channel();
+
+    // Round 1 with callId = 101
+    resetSabForCall(sab, 101);
+
+    // Host finishes call 101 successfully
+    expect(publishSabReply(sab, { ok: true, value: 'result-101' }, 101)).toBe(true);
+    expect(waitForSabReply(sab, 50, 'timeout', 101)).toEqual({
+      ok: true,
+      value: 'result-101',
+    });
+
+    // Round 2 resets the buffer for callId = 102
+    resetSabForCall(sab, 102);
+
+    // Stale late write for previous call 101 arrives — must be rejected!
+    expect(publishSabReply(sab, { ok: true, value: 'stale-101' }, 101)).toBe(false);
+
+    // Call 102 publisher succeeds
+    expect(publishSabReply(sab, { ok: true, value: 'result-102' }, 102)).toBe(true);
+    expect(waitForSabReply(sab, 50, 'timeout', 102)).toEqual({
+      ok: true,
+      value: 'result-102',
     });
   });
 });
