@@ -33,6 +33,7 @@ export interface SpiderSourceAssembly {
   readiness: AggregateSearchDependencies['readiness'];
   aggregateSearch: AggregateSearchCoordinator;
   runtime: SpiderRuntimeLifecycle;
+  searchHealth: SourceSearchHealth;
 }
 
 /** Composes the source gateway, search scheduler, and runtime lifecycle as one source subsystem. */
@@ -89,5 +90,5 @@ export function createSpiderSourceAssembly(options: SpiderSourceAssemblyOptions)
     logger: options.logger,
   });
 
-  return { gateway, readiness, aggregateSearch, runtime };
+  return { gateway, readiness, aggregateSearch, runtime, searchHealth };
 }

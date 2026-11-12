@@ -17,6 +17,7 @@ export interface VodIpcPort {
   ): Promise<unknown>;
   play(key: string, flag: string, id: string, profileId?: string, parseOffset?: number, fastRecovery?: boolean): Promise<PlayResult>;
   prewarm(key: string, flag: string, id: string, profileId?: string, signal?: AbortSignal): Promise<PlayResult | null>;
+  reportPlaybackHealth?(key: string, ok: boolean): void;
 }
 interface ProgressWindow {
   webContents: { send(channel: string, payload: unknown): void };
@@ -133,4 +134,10 @@ export function registerVodIpc(host: VodIpcPort, ports: VodIpcPorts, logger: Log
     requestId?: string;
   }) => withRequestCancellation(event, args.requestId, '下一集预解析', (signal) =>
     host.prewarm(args.key, args.flag, args.id, args.profileId, signal)), logger);
+  registerHandler(IPC.VOD_REPORT_PLAYBACK_HEALTH, (_event, args: { key: string; ok: boolean }) => {
+    if (args && typeof args.key === 'string') {
+      host.reportPlaybackHealth?.(args.key, !!args.ok);
+    }
+    return true;
+  }, logger);
 }

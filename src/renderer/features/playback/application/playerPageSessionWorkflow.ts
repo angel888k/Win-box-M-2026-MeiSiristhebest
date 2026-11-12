@@ -503,6 +503,16 @@ export function createPlayerPageSessionWorkflow(
       }
     }
 
+    const failedSourceKey = current.meta?.fromKey || current.key;
+    if (failedSourceKey) {
+      try {
+        (window as unknown as { api?: { vod?: { reportPlaybackHealth?: (a: { key: string; ok: boolean }) => void } } })
+          ?.api?.vod?.reportPlaybackHealth?.({ key: failedSourceKey, ok: false });
+      } catch {
+        /* ignore */
+      }
+    }
+
     // ★ 步骤一：优先尝试当前影片自带的其他线路（flags）秒级续播！
     const switched = await attemptNextFlagInCurrentSource(resumePosition);
     if (switched) return true;
@@ -643,6 +653,15 @@ export function createPlayerPageSessionWorkflow(
     }
     const current = currentInit;
     if (!current) return;
+    const okSourceKey = current.meta?.fromKey || current.key;
+    if (okSourceKey) {
+      try {
+        (window as unknown as { api?: { vod?: { reportPlaybackHealth?: (a: { key: string; ok: boolean }) => void } } })
+          ?.api?.vod?.reportPlaybackHealth?.({ key: okSourceKey, ok: true });
+      } catch {
+        /* ignore */
+      }
+    }
     stopFallbackDiscovery();
     if (current.deferHistoryUntilPlayback) {
       const committed = { ...current, deferHistoryUntilPlayback: false, fastRecovery: false };

@@ -171,6 +171,7 @@ const api = {
     play: (a: { key: string; flag: string; id: string; profileId?: string; parseOffset?: number; fastRecovery?: boolean }) => invoke(IPC.VOD_PLAY, a),
     prewarmPlay: (a: { key: string; flag: string; id: string; profileId?: string; requestId?: string }) => invoke(IPC.VOD_PLAY_PREWARM, a),
     cancelPrewarmPlay: (requestId: string) => ipcRenderer.send(IPC.VOD_PLAY_PREWARM_CANCEL, requestId),
+    reportPlaybackHealth: (a: { key: string; ok: boolean }) => invoke(IPC.VOD_REPORT_PLAYBACK_HEALTH, a),
     // ★ 2026-09-30（用户要求）：点播外部播放器（与磁力分开绑定）——探测本机播放器 / 用当前地址拉起
     detectPlayers: () => invoke<Array<{ id: string; name: string; path: string }>>(IPC.VOD_DETECT_PLAYERS),
     // ★ 2026-09-30（用户要求）：`seek`（秒）—— 从历史续播时按播放器类型拼起播参数

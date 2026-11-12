@@ -62,4 +62,31 @@ describe('SourceSearchHealth', () => {
     expect(health.scheduleOrder(sources)).toEqual([0, 1]);
     expect(health.budget(source('fast'), 15_000, 12_000)).toBe(12_000);
   });
+
+  it('routes playback success and failure to scoped and bare keys', () => {
+    let now = 1_000;
+    const health = new SourceSearchHealth(() => now);
+    const sources = [
+      source('zombie', '["p1","zombie"]'),
+      source('reliable', '["p1","reliable"]'),
+    ];
+
+    health.succeeded('["p1","zombie"]', 60, false);
+    health.succeeded('["p1","reliable"]', 140, false);
+
+    // Initial order: zombie (60ms) before reliable (140ms)
+    expect(health.scheduleOrder(sources)).toEqual([0, 1]);
+
+    // Feed back playback failure to bare key "zombie"
+    now += 100;
+    health.playbackFailed('zombie');
+
+    // Scoped stat received failure: zombie effectiveLatency (60 / 0.25 = 240ms) sinks behind reliable (140ms)
+    expect(health.scheduleOrder(sources)).toEqual([1, 0]);
+
+    // Feed back playback success to reliable
+    health.playbackSucceeded('reliable');
+    expect(health.getStat('["p1","reliable"]')?.playbackSuccess).toBe(1);
+    expect(health.getStat('["p1","zombie"]')?.playbackFail).toBe(1);
+  });
 });

@@ -1,5 +1,7 @@
 import {
   newSourceStat,
+  notePlaybackFail,
+  notePlaybackSuccess,
   noteSourceFail,
   noteSourceOk,
   scheduleOrder,
@@ -44,8 +46,41 @@ export class SourceSearchHealth {
     noteSourceFail(this.statOf(scope), this.now());
   }
 
+  playbackSucceeded(scopeOrKey: string): void {
+    this.recordPlayback(scopeOrKey, true);
+  }
+
+  playbackFailed(scopeOrKey: string): void {
+    this.recordPlayback(scopeOrKey, false);
+  }
+
+  getStat(scopeOrKey: string): Readonly<SourceStat> | undefined {
+    return this.statistics.get(scopeOrKey);
+  }
+
   clear(): void {
     this.statistics.clear();
+  }
+
+  private recordPlayback(scopeOrKey: string, ok: boolean): void {
+    const now = this.now();
+    const primary = this.statOf(scopeOrKey);
+    if (ok) {
+      notePlaybackSuccess(primary, now);
+    } else {
+      notePlaybackFail(primary, now);
+    }
+
+    // 若传入的是 bare source key，同步更新其下所有关联 profile 的 runtimeScope
+    for (const [scope, stat] of this.statistics.entries()) {
+      if (scope !== scopeOrKey && (scope.endsWith(`,"${scopeOrKey}"]`) || scope.endsWith(`:${scopeOrKey}`))) {
+        if (ok) {
+          notePlaybackSuccess(stat, now);
+        } else {
+          notePlaybackFail(stat, now);
+        }
+      }
+    }
   }
 
   private scopeOf(source: SearchHealthSource): string {

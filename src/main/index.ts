@@ -314,6 +314,13 @@ const ipcServices: MainIpcApplicationPorts = {
     play: (key, flag, id, profileId, parseOffset, fastRecovery) =>
       hostServices.playbackRequest.execute(key, flag, id, profileId, parseOffset, fastRecovery),
     prewarm: (key, flag, id, profileId, signal) => hostServices.playbackRequest.prewarm(key, flag, id, profileId, signal),
+    reportPlaybackHealth: (key, ok) => {
+      if (ok) {
+        hostServices.searchHealth.playbackSucceeded(key);
+      } else {
+        hostServices.searchHealth.playbackFailed(key);
+      }
+    },
   },
 };
 const disposeSpiderServices = (): void => {

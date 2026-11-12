@@ -265,6 +265,8 @@ export const client = {
   prewarmPlay: (a: { key: string; flag: string; id: string; profileId?: string }, signal?: AbortSignal) =>
     invokeVodRequestWithCancellation(signal, (requestId) => window.api.vod.prewarmPlay({ ...a, requestId }),
       (requestId) => window.api.vod.cancelPrewarmPlay(requestId)),
+  reportPlaybackHealth: (key: string, ok: boolean) =>
+    window.api?.vod?.reportPlaybackHealth?.({ key, ok }),
   loadLive: (index: number) => unwrap(window.api.live.load(index)),
   liveMeta: () => unwrap(window.api.live.meta()),
   liveEpg: (index: number, channels: EpgChannelRef[]) => unwrap(window.api.live.epg(index, channels)),

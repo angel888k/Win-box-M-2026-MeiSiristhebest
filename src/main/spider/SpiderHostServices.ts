@@ -29,6 +29,7 @@ import type { SearchReadinessPort } from './AggregateSearchCoordinator';
 import type { DrivePanSharePlaybackPorts } from '../drive/DrivePanSharePlayback';
 import type { EngineHost } from '../../engine/ports';
 import type { SpiderRuntimeProvider } from '../../engine/spider/SpiderRuntimeProvider';
+import type { SourceSearchHealth } from '../../engine/vod/SourceSearchHealth';
 
 /** Optional capabilities supplied by the application composition root. */
 export interface SpiderHostOptionalIntegrations {
@@ -75,4 +76,5 @@ export interface SpiderHostServices {
   readonly subscriptionImports: SubscriptionImportApplicationService;
   readonly livePlayback: LivePlaybackService;
   readonly driveBindingLearning: DriveBindingRequirementLearning;
+  readonly searchHealth: SourceSearchHealth;
 }

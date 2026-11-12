@@ -220,6 +220,7 @@ export function createSpiderHostServices(
     safeUrlSummary: redactUrl,
     directPlayUrlError,
     recordDiagnostic: logPlayDiag,
+    notePlaybackFailure: (key) => sourceServices.searchHealth.playbackFailed(key),
   });
 
   const subscriptionImports = dependencies.createSubscriptionImports({
@@ -256,5 +257,6 @@ export function createSpiderHostServices(
     subscriptionImports,
     livePlayback,
     driveBindingLearning,
+    searchHealth: sourceServices.searchHealth,
   };
 }

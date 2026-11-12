@@ -32,6 +32,7 @@ export interface SpiderPlaybackRequestPorts {
   safeUrlSummary(url: string): string;
   directPlayUrlError(url: string): string;
   recordDiagnostic(event: PlaybackRequestDiagnostic): void;
+  notePlaybackFailure?(key: string): void;
 }
 
 /** Resolves a profile-scoped playback request and records diagnostics around the playback use case. */
@@ -52,10 +53,14 @@ export class SpiderPlaybackRequestService {
         const error = this.ports.directPlayUrlError(result.url);
         if (error) result = { ...result, parse: 1, url: '', playUrl: '', message: result.message || error };
       }
+      const isOk = result.parse === 0 && !!result.url;
+      if (!isOk) {
+        this.ports.notePlaybackFailure?.(key);
+      }
       this.record({
         kind: 'play',
         stage: 'done',
-        ok: result.parse === 0 && !!result.url,
+        ok: isOk,
         ms: timer.ms(),
         key,
         flag,
@@ -67,6 +72,7 @@ export class SpiderPlaybackRequestService {
       });
       return result;
     } catch (error) {
+      this.ports.notePlaybackFailure?.(key);
       this.record({
         kind: 'play',
         stage: 'failed',

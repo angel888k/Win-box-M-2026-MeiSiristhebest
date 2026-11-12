@@ -26,10 +26,20 @@ export interface SourceStat {
    * 用途：反复空的源即使慢，也不值得给它整个 10s 预算 —— 它是搜索尾巴的主因之一。
    */
   emptyStreak: number;
+  /** 播放成功次数（本会话） */
+  playbackSuccess: number;
+  /** 播放失败次数（本会话） */
+  playbackFail: number;
+  /** 连续播放失败次数（起播成功即清零） */
+  playbackFailStreak: number;
+  /** 最近一次播放失败时间戳；0 = 从未失败 */
+  lastPlaybackFailAt: number;
 }
 
 /** 「近期失败」判定窗口：窗口外的失败不再降权（源站可能已恢复） */
 export const FAILED_COOLDOWN_MS = 10 * 60 * 1000;
+/** 「播放失败」判定冷却窗口（10分钟） */
+export const PLAYBACK_FAIL_COOLDOWN_MS = 10 * 60 * 1000;
 /** 近期失败源的短预算：快速失败，把时间让给健康源 */
 export const FAILED_SOURCE_BUDGET_MS = 3500;
 /** 历史耗时 → 预算的倍数（2.5：平时 1s 的源给 3.5s，平时 3s 的给 7.5s） */
@@ -40,7 +50,17 @@ export const EMPTY_SLOW_BUDGET_MS = 6000;
 export const MIN_SOURCE_BUDGET_MS = 1500;
 
 export function newSourceStat(): SourceStat {
-  return { okAt: 0, failAt: 0, failStreak: 0, avgMs: 0, emptyStreak: 0 };
+  return {
+    okAt: 0,
+    failAt: 0,
+    failStreak: 0,
+    avgMs: 0,
+    emptyStreak: 0,
+    playbackSuccess: 0,
+    playbackFail: 0,
+    playbackFailStreak: 0,
+    lastPlaybackFailAt: 0,
+  };
 }
 
 /**
@@ -66,10 +86,54 @@ export function noteSourceFail(stat: SourceStat, now = Date.now()): void {
   stat.failStreak += 1;
 }
 
+/** 播放成功 → 记成功数、清播放连败 */
+export function notePlaybackSuccess(stat: SourceStat, _now = Date.now()): void {
+  stat.playbackSuccess += 1;
+  stat.playbackFailStreak = 0;
+}
+
+/** 播放失败（媒体解码错误/403/空地址/线路失效）→ 记失败数、连败与最新时间戳 */
+export function notePlaybackFail(stat: SourceStat, now = Date.now()): void {
+  stat.playbackFail += 1;
+  stat.playbackFailStreak += 1;
+  stat.lastPlaybackFailAt = now;
+}
+
+/**
+ * 播放健康度折算因子（0.05 ~ 1.5）：
+ * - 无起播记录时：1.0（中立，不影响冷启动新源）；
+ * - 起播成功率高且近期无连续失败时：最高 1.25 加分；
+ * - 发生起播失败时：结合连续失败次数与平滑成功率深度打折，拉大有效耗时惩罚。
+ */
+export function playbackScore(stat: SourceStat | undefined, now = Date.now()): number {
+  if (!stat || (stat.playbackSuccess === 0 && stat.playbackFail === 0)) {
+    return 1.0;
+  }
+  const total = stat.playbackSuccess + stat.playbackFail;
+  const rawRate = (stat.playbackSuccess + 1) / (total + 1);
+
+  // 稳定可靠的源适当给予提速奖励（最高 1.25x）
+  const successBonus = stat.playbackSuccess > 0 && stat.playbackFail === 0
+    ? Math.min(1.25, 1.0 + stat.playbackSuccess * 0.05)
+    : 1.0;
+
+  // 近期播放失败惩罚：按连败次数施加指数级折扣
+  let failPenalty = 1.0;
+  if (stat.playbackFail > 0 && now - stat.lastPlaybackFailAt <= PLAYBACK_FAIL_COOLDOWN_MS) {
+    const streak = Math.max(1, stat.playbackFailStreak);
+    failPenalty = Math.max(0.1, Math.pow(0.5, streak));
+  }
+
+  const composite = rawRate * successBonus * failPenalty;
+  return Math.max(0.05, Math.min(1.5, composite));
+}
+
 /** 档位：0 = 健康、1 = 未知、2 = 近期失败（排最后 + 短预算） */
 export function healthRank(stat: SourceStat | undefined, now = Date.now()): 0 | 1 | 2 {
   if (!stat) return 1;
   if (stat.failStreak > 0 && now - stat.failAt <= FAILED_COOLDOWN_MS) return 2;
+  // ★ 连续播放失败 ≥ 2 且在冷却窗口内：即使搜索 API 秒回，也是假死/失效僵尸源，直接降为近期失败档
+  if (stat.playbackFailStreak >= 2 && now - stat.lastPlaybackFailAt <= PLAYBACK_FAIL_COOLDOWN_MS) return 2;
   if (stat.okAt > 0) return 0;
   return 1;
 }
@@ -90,17 +154,21 @@ export function scheduleOrder(
   const rankAt = (i: number): 0 | 1 | 2 => healthRank(health.get(keyAt(i)), now);
   const costAt = (i: number): number => {
     const s = health.get(keyAt(i));
-    return s && s.avgMs > 0 ? s.avgMs : Number.MAX_SAFE_INTEGER;
+    if (!s || s.avgMs <= 0) return Number.MAX_SAFE_INTEGER;
+    const score = playbackScore(s, now);
+    return Math.round(s.avgMs / score); // 综合成本：有效耗时 = avgMs / playbackScore
   };
   return idx.sort((a, b) => {
     const ra = rankAt(a);
     const rb = rankAt(b);
     if (ra !== rb) return ra - rb;
-    if (ra === 0) return costAt(a) - costAt(b); // 健康源：快的先派发
+    if (ra === 0) return costAt(a) - costAt(b); // 健康源：综合成本（耗时/起播率）低的先派发
     if (ra === 2) {
       // 近期失败源：更早失败的先试（刚失败过的排最后）
-      const fa = health.get(keyAt(a))?.failAt ?? 0;
-      const fb = health.get(keyAt(b))?.failAt ?? 0;
+      const sA = health.get(keyAt(a));
+      const sB = health.get(keyAt(b));
+      const fa = Math.max(sA?.failAt ?? 0, sA?.lastPlaybackFailAt ?? 0);
+      const fb = Math.max(sB?.failAt ?? 0, sB?.lastPlaybackFailAt ?? 0);
       if (fa !== fb) return fa - fb;
     }
     return a - b; // 同档同位：保持配置顺序（稳定）

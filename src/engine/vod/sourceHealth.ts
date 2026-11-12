@@ -80,3 +80,22 @@ export function classifyHealth(inp: HealthInput): HealthOutcome {
     advice: '主页无内容：可能源站失效、接口结构变化或首页需特殊参数。用「配置→诊断」看正文与解析情况。',
   };
 }
+
+/**
+ * 双维评分：结合搜索耗时与播放成功率折算综合有效耗时（ms）
+ * 播放成功率越低，有效耗时惩罚越重，防止秒回但无法播放的僵尸采集源霸占前排。
+ * @param avgMs 搜索平均耗时
+ * @param playbackSuccess 播放成功次数
+ * @param playbackFail 播放失败次数
+ * @returns 综合有效耗时（ms）
+ */
+export function calculateEffectiveLatency(
+  avgMs: number,
+  playbackSuccess: number,
+  playbackFail: number,
+): number {
+  if (playbackSuccess === 0 && playbackFail === 0) return avgMs;
+  const rate = (playbackSuccess + 1) / (playbackSuccess + playbackFail + 1);
+  return Math.round(avgMs / Math.max(0.05, rate));
+}
+

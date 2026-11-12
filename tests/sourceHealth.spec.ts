@@ -1,6 +1,6 @@
 // tests/sourceHealth.spec.ts — 逐源体检判定 + CMS 首页自动回退
 import { describe, it, expect } from 'vitest';
-import { classifyHealth, resolveFamilyHint } from '../src/engine/vod/sourceHealth';
+import { classifyHealth, resolveFamilyHint, calculateEffectiveLatency } from '../src/engine/vod/sourceHealth';
 import { CmsSource } from '../src/engine/vod/CmsSource';
 import type { HttpClient, HttpRequest, HttpResponse } from '../src/shared/types';
 
@@ -105,5 +105,20 @@ describe('CmsSource.home — 首页自动回退（根治"有效源首页空白"�
     expect(r.items.length).toBe(1);
     expect(r.homeFallback).toBeUndefined();
     expect(calls).toBe(1);
+  });
+});
+
+describe('calculateEffectiveLatency — 双维有效耗时折算', () => {
+  it('无起播记录时保持原平均耗时', () => {
+    expect(calculateEffectiveLatency(300, 0, 0)).toBe(300);
+  });
+
+  it('起播失败拉大有效耗时，起播成功保持或降低有效耗时', () => {
+    // 50ms 搜索，但 0 成功 1 失败：rate = (0+1)/(0+1+1) = 0.5 -> 50 / 0.5 = 100ms
+    expect(calculateEffectiveLatency(50, 0, 1)).toBe(100);
+    // 50ms 搜索，0 成功 3 失败：rate = 1/4 = 0.25 -> 50 / 0.25 = 200ms
+    expect(calculateEffectiveLatency(50, 0, 3)).toBe(200);
+    // 120ms 搜索，3 成功 0 失败：rate = 4/4 = 1.0 -> 120ms
+    expect(calculateEffectiveLatency(120, 3, 0)).toBe(120);
   });
 });

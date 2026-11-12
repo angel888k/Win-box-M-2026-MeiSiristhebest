@@ -5,12 +5,16 @@ import {
   newSourceStat,
   noteSourceOk,
   noteSourceFail,
+  notePlaybackSuccess,
+  notePlaybackFail,
+  playbackScore,
   healthRank,
   scheduleOrder,
   sourceBudgetMs,
   FAILED_SOURCE_BUDGET_MS,
   MIN_SOURCE_BUDGET_MS,
   FAILED_COOLDOWN_MS,
+  PLAYBACK_FAIL_COOLDOWN_MS,
   EMPTY_SLOW_BUDGET_MS,
 } from '../src/engine/vod/searchScheduler';
 
@@ -125,5 +129,77 @@ describe('sourceBudgetMs', () => {
     const fastEmpty = newSourceStat();
     noteSourceOk(fastEmpty, 200, { empty: true, now: T0 }); // 快 + 上轮空 → 6s 上限也够用
     expect(sourceBudgetMs(fastEmpty, 15000, 10000, T0)).toBe(EMPTY_SLOW_BUDGET_MS);
+  });
+});
+
+describe('起播反馈与双维评分（播放成功率 × 搜索耗时）', () => {
+  it('播放成功累加 success 并清空 failStreak；播放失败累加 fail 与 failStreak', () => {
+    const s = newSourceStat();
+    notePlaybackSuccess(s, T0);
+    expect(s.playbackSuccess).toBe(1);
+    expect(s.playbackFailStreak).toBe(0);
+
+    notePlaybackFail(s, T0 + 10);
+    notePlaybackFail(s, T0 + 20);
+    expect(s.playbackFail).toBe(2);
+    expect(s.playbackFailStreak).toBe(2);
+    expect(s.lastPlaybackFailAt).toBe(T0 + 20);
+
+    notePlaybackSuccess(s, T0 + 30);
+    expect(s.playbackSuccess).toBe(2);
+    expect(s.playbackFailStreak).toBe(0);
+  });
+
+  it('playbackScore: 无历史中立(1.0)，多次成功给予奖励(>1.0)，播放失败大幅打折', () => {
+    expect(playbackScore(undefined, T0)).toBe(1.0);
+    const virgin = newSourceStat();
+    expect(playbackScore(virgin, T0)).toBe(1.0);
+
+    const reliable = newSourceStat();
+    for (let i = 0; i < 5; i++) notePlaybackSuccess(reliable, T0);
+    expect(playbackScore(reliable, T0)).toBeGreaterThan(1.1);
+
+    const failing = newSourceStat();
+    notePlaybackFail(failing, T0);
+    // 0 success, 1 fail: rawRate = 1/2 = 0.5, failPenalty = 0.5 -> composite = 0.25
+    expect(playbackScore(failing, T0)).toBeCloseTo(0.25, 2);
+
+    // 冷却过期后，failPenalty 恢复
+    expect(playbackScore(failing, T0 + PLAYBACK_FAIL_COOLDOWN_MS + 1)).toBeCloseTo(0.5, 2);
+  });
+
+  it('连续 2 次播放失败的僵尸源被直接降为 rank 2 失败档', () => {
+    const zombie = newSourceStat();
+    noteSourceOk(zombie, 50, { now: T0 }); // 搜索只要 50ms
+    expect(healthRank(zombie, T0)).toBe(0);
+
+    notePlaybackFail(zombie, T0);
+    expect(healthRank(zombie, T0)).toBe(0); // 1 次失败仍为 rank 0（靠 effectiveLatency 降权）
+
+    notePlaybackFail(zombie, T0 + 100);
+    expect(healthRank(zombie, T0 + 100)).toBe(2); // 连续 2 次失败 → rank 2 (近期失败档，排队尾)
+
+    // 冷却过期后恢复
+    expect(healthRank(zombie, T0 + 100 + PLAYBACK_FAIL_COOLDOWN_MS + 1)).toBe(0);
+  });
+
+  it('scheduleOrder: 综合成本将秒回但起播失败的源排在稍慢但可靠的源之后', () => {
+    const health = new Map([
+      ['fastZombie', newSourceStat()],
+      ['solidSource', newSourceStat()],
+    ]);
+
+    // fastZombie: 搜索 50ms，但起播失败 1 次 (score 0.25 -> effectiveLatency = 50 / 0.25 = 200ms)
+    noteSourceOk(health.get('fastZombie')!, 50, { now: T0 });
+    notePlaybackFail(health.get('fastZombie')!, T0);
+
+    // solidSource: 搜索 120ms，但起播成功 3 次 (score 1.15 -> effectiveLatency = 120 / 1.15 = 104ms)
+    noteSourceOk(health.get('solidSource')!, 120, { now: T0 });
+    for (let i = 0; i < 3; i++) notePlaybackSuccess(health.get('solidSource')!, T0);
+
+    const testKeys = ['fastZombie', 'solidSource'];
+    const order = scheduleOrder(2, (i) => testKeys[i], health, T0);
+    // solidSource (104ms 有效耗时) 优先于 fastZombie (200ms 有效耗时)
+    expect(order).toEqual([1, 0]);
   });
 });

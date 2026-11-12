@@ -195,6 +195,8 @@ export const IPC = {
   VOD_PLAY: 'vod:play',
   VOD_PLAY_PREWARM: 'vod:play:prewarm',
   VOD_PLAY_PREWARM_CANCEL: 'vod:play:prewarm:cancel',
+  /** ★ 搜索与起播双维反馈：汇报实际起播成败（惩罚快而烂的僵尸采集源） */
+  VOD_REPORT_PLAYBACK_HEALTH: 'vod:reportPlaybackHealth',
   VOD_DEBUG: 'vod:debug',
   LIVE_LOAD: 'live:load',
   LIVE_GROUPS: 'live:groups',
