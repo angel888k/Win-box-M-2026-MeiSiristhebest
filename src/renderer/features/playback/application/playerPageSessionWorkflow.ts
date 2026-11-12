@@ -61,6 +61,7 @@ export function createPlayerPageSessionWorkflow(
   let fallbackExhaustionReported = false;
   let lastFallbackPosition = 0;
   let lastPlaybackFailure: PlaybackFailureContext | undefined;
+  let lastPlaybackFailureMessage = '';
   let lastResolutionFailureMessage = '';
   let automaticDriveSkipCount = 0;
   let prewarmController: AbortController | null = null;
@@ -135,6 +136,7 @@ export function createPlayerPageSessionWorkflow(
     candidateById.clear();
     resolvedCandidateIds.clear();
     lastPlaybackFailure = undefined;
+    lastPlaybackFailureMessage = '';
     lastResolutionFailureMessage = '';
     automaticDriveSkipCount = 0;
     const currentId = sourceId(data);
@@ -151,6 +153,7 @@ export function createPlayerPageSessionWorkflow(
     queuedAlternativeAttempt = null;
     resolvedAlternativeId = null;
     fallbackExhaustionReported = false;
+    lastPlaybackFailureMessage = '';
     lastResolutionFailureMessage = '';
     automaticDriveSkipCount = 0;
     attemptedFlags.clear();
@@ -266,7 +269,11 @@ export function createPlayerPageSessionWorkflow(
           return true;
         }
 
-        const failureNote = lastPlaybackFailure ? `${playbackFailureSummary(lastPlaybackFailure)}。` : '';
+        const failureSummary = lastPlaybackFailure ? playbackFailureSummary(lastPlaybackFailure) : '';
+        const failureDetail = lastPlaybackFailureMessage && lastPlaybackFailureMessage !== failureSummary
+          ? (lastPlaybackFailureMessage.endsWith('。') ? lastPlaybackFailureMessage : `${lastPlaybackFailureMessage}。`)
+          : '';
+        const failureNote = `${failureSummary ? `${failureSummary}。` : ''}${failureDetail}`;
         const message = result.searchIncomplete
           ? `${failureNote}备用源搜索达到时间上限；当前没有发现已核验候选，且全源检查尚未完成。${result.incompleteSources > 0 ? `另有 ${result.incompleteSources} 个来源或影片详情未完成核验。` : ''}这不代表没有可播源，可以重新搜索或手动切换来源。`
           : result.incompleteSources > 0 || result.truncated
@@ -277,7 +284,11 @@ export function createPlayerPageSessionWorkflow(
       } catch (error) {
         if (fallbackGeneration !== searchGeneration || controller.signal.aborted) return true;
         const message = error instanceof Error ? error.message : String(error);
-        const failureNote = lastPlaybackFailure ? `${playbackFailureSummary(lastPlaybackFailure)}。` : '';
+        const failureSummary = lastPlaybackFailure ? playbackFailureSummary(lastPlaybackFailure) : '';
+        const failureDetail = lastPlaybackFailureMessage && lastPlaybackFailureMessage !== failureSummary
+          ? (lastPlaybackFailureMessage.endsWith('。') ? lastPlaybackFailureMessage : `${lastPlaybackFailureMessage}。`)
+          : '';
+        const failureNote = `${failureSummary ? `${failureSummary}。` : ''}${failureDetail}`;
         publish({ type: 'source-fallback-unavailable', message: `${failureNote}备用源搜索失败：${message}` });
         return true;
       } finally {
@@ -495,6 +506,7 @@ export function createPlayerPageSessionWorkflow(
 
     if (cause === 'media-failure') {
       lastPlaybackFailure = failure;
+      lastPlaybackFailureMessage = reason;
       resolvedAlternativeId = null;
       if (failure) publish({ type: 'playback-failure-reported', failure });
       if (remainingAutomaticFailoverMs() < AUTOMATIC_CANDIDATE_ATTEMPT_BUDGET_MS) {

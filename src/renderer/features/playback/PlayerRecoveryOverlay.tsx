@@ -66,7 +66,7 @@ export function PlayerRecoveryOverlay(props: PlayerRecoveryOverlayProps) {
           <h2 className="player-recovery-title">{heading}</h2>
           {fallback.kind === 'searching' && <p className="player-recovery-message">正在匹配备用片源…</p>}
           {fallback.kind === 'switching' && <p className="player-recovery-message">{fallback.message || `正在尝试：${fallback.sourceName}`}</p>}
-          {message && !inProgress && <p className="player-recovery-message">{safeMessage.length > 180 ? playbackFailureSummary(failure) : safeMessage}</p>}
+          {message && !inProgress && <p className="player-recovery-message">{safeMessage.length > 280 ? safeMessage.slice(0, 280) + '…' : safeMessage}</p>}
           {hasDiagnostic && (
             <>
               <details className="player-recovery-details">

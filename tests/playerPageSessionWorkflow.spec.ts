@@ -512,6 +512,10 @@ describe('player page session workflow', () => {
       type: 'source-fallback-unavailable',
       message: expect.stringContaining('源站要求登录或拒绝了当前访问权限'),
     }));
+    expect(actions).toContainEqual(expect.objectContaining({
+      type: 'source-fallback-unavailable',
+      message: expect.stringContaining('HTTP 403'),
+    }));
   });
 
   it('keeps direct live playback out of VOD parsing, failover search and watch history', async () => {
