@@ -84,6 +84,7 @@ export class MpvController {
   private subOn = false;
   private pendingSeekSec: number | null = null;
   private seekThrottleTimer: NodeJS.Timeout | null = null;
+  onPlaybackStarted?: () => void;
 
   constructor(private log: Logger) {}
 
@@ -152,7 +153,14 @@ export class MpvController {
     // A retiring process must release the embedded HWND before another VO attaches to it.
     await Promise.all([...this.retiring].map(proc => new Promise<void>(resolve => {
       if (proc.exitCode !== null || proc.signalCode !== null) { resolve(); return; }
-      proc.once('exit', () => resolve());
+      const timer = setTimeout(() => {
+        try { proc.kill(); } catch { /* ignore */ }
+        resolve();
+      }, 2000);
+      proc.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
     })));
     if (reservation !== this.session || win.isDestroyed()) return { session: reservation, path: st.path };
     this.session += 1;

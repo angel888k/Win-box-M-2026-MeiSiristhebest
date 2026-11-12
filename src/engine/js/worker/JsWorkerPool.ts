@@ -191,13 +191,18 @@ export class JsWorkerPool {
       case 'http':
         this.host.http
           .request(msg.req)
-          .then((res) => pw.w.postMessage({ t: 'httpRes', id: msg.id, res }))
-          .catch((e: Error) => pw.w.postMessage({ t: 'httpErr', id: msg.id, message: e.message }));
+          .then((res) => {
+            try { pw.w.postMessage({ t: 'httpRes', id: msg.id, res }); } catch { /* worker 已终止：忽略 */ }
+          })
+          .catch((e: Error) => {
+            try { pw.w.postMessage({ t: 'httpErr', id: msg.id, message: e.message }); } catch { /* worker 已终止：忽略 */ }
+          });
         return;
       case 'httpSync': {
         // 同步通道的超时与 HTTP 结果通过 SAB CAS 竞争；第一个回执获胜，迟到结果不会覆写。
         const budget = Math.min((msg.req.timeoutMs ?? 10000) + 1000, 60_000);
         const timer = setTimeout(() => this.writeSab(msg.sab, { ok: false, code: 'timeout', error: `上游超时（>${budget}ms）` }), budget);
+        timer.unref?.();
         this.host.http
           .request(msg.req)
           .then((res) => { clearTimeout(timer); this.writeSab(msg.sab, { ok: true, value: res }); })
