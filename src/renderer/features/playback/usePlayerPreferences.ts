@@ -8,7 +8,7 @@ export function usePlayerPreferences(storage: PlayerPreferencesPort, workKey = '
   const [initialPreferences] = useState(() => storage.load());
   const [initialWorkPreferences] = useState(() => workKey ? storage.loadForWork?.(workKey) || null : null);
   const [subtitleOffset, setSubtitleOffset] = useState(initialWorkPreferences?.subOffset ?? initialPreferences.subOffset);
-  const activeWorkKeyRef = useRef(workKey);
+  const [prevWorkKey, setPrevWorkKey] = useState(workKey);
   const preferencesRef = useRef<PlayerPrefs | null>(initialPreferences);
 
   const [volume, setVolume] = useState(initialPreferences.vol);
@@ -26,8 +26,8 @@ export function usePlayerPreferences(storage: PlayerPreferencesPort, workKey = '
   // Reset only work-specific controls when the media identity changes. Updating
   // this component's own state during render avoids briefly persisting the
   // previous work's values under the next work key.
-  if (activeWorkKeyRef.current !== workKey) {
-    activeWorkKeyRef.current = workKey;
+  if (prevWorkKey !== workKey) {
+    setPrevWorkKey(workKey);
     const global = storage.load();
     const work = (workKey && storage.loadForWork?.(workKey)) || {};
     setRate(work.rate ?? global.rate);

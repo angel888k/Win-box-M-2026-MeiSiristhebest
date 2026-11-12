@@ -1,7 +1,7 @@
-import { useId, useRef, type KeyboardEvent } from 'react';
+import { memo, useId, useRef, type KeyboardEvent } from 'react';
 import { EP_PAGE_SIZE, epPageRanges, epPageSlice } from '../../lib/epPager';
 
-export function PlayerEpisodePanel({ episodes, current, open, title, page, onClose, onSelect, onPageChange }: {
+export const PlayerEpisodePanel = memo(function PlayerEpisodePanel({ episodes, current, open, title, page, onClose, onSelect, onPageChange }: {
   episodes: { name: string; url: string }[]; current: number; open: boolean; title: string; page: number;
   onClose(): void; onSelect(index: number): void; onPageChange(page: number): void;
 }) {
@@ -73,4 +73,4 @@ export function PlayerEpisodePanel({ episodes, current, open, title, page, onClo
       })}</div>
     </aside>
   );
-}
+});

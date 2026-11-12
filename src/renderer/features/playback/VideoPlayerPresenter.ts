@@ -241,22 +241,25 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
 
   const { state: playbackStatus, update: updatePlaybackStatus } = usePlayerPlaybackPresentation();
   const { paused, currentTime: cur, duration: dur, buffered, error: err, mpvError: mpvErr, loading, isLive, netSpeed, relaySpeed, buffering } = playbackStatus;
+  const onPrepareNextEpisode = props.onPrepareNextEpisode;
+  const epIndex = props.epIndex;
+  const playbackKind = props.playbackKind;
   const prewarmEpisodeKeyRef = useRef('');
   const prewarmRetryAfterRef = useRef<{ key: string; time: number } | null>(null);
   useEffect(() => {
     // Legacy VOD player init payloads omit playbackKind; live, catch-up and storage
     // surfaces carry an explicit non-VOD kind and stay excluded.
-    if ((props.playbackKind !== undefined && props.playbackKind !== 'vod')
-      || !props.onPrepareNextEpisode || !props.canNext || isLive
+    if ((playbackKind !== undefined && playbackKind !== 'vod')
+      || !onPrepareNextEpisode || !canNext || isLive
       || isAudio || isImage || !Number.isFinite(dur) || dur <= 0) return;
     const remainingSeconds = dur - cur;
-    const episodeKey = `${progressKey}:${props.epIndex ?? 0}`;
+    const episodeKey = `${progressKey}:${epIndex ?? 0}`;
     const retryCoolingDown = prewarmRetryAfterRef.current?.key === episodeKey
       && Date.now() < prewarmRetryAfterRef.current.time;
     if (remainingSeconds <= 30 && remainingSeconds >= 0 && cur > 0
       && prewarmEpisodeKeyRef.current !== episodeKey && !retryCoolingDown) {
       prewarmEpisodeKeyRef.current = episodeKey;
-      const pending = props.onPrepareNextEpisode();
+      const pending = onPrepareNextEpisode();
       if (pending && typeof pending.then === 'function') {
         void pending.then(prepared => {
           if (prepared) {
@@ -276,7 +279,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       prewarmEpisodeKeyRef.current = '';
       if (prewarmRetryAfterRef.current?.key === episodeKey) prewarmRetryAfterRef.current = null;
     }
-  }, [cur, dur, isAudio, isImage, isLive, progressKey, props.canNext, props.epIndex, props.onPrepareNextEpisode, props.playbackKind]);
+  }, [cur, dur, isAudio, isImage, isLive, progressKey, canNext, epIndex, onPrepareNextEpisode, playbackKind]);
   const { message: commandError, report: reportCommandError } = usePlayerCommandFeedback();
   const updateCurrentTime = useCallback((currentTime: number) => updatePlaybackStatus({ currentTime }), [updatePlaybackStatus]);
   /**
@@ -300,12 +303,12 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     workKey: workPreferenceKey,
     trackKey: workPreferenceKey ? dependencies.playerPreferences.loadForWork?.(workPreferenceKey)?.subtitleTrackKey || '' : '',
   });
-  if (subtitleTrackPreferenceRef.current.workKey !== workPreferenceKey) {
+  useLayoutEffect(() => {
     subtitleTrackPreferenceRef.current = {
       workKey: workPreferenceKey,
       trackKey: workPreferenceKey ? dependencies.playerPreferences.loadForWork?.(workPreferenceKey)?.subtitleTrackKey || '' : '',
     };
-  }
+  }, [dependencies.playerPreferences, workPreferenceKey]);
   const subtitlePreferenceAppliedRef = useRef('');
   const createAudioTracksPort = dependencies.createAudioTracksPort;
   // oxlint-disable-next-line react/refs -- The adapter reads the current session's narrow audio-track capability only when a user action runs.
@@ -894,18 +897,18 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     if (mini || (event.target as HTMLElement).closest('.vp-eppanel')) return;
     toggleFull();
   }, [mini, toggleFull]);
-  const contextActions = {
+  const contextActions = useMemo(() => ({
     onInfo: () => { contextMenu.toggleInfo(); contextMenu.closeMenu(); },
     onCopy: () => { void contextMenu.copyAddress(); contextMenu.closeMenu(); },
-    onSwitchSource: props.onAutoChangeParse ? () => {
+    onSwitchSource: onAutoChangeParse ? () => {
       contextMenu.closeMenu();
-      void props.onAutoChangeParse?.(cur, '用户手动切换播放源', 'media-failure');
+      void onAutoChangeParse(cur, '用户手动切换播放源', 'media-failure');
     } : undefined,
     onCast: () => {
       contextMenu.closeMenu();
       dlna.actions.toggle();
     },
-  };
+  }), [contextMenu, onAutoChangeParse, cur, dlna.actions]);
   const onGoToBind = useCallback(() => { void dependencies.driveBindingNavigation.openBindingSettings(); }, [dependencies.driveBindingNavigation]);
   const onRetryPlayback = props.onRetryPlayback;
   const onRetry = useCallback(() => {
@@ -945,7 +948,7 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     // MPV has emitted file-loaded. Plugin declarations alone are not session evidence.
     engineReady: observePlayerReadiness({
       kernel,
-      htmlReadyState: kernel === 'html5' ? ref.current?.readyState : undefined,
+      htmlReadyState: kernel === 'html5' ? playbackStatus.htmlReadyState : undefined,
       mpvLoaded: kernel === 'mpv' ? technical.loaded : undefined,
     }),
     superResolution: superResolutionState,
@@ -954,17 +957,72 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
     subtitleTrackCount: subtitleTracksObserved ? technical.subtitles.length : null,
     resolution: resText || null,
   });
+
+  const identitySlice = useMemo(() => ({
+    url, resourceName, danmakuTitle, playTitle, mini, onPlaybackStarted: props.onPlaybackStarted,
+  }), [url, resourceName, danmakuTitle, playTitle, mini, props.onPlaybackStarted]);
+
+  const mediaSlice = useMemo(() => ({
+    kind: mediaKind,
+    playbackSource: props.playbackSource,
+    cover: props.cover,
+    episodeNumber: (props.epIndex ?? 0) + 1,
+    episodeCount: props.epTotal,
+    startTime: props.startTime,
+  }), [mediaKind, props.playbackSource, props.cover, props.epIndex, props.epTotal, props.startTime]);
+
+  const navigationSlice = useMemo(() => ({
+    canPrev, canNext, onPrev, onNext, onAutoChangeParse: props.onAutoChangeParse,
+  }), [canPrev, canNext, onPrev, onNext, props.onAutoChangeParse]);
+
+  const episodesSlice = useMemo(() => ({
+    items: props.episodes,
+    current: props.epIndex ?? -1,
+    open: epPanel,
+    title: playTitle || resourceName || '选集',
+    page: episodePanel.page,
+    onPageChange: episodePanel.setPage,
+    onClose: episodePanel.close,
+    onSelect: episodePanel.selectEpisode,
+  }), [props.episodes, props.epIndex, epPanel, playTitle, resourceName, episodePanel.page, episodePanel.setPage, episodePanel.close, episodePanel.selectEpisode]);
+
+  const closeStats = useCallback(() => setStatsOpen(false), [setStatsOpen]);
+  const closeKeys = useCallback(() => setKeysOpen(false), [setKeysOpen]);
+  const closeCapabilities = useCallback(() => setCapabilitiesOpen(false), [setCapabilitiesOpen]);
+
+  const technicalPanelsSlice = useMemo(() => ({
+    audioTracks: audio.tracks,
+    subtitles: technical.subtitles,
+    pluginKeys,
+    active: kernel === 'mpv',
+    statsOpen,
+    keysOpen,
+    capabilitiesOpen,
+    capabilitySummary,
+    mini,
+    mpvTech: technical.tech,
+    formatNetworkSpeed,
+    onStatsClose: closeStats,
+    onKeysClose: closeKeys,
+    onCapabilitiesClose: closeCapabilities,
+  }), [audio.tracks, technical.subtitles, pluginKeys, kernel, statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini, technical.tech, closeStats, closeKeys, closeCapabilities]);
+
+  const danmakuSlice = useMemo(() => ({
+    items: dmItems, enabled: dmEnabled, settings: dmCfg,
+  }), [dmItems, dmEnabled, dmCfg]);
+
+  const contextMenuSlice = useMemo(() => ({
+    position: contextMenu.position, menuRef: contextMenu.menuRef, infoOpen: contextMenu.infoOpen, actions: contextActions,
+  }), [contextMenu.position, contextMenu.menuRef, contextMenu.infoOpen, contextActions]);
+
+  const toastSlice = useMemo(() => ({
+    skip: skipToast, boost: boost.tip, commandError,
+  }), [skipToast, boost.tip, commandError]);
+
   return {
-    identity: { url, resourceName, danmakuTitle, playTitle, mini, onPlaybackStarted: props.onPlaybackStarted },
-    media: {
-      kind: mediaKind,
-      playbackSource: props.playbackSource,
-      cover: props.cover,
-      episodeNumber: (props.epIndex ?? 0) + 1,
-      episodeCount: props.epTotal,
-      startTime: props.startTime,
-    },
-    navigation: { canPrev, canNext, onPrev, onNext, onAutoChangeParse: props.onAutoChangeParse },
+    identity: identitySlice,
+    media: mediaSlice,
+    navigation: navigationSlice,
     surface: {
       videoRef: ref, containerRef: wrapRef, controlsVisible: ui, full, toggleFull, fit, subFont, subBottom,
       onPointerActivity: poke, onPointerLeave: hideIfNoPanel, onDoubleClick: onSurfaceDoubleClick,
@@ -974,21 +1032,12 @@ export function useVideoPlayerPresenter(props: VideoPlayerProps, dependencies: V
       kernel, mpvTimeRef, mpvSizeRef, paused, currentTime: cur, duration: dur, resolution: resText,
       loading, buffering, relaySpeed, netSpeed, error: err, mpvError: mpvErr, isLive,
     },
-    danmaku: { items: dmItems, enabled: dmEnabled, settings: dmCfg },
-    contextMenu: { position: contextMenu.position, menuRef: contextMenu.menuRef, infoOpen: contextMenu.infoOpen, actions: contextActions },
-    episodes: {
-      items: props.episodes,
-      current: props.epIndex ?? -1,
-      open: epPanel,
-      title: playTitle || resourceName || '选集',
-      page: episodePanel.page,
-      onPageChange: episodePanel.setPage,
-      onClose: episodePanel.close,
-      onSelect: episodePanel.selectEpisode,
-    },
-    technicalPanels: { audioTracks: audio.tracks, subtitles: technical.subtitles, pluginKeys, active: kernel === 'mpv', statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini, mpvTech: technical.tech, formatNetworkSpeed, onStatsClose: () => setStatsOpen(false), onKeysClose: () => setKeysOpen(false), onCapabilitiesClose: () => setCapabilitiesOpen(false) },
+    danmaku: danmakuSlice,
+    contextMenu: contextMenuSlice,
+    episodes: episodesSlice,
+    technicalPanels: technicalPanelsSlice,
     info: { title: playTitle, currentTime: cur, duration: dur, resolution: resText },
-    toast: { skip: skipToast, boost: boost.tip, commandError },
+    toast: toastSlice,
     status: {
       loading, buffering, loadingSpeed: formatNetworkSpeed(relaySpeed && relaySpeed > 0 ? relaySpeed : netSpeed && netSpeed > 0 ? netSpeed : 0),
       error: err, mpvError: mpvErr, paused, mini, episodePanelOpen: epPanel, driveProvider: driveBinding.provider,

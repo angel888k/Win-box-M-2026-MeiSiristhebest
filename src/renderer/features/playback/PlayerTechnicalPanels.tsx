@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { MpvAudioTrack, MpvSubtitleTrack } from '../../../shared/player';
 import type { KeymapView } from '../../../shared/plugin';
 import { spdifLabel } from '../../../shared/player';
@@ -18,7 +19,7 @@ const KEY_SHORTCUTS: ReadonlyArray<{ keys: string; desc: string }> = [
   { keys: '右键画面', desc: '播放器菜单（详情信息 / 复制地址）' },
 ];
 
-export function PlayerTechnicalPanels({ active, statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini, mpvTech, audioTracks, subtitles, pluginKeys, fmtNet, onStatsClose, onKeysClose, onCapabilitiesClose }: { audioTracks: MpvAudioTrack[]; subtitles: MpvSubtitleTrack[]; pluginKeys: KeymapView[]; active: boolean; statsOpen: boolean; keysOpen: boolean; capabilitiesOpen: boolean; capabilitySummary: PlayerCapabilitySummary; mini: boolean; mpvTech: MpvTechnicalState | null; fmtNet(value: number): string; onStatsClose(): void; onKeysClose(): void; onCapabilitiesClose(): void }) {
+export const PlayerTechnicalPanels = memo(function PlayerTechnicalPanels({ active, statsOpen, keysOpen, capabilitiesOpen, capabilitySummary, mini, mpvTech, audioTracks, subtitles, pluginKeys, fmtNet, onStatsClose, onKeysClose, onCapabilitiesClose }: { audioTracks: MpvAudioTrack[]; subtitles: MpvSubtitleTrack[]; pluginKeys: KeymapView[]; active: boolean; statsOpen: boolean; keysOpen: boolean; capabilitiesOpen: boolean; capabilitySummary: PlayerCapabilitySummary; mini: boolean; mpvTech: MpvTechnicalState | null; fmtNet(value: number): string; onStatsClose(): void; onKeysClose(): void; onCapabilitiesClose(): void }) {
   return <>
       {active && statsOpen && !mini && (
         <div className="vp-stats" onDoubleClick={(e) => e.stopPropagation()}>
@@ -94,4 +95,4 @@ export function PlayerTechnicalPanels({ active, statsOpen, keysOpen, capabilitie
       )}
 
   </>;
-}
+});

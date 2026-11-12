@@ -1,7 +1,7 @@
-import type { RefObject } from 'react';
+import { memo, type RefObject } from 'react';
 import type { PlayerContextMenuPosition } from './usePlayerContextMenu';
 
-export function PlayerContextMenu({ position, menuRef, onInfo, onCopy, onSwitchSource, onCast }: {
+export const PlayerContextMenu = memo(function PlayerContextMenu({ position, menuRef, onInfo, onCopy, onSwitchSource, onCast }: {
   position: PlayerContextMenuPosition | null;
   menuRef: RefObject<HTMLDivElement | null>;
   onInfo(): void;
@@ -38,4 +38,4 @@ export function PlayerContextMenu({ position, menuRef, onInfo, onCopy, onSwitchS
       )}
     </div>
   );
-}
+});

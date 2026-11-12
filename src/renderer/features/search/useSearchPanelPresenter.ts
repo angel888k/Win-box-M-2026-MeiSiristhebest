@@ -17,10 +17,17 @@ export function useSearchPanelPresenter(ports: SearchPanelPorts) {
   const [history, setHistory] = useState<string[]>([]);
   const timer = useRef<number | null>(null);
 
+  const [prevOpenState, setPrevOpenState] = useState(open);
+  const [prevAttemptState, setPrevAttemptState] = useState(hotAttempt);
+  if (prevOpenState !== open || prevAttemptState !== hotAttempt) {
+    setPrevOpenState(open);
+    setPrevAttemptState(hotAttempt);
+    if (open) setHotLoading(true);
+  }
+
   useEffect(() => {
     if (!open) return;
     let active = true;
-    setHotLoading(true);
     void ports.recommendations.loadHotList()
       .then((result) => { if (active) setHotList(result); })
       .catch(() => undefined)

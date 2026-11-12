@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 
-export function PlayerInfoOverlay({ open, title, currentTime, duration, resolution, formatTime }: {
+export const PlayerInfoOverlay = memo(function PlayerInfoOverlay({ open, title, currentTime, duration, resolution, formatTime }: {
   open: boolean; title?: string; currentTime: number; duration: number; resolution: string; formatTime(seconds: number): string;
 }) {
   const [now, setNow] = useState(() => new Date());
@@ -18,4 +18,4 @@ export function PlayerInfoOverlay({ open, title, currentTime, duration, resoluti
       <div className="vp-info-row">{now.getHours()}点{String(now.getMinutes()).padStart(2, '0')}分</div>
     </div>
   );
-}
+});

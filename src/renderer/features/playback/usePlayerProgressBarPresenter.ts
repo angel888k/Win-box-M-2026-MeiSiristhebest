@@ -96,7 +96,7 @@ export function usePlayerProgressBarPresenter(model: PlayerProgressBarModel) {
     updateHover(sample);
     seekAtPointer(sample);
     return true;
-  }, [seekAtPointer, updateHover]);
+  }, [seekAtPointer, timeAtPointer, updateHover]);
 
   const onPointerMove = useCallback((sample: ProgressPointerSample) => {
     updateHover(sample);

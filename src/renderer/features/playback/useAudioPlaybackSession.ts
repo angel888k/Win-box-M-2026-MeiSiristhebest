@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PlaybackPositionScope } from './application/playbackSessionPorts';
 import type { PlaybackPositionMemoryPort } from './application/playbackSessionPorts';
 import type { AudioPlayerInput } from './application/audioPlayer';
@@ -167,14 +167,16 @@ export function useAudioPlaybackSession(
     const audio = audioRef.current;
     if (audio && !mediaPort.isPaused(audio)) mediaPort.pause(audio);
   }, [mediaPort]);
-  mediaSessionActionsRef.current = {
-    play: playFromMediaSession,
-    pause: pauseFromMediaSession,
-    seekBy: seconds => seekTo((audioRef.current ? mediaPort.currentTime(audioRef.current) : 0) + seconds),
-    seekTo,
-    ...(canPrev && onPrev ? { previous: onPrev } : {}),
-    ...(canNext && onNext ? { next: onNext } : {}),
-  };
+  useLayoutEffect(() => {
+    mediaSessionActionsRef.current = {
+      play: playFromMediaSession,
+      pause: pauseFromMediaSession,
+      seekBy: seconds => seekTo((audioRef.current ? mediaPort.currentTime(audioRef.current) : 0) + seconds),
+      seekTo,
+      ...(canPrev && onPrev ? { previous: onPrev } : {}),
+      ...(canNext && onNext ? { next: onNext } : {}),
+    };
+  });
 
   const mediaSessionPlaybackState: PlayerMediaSessionPlaybackState = error
     ? 'none'

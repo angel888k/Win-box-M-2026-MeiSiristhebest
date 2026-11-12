@@ -29,13 +29,15 @@ export default function PlayerPage() {
   useEffect(() => {
     if (!diagnosticMessage || fallbackInProgress) return;
     const failure = session.playbackFailure;
-    setDiagnosticHistory(recordPlayerDiagnostic({
-      message: diagnosticMessage,
-      title: session.playName || session.curName || title,
-      sourceName: session.init?.meta?.sourceName || session.init?.meta?.fromKey || session.init?.key,
-      engine: failure?.engine,
-      failure,
-    }, playerDiagnosticHistoryStorageAdapter));
+    queueMicrotask(() => {
+      setDiagnosticHistory(recordPlayerDiagnostic({
+        message: diagnosticMessage,
+        title: session.playName || session.curName || title,
+        sourceName: session.init?.meta?.sourceName || session.init?.meta?.fromKey || session.init?.key,
+        engine: failure?.engine,
+        failure,
+      }, playerDiagnosticHistoryStorageAdapter));
+    });
   }, [diagnosticMessage, fallbackInProgress, session.curName, session.init, session.playName, session.playbackFailure, title]);
 
   useEffect(() => {

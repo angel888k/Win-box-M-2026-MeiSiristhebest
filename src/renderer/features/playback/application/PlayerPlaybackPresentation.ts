@@ -11,6 +11,7 @@ export interface PlayerPlaybackPresentation {
   netSpeed: number | null;
   relaySpeed: number | null;
   buffering: boolean;
+  htmlReadyState?: number;
 }
 
 export type PlayerPlaybackPresentationUpdate = Partial<PlayerPlaybackPresentation>;

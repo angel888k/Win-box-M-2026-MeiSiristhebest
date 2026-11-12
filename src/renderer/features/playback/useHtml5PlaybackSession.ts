@@ -238,7 +238,7 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
         if (video.volume !== prefsRef.current.vol) video.volume = prefsRef.current.vol;
         if (video.playbackRate !== prefsRef.current.rate) video.playbackRate = prefsRef.current.rate;
       }
-       updatePlaybackStatus({ loading: false });
+       updatePlaybackStatus({ loading: false, htmlReadyState: video.readyState });
       timeline.maybeSkip();
     };
     const onDuration = () => {

@@ -27,12 +27,10 @@ export function usePlayerSegmentLoop(options: PlayerSegmentLoopOptions) {
   const loop = stored.identity === identity ? stored.loop : EMPTY_PLAYER_SEGMENT_LOOP;
   const active = available && isPlayerSegmentLoopActive(loop);
 
-  useEffect(() => {
-    if (stored.identity !== identity) {
-      setStored({ identity, loop: { ...EMPTY_PLAYER_SEGMENT_LOOP } });
-      setOpen(false);
-    }
-  }, [identity, stored.identity]);
+  if (stored.identity !== identity) {
+    setStored({ identity, loop: { ...EMPTY_PLAYER_SEGMENT_LOOP } });
+    setOpen(false);
+  }
 
   useEffect(() => {
     repeatPending.current = false;

@@ -95,5 +95,5 @@ export function usePlayerMediaSession(options: PlayerMediaSessionOptions): void 
       for (const event of events) video.removeEventListener(event, publishState);
       detachMediaSession();
     };
-  }, [active, canNext, canPrevious, canSeek, hasNextAction, hasPreviousAction, metadata.album, metadata.artist, metadata.title, port, runtimePlaybackState, sourceKey, videoRef]);
+  }, [active, canNext, canPrevious, canSeek, hasNextAction, hasPreviousAction, metadata, port, runtimePlaybackState, sourceKey, videoRef]);
 }

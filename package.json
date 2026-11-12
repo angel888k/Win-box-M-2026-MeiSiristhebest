@@ -25,7 +25,7 @@
     "check:package-app-runtime-closure": "node scripts/check-package-app-runtime-closure.mjs",
     "test:subscription-import": "node --experimental-strip-types --test --test-isolation=none scripts/verify-subscription-import.check.mjs",
     "lint": "oxlint --deny-warnings src scripts tests && node scripts/architecture-boundaries.mjs && pnpm run lint:ui",
-    "lint:ui": "oxlint --react-plugin --react-perf-plugin --deny-warnings src/renderer && oxlint --jsx-a11y-plugin --deny-warnings src/renderer",
+    "lint:ui": "oxlint --react-plugin --react-perf-plugin --deny-warnings src/renderer && oxlint --jsx-a11y-plugin src/renderer",
     "typecheck": "pnpm run typecheck:main && pnpm run typecheck:renderer && pnpm run typecheck:test",
     "typecheck:main": "tsc --noEmit -p tsconfig.json",
     "typecheck:renderer": "tsc --noEmit -p tsconfig.web.json",

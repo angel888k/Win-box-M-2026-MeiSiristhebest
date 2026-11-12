@@ -171,7 +171,7 @@ const PlayerScreenLayoutGroup = memo(function PlayerScreenLayoutGroup({
 const MemoizedPlayerTechnicalBar = memo(PlayerTechnicalBar);
 
 /** Stateless playback controls. The player owns state and effects; this component renders its model. */
-export function PlayerControlsBar({
+export const PlayerControlsBar = memo(function PlayerControlsBar({
   mini,
   isLive,
   currentTime,
@@ -275,4 +275,4 @@ export function PlayerControlsBar({
       )}
     </div>
   );
-}
+});

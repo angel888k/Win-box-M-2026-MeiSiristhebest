@@ -1,10 +1,10 @@
+import { memo, useEffect, useRef, type PointerEvent } from 'react';
 import type { PlayerProgressBarModel } from './presentation/PlayerControlModels';
-import { useEffect, useRef, type PointerEvent } from 'react';
 import { usePlayerProgressBarPresenter } from './usePlayerProgressBarPresenter';
 
 type PlayerProgressBarProps = PlayerProgressBarModel;
 
-export function PlayerProgressBar({
+export const PlayerProgressBar = memo(function PlayerProgressBar({
   identity,
   markers,
   chapters,
@@ -145,4 +145,4 @@ export function PlayerProgressBar({
       )}
     </div>
   );
-}
+});

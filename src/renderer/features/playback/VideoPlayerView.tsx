@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, memo, useMemo, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { formatPlaybackTime } from './formatting';
 import { PlayerEpisodePanel } from './PlayerEpisodePanel';
 import { PlayerContextMenu } from './PlayerContextMenu';
@@ -14,7 +14,7 @@ import type { PlayerMediaSessionPort } from './application/playerMediaSession';
 import { readMpvMediaSessionPlaybackState } from './application/playerMediaSession';
 import { usePlayerMediaSession } from './usePlayerMediaSession';
 
-export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure = false, mediaSessionPort = null }: {
+export const VideoPlayerView = memo(function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure = false, mediaSessionPort = null }: {
   model: VideoPlayerPresenterModel;
   statusOverlay?: ReactNode;
   suppressPlaybackFailure?: boolean;
@@ -41,12 +41,18 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
       hasError: Boolean(playback.error || playback.mpvError),
     })
     : undefined;
+  const mediaSessionMetadata = useMemo(() => ({
+    title: info.title || resourceName || '正在播放',
+    artist: 'Win-Box',
+    album: '视频播放',
+  }), [info.title, resourceName]);
+
   usePlayerMediaSession({
     port: mediaSessionPort,
     active: (kernel === 'html5' || kernel === 'mpv') && media.kind === 'video' && Boolean(url),
     videoRef: ref,
     sourceKey: url,
-    metadata: { title: info.title || resourceName || '正在播放', artist: 'Win-Box', album: '视频播放' },
+    metadata: mediaSessionMetadata,
     canSeek: !playback.isLive && Boolean(controls.progressBar),
     canPrevious: Boolean(canPrev && onPrev),
     canNext: Boolean(canNext && onNext),
@@ -187,4 +193,4 @@ export function VideoPlayerView({ model, statusOverlay, suppressPlaybackFailure 
       <PlayerControlsBar {...playerControlsModel} />
     </div>
   );
-}
+});

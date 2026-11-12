@@ -1,4 +1,4 @@
-import type { MouseEventHandler } from 'react';
+import { memo, type MouseEventHandler } from 'react';
 import type { Kernel } from '../../lib/kernel';
 import { DriveBindingDialog } from '../driveBinding/DriveBindingDialog';
 import { driveProviderLabel } from '../../../shared/driveProvider';
@@ -34,7 +34,7 @@ export interface PlayerStatusOverlaysProps {
 }
 
 /** Declarative playback status and recovery surfaces, isolated from player orchestration. */
-export function PlayerStatusOverlays(props: PlayerStatusOverlaysProps) {
+export const PlayerStatusOverlays = memo(function PlayerStatusOverlays(props: PlayerStatusOverlaysProps) {
   const {
     loading, buffering, loadingSpeed, error, mpvError, paused, mini, episodePanelOpen,
     driveProvider, bindModalOpen, resourceName, allowMpv, mpvAvailable, kernel,
@@ -114,4 +114,4 @@ export function PlayerStatusOverlays(props: PlayerStatusOverlaysProps) {
       {kernelNotice && <output className="vp-kernel-notice">{kernelNotice}</output>}
     </>
   );
-}
+});

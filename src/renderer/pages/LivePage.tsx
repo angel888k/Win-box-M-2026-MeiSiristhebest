@@ -25,10 +25,13 @@ export default function LivePage() {
     latencySeconds: number | null;
     lowLatencySupported: boolean | null;
   } | null>(null);
-  useEffect(() => {
+  const liveStreamKey = `${liveIdx}:${groupName}:${channelName}:${lineIdx}:${playUrl}`;
+  const [prevLiveKey, setPrevLiveKey] = useState(liveStreamKey);
+  if (prevLiveKey !== liveStreamKey) {
+    setPrevLiveKey(liveStreamKey);
     setLiveLatencyMode('stable');
     setLiveTelemetry(null);
-  }, [liveIdx, groupName, channelName, lineIdx, playUrl]);
+  }
   const currentTelemetry = liveTelemetry?.url === playUrl ? liveTelemetry : null;
   const lowLatencyAvailable = currentTelemetry !== null && canSelectLowLatencyMode(currentTelemetry);
   const effectiveLatencyMode = effectiveLiveLatencyMode({

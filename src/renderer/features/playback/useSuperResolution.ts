@@ -35,14 +35,22 @@ export function useSuperResolution(enabled: boolean, sessionKey: string, port: S
     if (open) setFeedback(null);
     setPanel({ sessionKey, open });
   }, [sessionKey]);
-  useEffect(() => {
+
+  const [prevEnabled, setPrevEnabled] = useState(enabled);
+  if (prevEnabled !== enabled) {
+    setPrevEnabled(enabled);
     if (!enabled) {
       setCapability({ enabled: false, loading: false, info: null, error: null });
       setMode('off');
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!enabled) return;
     let alive = true;
-    setCapability({ enabled: true, loading: true, info: null, error: null });
+    queueMicrotask(() => {
+      if (alive) setCapability({ enabled: true, loading: true, info: null, error: null });
+    });
     void port.readCapability().then(value => {
       if (alive) {
         setCapability({ enabled: true, loading: false, info: value, error: null });
@@ -58,13 +66,22 @@ export function useSuperResolution(enabled: boolean, sessionKey: string, port: S
     });
     return () => { alive = false; };
   }, [enabled, port]);
-  useEffect(() => {
-    if (!enabled || !mpvActive || !open || mode === 'off' || !port.readRenderStatus) {
+
+  const shouldProbe = enabled && mpvActive && open && mode !== 'off' && Boolean(port.readRenderStatus);
+  const [prevShouldProbe, setPrevShouldProbe] = useState(shouldProbe);
+  if (prevShouldProbe !== shouldProbe) {
+    setPrevShouldProbe(shouldProbe);
+    if (!shouldProbe) {
       setRenderProbe({ sessionKey, mode, loading: false, status: null, error: null });
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!shouldProbe) return;
     let alive = true;
-    setRenderProbe({ sessionKey, mode, loading: true, status: null, error: null });
+    queueMicrotask(() => {
+      if (alive) setRenderProbe({ sessionKey, mode, loading: true, status: null, error: null });
+    });
     // Let the renderer present a frame after the shader switch before taking a snapshot.
     const timer = setTimeout(() => {
       void port.readRenderStatus!(mode).then(status => {
@@ -80,7 +97,7 @@ export function useSuperResolution(enabled: boolean, sessionKey: string, port: S
       });
     }, 500);
     return () => { alive = false; clearTimeout(timer); };
-  }, [enabled, mpvActive, open, mode, sessionKey, port]);
+  }, [enabled, mode, mpvActive, open, port, sessionKey, shouldProbe]);
   const apply = useCallback(async (value: SrMode) => {
     const operation = applyChain.current.then(async () => {
       setFeedback(null);
