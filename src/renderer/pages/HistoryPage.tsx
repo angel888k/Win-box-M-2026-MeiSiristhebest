@@ -50,7 +50,6 @@ export default function HistoryPage() {
       lastDeleted={presenter.lastDeleted}
       notice={presenter.notice}
       updated={presenter.updated}
-      resumeCount={presenter.resumeCount}
       coverFor={(item) => covers.picOf(historyCoverItem(item))}
       onCoverError={(item, url) => covers.onError(historyCoverItem(item), url)}
       onSelectCategory={presenter.setCategory}

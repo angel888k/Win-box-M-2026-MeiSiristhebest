@@ -16,6 +16,7 @@ import { UnsupportedSourceError } from '../util/errors';
 import { compileModule, type CompiledModule } from './esmTransform';
 import { buildSandboxGlobals } from './globals';
 import { createLocalUpstream } from './globals/SandboxLocal';
+import { buildHardenedContext, createSandboxProxy, type HardenedContext } from './sandboxGuard';
 import { withTimeout } from '../util/withTimeout';
 import { SourceProblemError } from '../spider/errors';
 import { awaitWithAbort, throwIfAborted } from '../util/abort';
@@ -87,6 +88,7 @@ export class JsSandbox implements JsSpiderRuntimePort {
   private ext: string;
   private ctx: vm.Context | null = null;
   private globals: Record<string, unknown> | null = null;
+  private hardenedContext: HardenedContext | null = null;
   private spider: Record<string, unknown> | null = null;
   private style: SpiderStyle = 'unknown';
   private loaded = false;
@@ -186,7 +188,10 @@ export class JsSandbox implements JsSpiderRuntimePort {
       //   必须在 forwardInit（drpy 的 init 会读缓存）与首次调用之前完成；沙箱对象属性变更
       //   对已 context 化的 vm 全局立即可见。
       if (this.style === 'drpy' && this.globals) {
-        this.globals.local = createLocalUpstream(this.host);
+        const localUpstream = createLocalUpstream(this.host);
+        this.globals.local = this.hardenedContext
+          ? createSandboxProxy(localUpstream, this.hardenedContext.getVmObjectConstructor)
+          : localUpstream;
       }
       this.forwardInit(isCat);
       this.loaded = true;
@@ -227,8 +232,17 @@ export class JsSandbox implements JsSpiderRuntimePort {
         : isJson(this.ext)
           ? JSON.parse(this.ext)
           : this.ext;
-      this.trackWork(Promise.resolve((initFn as (...a: unknown[]) => unknown).call(this.spider, arg)).catch(() => undefined));
-    } catch { /* swallow，对齐 JsSpider.java:170 catch */ }
+      this.trackWork(
+        Promise.resolve((initFn as (...a: unknown[]) => unknown).call(this.spider, arg)).catch((err) => {
+          const errMsg = (err as { message?: string })?.message || String(err);
+          this.host.logger.w(`spider js:${this.siteKey} init promise rejected: ${errMsg}`);
+          return undefined;
+        }),
+      );
+    } catch (err) {
+      const errMsg = (err as { message?: string })?.message || String(err);
+      this.host.logger.w(`spider js:${this.siteKey} init synchronous throw: ${errMsg}`);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -236,8 +250,10 @@ export class JsSandbox implements JsSpiderRuntimePort {
   // ------------------------------------------------------------------
   private createContext(): void {
     if (this.ctx) return;
-    this.globals = buildSandboxGlobals(this.host, this.siteKey, (name: string) => this.loadLib(name));
-    this.ctx = vm.createContext(this.globals);
+    const rawGlobals = buildSandboxGlobals(this.host, this.siteKey, (name: string) => this.loadLib(name));
+    this.hardenedContext = buildHardenedContext(rawGlobals);
+    this.ctx = this.hardenedContext.ctx;
+    this.globals = this.hardenedContext.globals;
   }
 
   /** 按调用区分能力缺失、脚本异常与超时；脚本正常返回的空值仍是成功结果。 */
@@ -330,6 +346,7 @@ export class JsSandbox implements JsSpiderRuntimePort {
     this.spider = null;
     this.ctx = null; // node:vm 无显式销毁 API，置空引用交由 GC
     this.globals = null;
+    this.hardenedContext = null;
     if (this.quickJsVm) {
       try { this.quickJsVm.dispose(); } catch { /* ignore */ }
       this.quickJsVm = null;
@@ -525,7 +542,7 @@ export class JsSandbox implements JsSpiderRuntimePort {
   ): unknown {
     const globals = this.globals as Record<string, unknown>;
     const slot = '__winboxInvocation' + ++this.invocationId;
-    globals[slot] = {
+    const invocationPayload = {
       module: moduleObj,
       require: this.makeRequire(url),
       import: async (spec: string) => {
@@ -535,6 +552,9 @@ export class JsSandbox implements JsSpiderRuntimePort {
       },
       meta: Object.freeze({ url, resolve: (spec: string) => new URL(spec, url).href }),
     };
+    globals[slot] = this.hardenedContext
+      ? createSandboxProxy(invocationPayload, this.hardenedContext.getVmObjectConstructor)
+      : invocationPayload;
     const access = 'globalThis[' + JSON.stringify(slot) + ']';
     const wrapper = '(' + (asynchronous ? 'async ' : '') +
       'function(module, exports, require, __filename, ' + compiled.importName + ', ' + compiled.metaName +

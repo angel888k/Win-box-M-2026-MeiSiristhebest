@@ -82,6 +82,8 @@ export class MpvController {
   private unbindViewport: (() => void) | null = null;
   /** 本次会话是否已挂上外挂字幕（换字幕前先 sub-remove） */
   private subOn = false;
+  private pendingSeekSec: number | null = null;
+  private seekThrottleTimer: NodeJS.Timeout | null = null;
 
   constructor(private log: Logger) {}
 
@@ -225,9 +227,22 @@ export class MpvController {
       if (sock !== this.sock || proc !== this.proc) return;
       this.onSockData(d, this.session);
     });
-    sock.on('error', () => undefined);
+    sock.on('error', () => {
+      this.clearCommandAcks();
+    if (this.seekThrottleTimer) {
+      clearTimeout(this.seekThrottleTimer);
+      this.seekThrottleTimer = null;
+    }
+    this.pendingSeekSec = null;
+    });
     sock.on('close', () => {
       if (this.sock === sock) this.sock = null;
+      this.clearCommandAcks();
+    if (this.seekThrottleTimer) {
+      clearTimeout(this.seekThrottleTimer);
+      this.seekThrottleTimer = null;
+    }
+    this.pendingSeekSec = null;
     });
     sock.write(mpvObserveLines().join(''));
     sock.write(mpvCmdLine(['set_property', 'mute', 'no']));
@@ -258,6 +273,11 @@ export class MpvController {
     this.session += 1;
     const session = this.session;
     this.clearCommandAcks();
+    if (this.seekThrottleTimer) {
+      clearTimeout(this.seekThrottleTimer);
+      this.seekThrottleTimer = null;
+    }
+    this.pendingSeekSec = null;
     if (this.pushTimer) clearTimeout(this.pushTimer);
     this.pushTimer = null;
     this.state = initialKernelState(!!opts.live);
@@ -309,6 +329,25 @@ export class MpvController {
       if (cmd?.type === 'sub-clear') {
         if (this.subOn) sock.write(mpvCmdLine(['sub-remove']));
         this.subOn = false;
+        return true;
+      }
+      if (cmd?.type === 'seek') {
+        const sec = Number(cmd.value) || 0;
+        this.pendingSeekSec = sec;
+        if (!this.seekThrottleTimer) {
+          this.seekThrottleTimer = setTimeout(() => {
+            this.seekThrottleTimer = null;
+            if (this.pendingSeekSec !== null && this.sock) {
+              const targetSec = this.pendingSeekSec;
+              this.pendingSeekSec = null;
+              try {
+                this.sock.write(mpvCmdLine(['seek', targetSec, 'absolute']));
+              } catch {
+                /* ignore */
+              }
+            }
+          }, 16);
+        }
         return true;
       }
       const lines = mpvCommandLines(cmd);
@@ -433,6 +472,11 @@ export class MpvController {
     this.reloading = false;
     this.session += 1; // 在途事件/连接立即作废
     this.clearCommandAcks();
+    if (this.seekThrottleTimer) {
+      clearTimeout(this.seekThrottleTimer);
+      this.seekThrottleTimer = null;
+    }
+    this.pendingSeekSec = null;
     if (this.pushTimer) {
       clearTimeout(this.pushTimer);
       this.pushTimer = null;

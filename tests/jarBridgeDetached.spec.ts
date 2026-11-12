@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { JarSpiderBridge, CONVERTED_CACHE_VERSION } from '../src/engine/spider/JarSpiderBridge';
+import { DetachedDex2jarCoordinator } from '../src/engine/spider/DetachedDex2jar';
 import { md5Hex } from '../src/engine/util/md5';
 import { buildZip } from '../src/engine/util/syncZip';
 
@@ -247,6 +248,12 @@ describe('JarSpiderBridge — 转换脱离 App 进程（detached / 收编 / 接�
     expect(repair[1][repair[1].indexOf('com.winbox.nativebridge.DexJarRepair') + 4]).not.toContain('*');
     expect(readFileSync(output).includes(Buffer.from('Repaired.class'))).toBe(true);
     expect(spawnMock).toHaveBeenCalledTimes(leftover ? 1 : 2);
+  });
+
+  it('DetachedDex2jarCoordinator 生命周期管控：记录活跃进程且 killAllActive 能彻底清理', () => {
+    expect(DetachedDex2jarCoordinator.getActiveCount()).toBe(0);
+    DetachedDex2jarCoordinator.killAllActive();
+    expect(DetachedDex2jarCoordinator.getActiveCount()).toBe(0);
   });
 
   it('构造器修复失败不发布坏缓存，保留 part 供后续收编重试', async () => {

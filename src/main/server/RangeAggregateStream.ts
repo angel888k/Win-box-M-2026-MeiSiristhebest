@@ -3,6 +3,7 @@ import { buildSlices, parseByteRange } from './mediaTransforms';
 export const AGGREGATE_CHUNK = 512 * 1024;
 export const AGGREGATE_CONCURRENCY = 8;
 export const AGGREGATE_MIN_LEN = 1 * 1024 * 1024;
+export const AGGREGATE_MAX_BUFFERED_BYTES = 8 * 1024 * 1024; // 8MB 反压高水位限额
 
 export interface RangeResponseSink {
   readonly destroyed: boolean;
@@ -28,7 +29,7 @@ export interface RangeAggregateDiagnostic {
 }
 
 export interface RangeAggregatePorts {
-  fetchRange(target: string, headers: Record<string, string>): Promise<Buffer>;
+  fetchRange(target: string, headers: Record<string, string>, signal?: AbortSignal): Promise<Buffer>;
   diagnose(event: RangeAggregateDiagnostic): void;
   warn(message: string): void;
   error(message: string, cause: unknown): void;
@@ -86,11 +87,15 @@ export class RangeAggregateStream {
     });
 
     const slices = buildSlices(start, end, AGGREGATE_CHUNK);
+    const abortController = new AbortController();
     const aborted = { flag: false };
-    const onClientClose = (): void => { aborted.flag = true; };
+    const onClientClose = (): void => {
+      aborted.flag = true;
+      abortController.abort();
+    };
     response.on('close', onClientClose);
     try {
-      await this.aggregatePipelined(slices, target, headers, response, aborted, concurrency);
+      await this.aggregatePipelined(slices, target, headers, response, aborted, abortController, concurrency);
     } catch (error) {
       if (!(error instanceof Error) || error.name !== 'AbortError') this.ports.error('proxy /play 聚合流错误', error);
     } finally {
@@ -105,71 +110,82 @@ export class RangeAggregateStream {
     headers: Record<string, string>,
     response: RangeResponseSink,
     aborted: { flag: boolean },
+    abortController: AbortController,
     concurrency: number,
   ): Promise<void> {
     const ready = new Map<number, Buffer>();
+    let bufferedBytes = 0;
     let nextWrite = 0;
     let dispatched = 0;
     let draining = false;
     let finished = false;
+    let resolveDone: () => void;
+    const donePromise = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+    abortController.signal.addEventListener('abort', () => resolveDone?.(), { once: true });
 
     const maybeFinish = (): void => {
       if (!finished && nextWrite === slices.length && !response.writableEnded) {
         finished = true;
         response.end();
+        resolveDone?.();
       }
     };
 
     const dispatch = (): void => {
-      while (!aborted.flag && dispatched < slices.length && dispatched - nextWrite < concurrency) {
+      while (
+        !aborted.flag &&
+        !abortController.signal.aborted &&
+        dispatched < slices.length &&
+        dispatched - nextWrite < concurrency &&
+        bufferedBytes < AGGREGATE_MAX_BUFFERED_BYTES
+      ) {
         const index = dispatched++;
-        void this.fetchSliceOne(slices[index], target, headers, response).then(
+        void this.fetchSliceOne(slices[index], target, headers, response, abortController.signal).then(
           (chunk) => {
-            if (aborted.flag) return;
+            if (aborted.flag || abortController.signal.aborted) return;
             ready.set(index, chunk);
+            bufferedBytes += chunk.length;
             void drain();
           },
           (error) => {
-            if (aborted.flag) return;
+            if (aborted.flag || abortController.signal.aborted) return;
             aborted.flag = true;
+            abortController.abort();
             if (!(error instanceof Error) || error.name !== 'AbortError') {
               this.ports.warn(`proxy /play 切片回源失败: ${error instanceof Error ? error.message : String(error)}`);
             }
             if (!response.writableEnded) response.destroy();
+            resolveDone?.();
           },
         );
       }
     };
 
     const drain = async (): Promise<void> => {
-      if (draining || aborted.flag) return;
+      if (draining || aborted.flag || abortController.signal.aborted) return;
       draining = true;
       try {
         while (ready.has(nextWrite)) {
           const chunk = ready.get(nextWrite)!;
           ready.delete(nextWrite);
+          bufferedBytes -= chunk.length;
           nextWrite++;
           if (!response.write(chunk)) {
             await new Promise<void>((resolve) => response.once('drain', resolve));
-            if (aborted.flag) return;
+            if (aborted.flag || abortController.signal.aborted) return;
           }
         }
         maybeFinish();
       } finally {
         draining = false;
-        if (!aborted.flag && !finished) dispatch();
+        if (!aborted.flag && !abortController.signal.aborted && !finished) dispatch();
       }
     };
 
     dispatch();
-    await new Promise<void>((resolve) => {
-      const timer = setInterval(() => {
-        if (finished || aborted.flag) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 25);
-    });
+    await donePromise;
   }
 
   private async fetchSliceOne(
@@ -177,13 +193,19 @@ export class RangeAggregateStream {
     target: string,
     headers: Record<string, string>,
     response: RangeResponseSink,
+    signal?: AbortSignal,
   ): Promise<Buffer> {
     const requestHeaders = { ...headers, Range: `bytes=${slice.start}-${slice.end}` };
     const expectedLength = slice.end - slice.start + 1;
     try {
-      const chunk = await this.ports.fetchRange(target, requestHeaders);
+      const chunk = await this.ports.fetchRange(target, requestHeaders, signal);
       if (chunk.length !== expectedLength) {
-        const retry = await this.ports.fetchRange(target, requestHeaders);
+        if (signal?.aborted) {
+          const aborted = new Error('CLIENT_CLOSE');
+          aborted.name = 'AbortError';
+          throw aborted;
+        }
+        const retry = await this.ports.fetchRange(target, requestHeaders, signal);
         if (retry.length === expectedLength) return retry;
         if (chunk.length >= expectedLength * 0.5) {
           this.ports.warn(`proxy /play 切片长度 ${chunk.length} != ${expectedLength}，截断容错`);
@@ -193,7 +215,7 @@ export class RangeAggregateStream {
       }
       return chunk;
     } catch (error) {
-      if (response.destroyed || (error instanceof Error && error.name === 'AbortError')) {
+      if (response.destroyed || signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
         const aborted = new Error('CLIENT_CLOSE');
         aborted.name = 'AbortError';
         throw aborted;

@@ -6,7 +6,7 @@
 //   - 连续 2 次失败/超时：冷却隔离 2 小时
 //   - 连续 3 次及以上失败：长期隔离 24 小时
 //   - 成功一次即刻自愈（计数归零、冷却解除）
-//   - 强制刷新（options.refresh === true）或手动重试绕过熔断
+//   - 并发时间窗口归并（默认 3 秒）：同一源在并发闪断或同一时间窗口内的多次失败不重复递增，防止瞬时网络抖动直接跃迁至 24 小时封禁
 // 纯 TS、零 Node/Electron 依赖，engine 与 renderer 均可复用与单测。
 import { sourceIdentityKey } from '../../shared/sourceIdentity';
 
@@ -23,10 +23,21 @@ export const COOLDOWN_LEVELS_MS = [
   24 * 60 * 60 * 1000, // 第 3 级：24 小时
 ] as const;
 
+export const DEFAULT_COLLAPSE_WINDOW_MS = 3_000; // 默认 3 秒内的并发失败归并
+
+export interface SourceCircuitBreakerOptions {
+  collapseWindowMs?: number;
+}
+
 export class SourceCircuitBreaker {
   private readonly records = new Map<string, CircuitBreakerRecord>();
+  private readonly collapseWindowMs: number;
 
-  constructor(initialData?: Record<string, CircuitBreakerRecord>) {
+  constructor(
+    initialData?: Record<string, CircuitBreakerRecord>,
+    options?: SourceCircuitBreakerOptions,
+  ) {
+    this.collapseWindowMs = options?.collapseWindowMs ?? DEFAULT_COLLAPSE_WINDOW_MS;
     if (initialData) {
       for (const [key, val] of Object.entries(initialData)) {
         if (val && typeof val === 'object') {
@@ -42,7 +53,7 @@ export class SourceCircuitBreaker {
     return this.records.get(sourceIdentityKey(profileId, key));
   }
 
-  /** 判断指定源当前是否可用（未被熔断或冷却期已过） */
+  /** 判断指定源当前是否可用（未被熔断或冷却期已过允许试探） */
   isAvailable(profileId?: string, key?: string, now = Date.now()): boolean {
     if (!key) return true;
     const rec = this.records.get(sourceIdentityKey(profileId, key));
@@ -58,11 +69,33 @@ export class SourceCircuitBreaker {
     return Math.max(0, rec.cooldownUntil - now);
   }
 
-  /** 记录失败：失败计数递增，并按阶梯计算下一次冷却时间戳 */
-  recordFailure(profileId?: string, key?: string, error?: string, now = Date.now()): number {
+  /**
+   * 记录失败：
+   * 1. 若同一源在 collapseWindowMs 窗口内并发报错，或仍在同一冷却期内，归并为同一次故障事件，不重复累加 failureCount；
+   * 2. 若冷却期已过（半开试探请求失败）或独立时间发生的新故障，才按阶梯升级冷却时间。
+   */
+  recordFailure(
+    profileId?: string,
+    key?: string,
+    error?: string,
+    now = Date.now(),
+    options?: { force?: boolean },
+  ): number {
     if (!key) return 0;
     const identity = sourceIdentityKey(profileId, key);
     const existing = this.records.get(identity);
+
+    // 并发去重：在归并窗口内或同一活跃冷却期内发生的多次回调，更新错误但不叠加惩罚
+    if (existing && !options?.force) {
+      const isBurst = (now - existing.lastFailureTime) < this.collapseWindowMs;
+      const isStillInCooldown = now < existing.cooldownUntil;
+      if (isBurst || isStillInCooldown) {
+        existing.lastFailureTime = now;
+        if (error) existing.lastError = error;
+        return Math.max(0, existing.cooldownUntil - now);
+      }
+    }
+
     const failureCount = (existing ? existing.failureCount : 0) + 1;
     const cooldownDuration = this.calculateCooldown(failureCount);
     const cooldownUntil = now + cooldownDuration;

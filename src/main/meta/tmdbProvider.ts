@@ -11,7 +11,7 @@ import type { MetaHit, MetaExtra, DiscoverItem, DiscoverSection, DiscoverGenre, 
 import type { MetaStore } from './MetaStore';
 import type { MetaSuggestion } from '../../shared/meta';
 import type { MetaImages } from '../../shared/types';
-import { BOARD_PAGE_SIZE, TMDB_BOARDS, discoverBoardById, normalizeBoardPage, type DiscoverBoardPage } from '../../shared/discoverBoards';
+import { BOARD_PAGE_SIZE, discoverBoardById, normalizeBoardPage, type DiscoverBoardPage } from '../../shared/discoverBoards';
 import { MAX_QUERY_ROUNDS, MAX_QUERY_VARIANTS, metaCacheKey, metaQueryVariants, titleMatches } from './tmdbSearchPolicy';
 import { DEFAULT_IMAGE_BASE, parseGenreList, parseGenrePage, parseTmdbExtras, parseTmdbImages, parseTmdbSearch, toDiscoverItems } from './tmdbResponseParsers';
 export { parseGenreList, parseGenrePage, parseTmdbExtras, parseTmdbImages, parseTmdbSearch, toDiscoverItems } from './tmdbResponseParsers';

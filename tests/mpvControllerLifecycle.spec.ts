@@ -194,4 +194,51 @@ describe('mpv lifecycle', () => {
 
     proc.finish(); controller.stop();
   });
+
+  it('Socket 断开或异常时立即清理挂起的命令 ACK，避免无谓等待超时', async () => {
+    const { controller, sockets } = make();
+    const proc = new Proc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    await controller.start(windowStub() as any, { url: 'video.mp4' });
+
+    const shaderPromise = controller.replaceShaders(['test.glsl']);
+    await tick();
+
+    // 此时命令已发出并等待回执，Socket 异常断开
+    sockets[0].emit('close');
+    await expect(shaderPromise).resolves.toBe(false);
+
+    proc.finish();
+    controller.stop();
+  });
+
+  it('连续高频调用 seek 时进行 16ms 节流合并，防止命名管道被密集写入冲垮', async () => {
+    vi.useFakeTimers();
+    const { controller, sockets } = make();
+    const proc = new Proc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    await controller.start(windowStub() as any, { url: 'video.mp4' });
+
+    // 清空初始化写入
+    sockets[0].write.mockClear();
+
+    // 快速连续触发 5 次 seek
+    for (let i = 1; i <= 5; i++) {
+      controller.command({ type: 'seek', value: i * 10 });
+    }
+
+    // 节流时间内尚未写入
+    expect(sockets[0].write).not.toHaveBeenCalled();
+
+    // 前进 20ms 触发节流
+    vi.advanceTimersByTime(20);
+
+    // 仅写入最后一次合并的 seek 目标点（50 秒）
+    expect(sockets[0].write).toHaveBeenCalledTimes(1);
+    expect(sockets[0].write.mock.calls[0][0]).toContain('"seek",50,"absolute"');
+
+    proc.finish();
+    controller.stop();
+    vi.useRealTimers();
+  });
 });

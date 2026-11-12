@@ -51,10 +51,33 @@ export interface DetachedDex2jarLogger {
 }
 
 export class DetachedDex2jarCoordinator implements DetachedDex2jarPort {
+  private static readonly activeProcesses = new Map<number, { pid: number; kill: () => void }>();
+  private static exitHandlerRegistered = false;
+
+  static killAllActive(): void {
+    for (const [pid, proc] of DetachedDex2jarCoordinator.activeProcesses) {
+      try {
+        proc.kill();
+      } catch {
+        // Process may have already terminated
+      }
+    }
+    DetachedDex2jarCoordinator.activeProcesses.clear();
+  }
+
+  static getActiveCount(): number {
+    return DetachedDex2jarCoordinator.activeProcesses.size;
+  }
+
   constructor(
     private readonly cacheDir: string,
     private readonly logger: DetachedDex2jarLogger,
-  ) {}
+  ) {
+    if (!DetachedDex2jarCoordinator.exitHandlerRegistered && typeof process !== 'undefined' && process.once) {
+      DetachedDex2jarCoordinator.exitHandlerRegistered = true;
+      process.once('beforeExit', () => DetachedDex2jarCoordinator.killAllActive());
+    }
+  }
 
   partPath(key: string): string {
     return join(this.cacheDir, key + '.part.jar');
@@ -151,6 +174,9 @@ export class DetachedDex2jarCoordinator implements DetachedDex2jarPort {
       const finish = (result: Dex2jarRunResult) => {
         if (settled) return;
         settled = true;
+        if (child?.pid) {
+          DetachedDex2jarCoordinator.activeProcesses.delete(child.pid);
+        }
         if (timer) clearTimeout(timer);
         if (progressTimer) clearInterval(progressTimer);
         this.clearLock(key);
@@ -173,28 +199,51 @@ export class DetachedDex2jarCoordinator implements DetachedDex2jarPort {
       if (fd >= 0) {
         try { closeSync(fd); } catch { /* ignore */ }
       }
-      const startedAt = Date.now();
-      this.writeLock(key, { pid: child.pid ?? 0, startedAt, heapMb });
-      child.unref?.();
       const keepTail = (data: Buffer | string) => {
         output = (output + String(data)).slice(-8000);
       };
-      child.stdout?.on('data', keepTail);
-      child.stderr?.on('data', keepTail);
+      child.stdout?.on?.('data', keepTail);
+      child.stderr?.on?.('data', keepTail);
+      const startedAt = Date.now();
+      const pid = child.pid ?? 0;
+      this.writeLock(key, { pid, startedAt, heapMb });
+      if (pid > 0) {
+        const killChild = () => {
+          if (process.platform === 'win32') {
+            try {
+              spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { windowsHide: true });
+            } catch {
+              try { child.kill(); } catch { /* ignore */ }
+            }
+          } else {
+            try { child.kill(); } catch { /* ignore */ }
+          }
+        };
+        DetachedDex2jarCoordinator.activeProcesses.set(pid, { pid, kill: killChild });
+      }
+      child.unref?.();
       progressTimer = setInterval(() => {
         this.logger.info(
           'jvm-bridge dex2jar 进行中：已 ' + formatDuration(Date.now() - startedAt) +
-          '（-Xmx' + heapMb + 'm，pid=' + (child.pid ?? 0) + '）',
+          '（-Xmx' + heapMb + 'm，pid=' + pid + '）',
         );
       }, CONVERSION_LOG_INTERVAL_MS);
       progressTimer.unref?.();
       timer = setTimeout(() => {
-        try { child.kill(); } catch { /* ignore */ }
+        if (pid > 0) {
+          const proc = DetachedDex2jarCoordinator.activeProcesses.get(pid);
+          if (proc) {
+            proc.kill();
+            DetachedDex2jarCoordinator.activeProcesses.delete(pid);
+          } else {
+            try { child.kill(); } catch { /* ignore */ }
+          }
+        }
         finish({ ok: false, output: this.readLog(key) || output, timedOut: true });
       }, DEX2JAR_TIMEOUT_MS);
       timer.unref?.();
-      child.on('error', (error) => finish({ ok: false, output: 'spawn 失败: ' + error.message + '\n' + output }));
-      child.on('close', (code) => finish({ ok: code === 0, output: output || this.readLog(key) }));
+      child.on('error', (error) => finish({ ok: false, output: 'spawn 失败: ' + error.message + '\n' + (this.readLog(key) || output) }));
+      child.on('close', (code) => finish({ ok: code === 0, output: this.readLog(key) || output }));
     });
   }
 

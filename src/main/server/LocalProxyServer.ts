@@ -117,8 +117,8 @@ export class LocalProxyServer {
       logger,
     });
     this.aggregateStream = new RangeAggregateStream({
-      fetchRange: async (target, headers) => {
-        const response = await this.upstream.openStream(target, headers);
+      fetchRange: async (target, headers, signal) => {
+        const response = await this.upstream.openStream(target, headers, { signal });
         return Buffer.from(await (response.body as unknown as { arrayBuffer(): Promise<ArrayBuffer> }).arrayBuffer());
       },
       diagnose: (event) => logPlayDiag({

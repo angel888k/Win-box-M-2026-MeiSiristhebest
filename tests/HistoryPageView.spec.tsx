@@ -37,7 +37,6 @@ function renderHistory(historyItem: WatchHistory = item) {
     lastDeleted: null,
     notice: '',
     updated: {},
-    resumeCount: 1,
     coverFor: () => '',
     onCoverError: () => undefined,
     onSelectCategory: () => undefined,

@@ -420,4 +420,55 @@ describe('JsSandbox — 调用契约', () => {
     await expect(sb.callMethod(['homeContent'], [], 1000)).resolves.toBe('ready');
     sb.destroy();
   });
+
+  it('沙箱原型隔离：拦截通过 constructor 原型链逃逸到宿主 process 的攻击', async () => {
+    const { host } = makeHost({
+      'https://mock.test/spider.js': `
+        export default {
+          homeContent() {
+            // 尝试通过多种途径利用宿主原型链获取 process
+            let leakedProcess = null;
+            try {
+              leakedProcess = this.constructor.constructor('return process')();
+            } catch (e) {}
+            if (!leakedProcess) {
+              try {
+                leakedProcess = cheerio.constructor.constructor('return process')();
+              } catch (e) {}
+            }
+            if (!leakedProcess) {
+              try {
+                leakedProcess = local.constructor.constructor('return process')();
+              } catch (e) {}
+            }
+            return JSON.stringify({ escaped: Boolean(leakedProcess && leakedProcess.mainModule) });
+          },
+        };
+      `,
+    });
+    const sb = new JsSandbox({ siteKey: 'escape_test', api: 'https://mock.test/spider.js', ext: '', host, jsLibDir: '' });
+    const result = JSON.parse(String(await sb.callMethod(['homeContent'], [], 1000)));
+    expect(result.escaped).toBe(false);
+    sb.destroy();
+  });
+
+  it('init 异常不静默吞没，向 host.logger 输出告警日志', async () => {
+    const { host, logs } = makeHost({
+      'https://mock.test/spider.js': `
+        export default {
+          init() {
+            throw new Error('boom_in_init');
+          },
+          homeContent() {
+            return 'alive';
+          },
+        };
+      `,
+    });
+    const sb = new JsSandbox({ siteKey: 'init_err', api: 'https://mock.test/spider.js', ext: '', host, jsLibDir: '' });
+    await sb.ensureLoaded();
+    const hasInitWarn = logs.some((msg) => msg.includes('init synchronous throw: boom_in_init'));
+    expect(hasInitWarn).toBe(true);
+    sb.destroy();
+  });
 });

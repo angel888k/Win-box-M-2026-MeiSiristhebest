@@ -17,7 +17,6 @@ interface HistoryPageViewProps {
   lastDeleted: WatchHistory | null;
   notice: string;
   updated: Record<string, boolean>;
-  resumeCount: number;
   coverFor(item: WatchHistory): string;
   onCoverError(item: WatchHistory, url: string): void;
   onSelectCategory(category: string): void;
@@ -32,7 +31,7 @@ interface HistoryPageViewProps {
 }
 
 export function HistoryPageView(props: HistoryPageViewProps) {
-  const { items, groups, visibleGroups, activeCategory, lastDeleted, notice, updated, resumeCount } = props;
+  const { items, groups, visibleGroups, activeCategory, lastDeleted, notice, updated } = props;
 
   return (
     <>

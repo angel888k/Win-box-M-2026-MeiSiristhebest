@@ -2,7 +2,7 @@ import PosterSizeControl from '../components/PosterSizeControl';
 import { usePosterSizePreference } from '../features/display/adapters/posterSizePreferenceAdapter';
 import { useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { BOARD_CATEGORIES, boardSourceName, discoverBoardById } from '../../shared/discoverBoards';
+import { boardSourceName, discoverBoardById } from '../../shared/discoverBoards';
 import { useDiscoverBoard } from '../features/discovery/useDiscoverBoard';
 import { discoverBoardAdapter } from '../features/discovery/adapters/discoveryAdapters';
 import { useBoardPageCapacity } from '../features/discovery/useBoardPageCapacity';
@@ -31,8 +31,6 @@ export default function DiscoverBoardPage() {
   const view = discoverPresentationView(theme);
   const covers = useCovers((data?.items || []).map(discoverCoverItem), active, true);
   const source = board ? boardSourceName(board) : '来源';
-  const category = board?.category || board?.mediaType || 'movie';
-  const categoryLabel = BOARD_CATEGORIES.find(option => option.id === category)?.label || '影片';
   useEffect(() => {
     if (!active || (!params.has('page') && !params.has('perPage'))) return;
     const next = new URLSearchParams(params); next.delete('page'); next.delete('perPage');
@@ -47,7 +45,6 @@ export default function DiscoverBoardPage() {
     return () => observer.disconnect();
   }, [active, loading, error, data?.hasMore, data?.items.length, loadMore]);
   const openItem = (item: DiscoverItem) => { navigate(discoverDetailRoute(item)); };
-  const complete = !!data && !data.hasMore && data.total !== null && data.items.length === data.total;
   return <div className="content board-content" ref={contentRef}>
     <nav className="board-breadcrumbs" aria-label="当前位置"><Link to="/boards"><Icon name="left" size={12} />榜单</Link></nav>
     <header className="page-heading board-heading"><div><h1>{board?.title || (error ? '榜单不可用' : '内容列表')}</h1></div>

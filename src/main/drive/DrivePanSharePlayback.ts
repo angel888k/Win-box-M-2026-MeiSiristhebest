@@ -17,6 +17,25 @@ export interface DrivePanSharePlaybackPorts {
   resolveBaiduShare(short: string, password: string, cookie: string, options: { innerFid?: string; innerName?: string }): Promise<BaiduTransferResult>;
   resolveBaiduSharedFile(file: BaiduSharedFile, cookie: string): Promise<BaiduTransferResult>;
   resolveBaiduByFsid(fsid: string, cookie: string): Promise<BaiduTransferResult>;
+  onAuthExpired?: (provider: NativeDriveProvider, reason: string) => void;
+}
+
+export function isDriveAuthExpiredReason(reason?: string): boolean {
+  if (!reason) return false;
+  const lower = reason.toLowerCase();
+  return (
+    lower.includes('cookie') ||
+    lower.includes('登录') ||
+    lower.includes('未登录') ||
+    lower.includes('过期') ||
+    lower.includes('失效') ||
+    lower.includes('errno -6') ||
+    lower.includes('31045') ||
+    lower.includes('401') ||
+    lower.includes('403') ||
+    lower.includes('token') ||
+    lower.includes('鉴权')
+  );
 }
 
 /** Resolves spider do=pan descriptors through native cloud-drive APIs. */
@@ -57,13 +76,21 @@ export class DrivePanSharePlayback {
       (jvmPort && String(pan.site || '').toLowerCase().startsWith('baidu') && /^\d+$/.test(fid)
         ? await this.ports.readBaiduJvmContext(jvmPort, fid) : null);
     if (sharedFile) {
-      if (!cookie) { miss?.push('百度：已识别分享文件但未绑定百度网盘 Cookie'); return null; }
+      if (!cookie) {
+        miss?.push('百度：已识别分享文件但未绑定百度网盘 Cookie');
+        this.ports.onAuthExpired?.('baidu', '未绑定百度网盘 Cookie');
+        return null;
+      }
       try {
         const t = await this.ports.resolveBaiduSharedFile(sharedFile, cookie);
         if (t.path) {
           this.ports.cleanup.enqueue({ provider: 'baidu', cookie, pdirFid: '', fid: '', path: t.path });
         }
-        if (!t.ok || !t.url) { miss?.push(`百度：解链失败(${t.reason || '未知原因'})`); return null; }
+        if (!t.ok || !t.url) {
+          if (isDriveAuthExpiredReason(t.reason)) this.ports.onAuthExpired?.('baidu', t.reason || '鉴权失败');
+          miss?.push(`百度：解链失败(${t.reason || '未知原因'})`);
+          return null;
+        }
         return { parse: 0, url: this.ports.wrapUrl(t.url, t.header), playUrl: '', flag, header: t.header, jx: 0 };
       } catch (e) { miss?.push(`百度：异常(${(e as Error).message.slice(0, 80)})`); return null; }
     }
@@ -78,11 +105,13 @@ export class DrivePanSharePlayback {
       }
       if (!cookie) {
         miss?.push('百度：已识别文件 ID（fs_id）但未绑定百度网盘 Cookie');
+        this.ports.onAuthExpired?.('baidu', '未绑定百度网盘 Cookie');
         return null;
       }
       try {
         const d = await this.ports.resolveBaiduByFsid(fid, cookie);
         if (!d.ok || !d.url) {
+          if (isDriveAuthExpiredReason(d.reason)) this.ports.onAuthExpired?.('baidu', d.reason || '鉴权失败');
           this.ports.logger.w(`baiduTransfer(fs_id) 未成功(${d.reason || '未知原因'})`);
           miss?.push(`百度：解链失败(${d.reason || '未知原因'})`);
           return null;
@@ -104,6 +133,7 @@ export class DrivePanSharePlayback {
     }
     if (!cookie) {
       miss?.push('百度：已识别分享但未绑定百度网盘 Cookie');
+      this.ports.onAuthExpired?.('baidu', '未绑定百度网盘 Cookie');
       return null;
     }
     try {
@@ -116,6 +146,7 @@ export class DrivePanSharePlayback {
         this.ports.cleanup.enqueue({ provider: 'baidu', cookie, pdirFid: '', fid: '', path: t.path });
       }
       if (!t.ok || !t.url) {
+        if (isDriveAuthExpiredReason(t.reason)) this.ports.onAuthExpired?.('baidu', t.reason || '鉴权失败');
         this.ports.logger.w(`baiduTransfer(do=pan) 未成功(${t.reason || '未知原因'})`);
         miss?.push(`百度：解链失败(${t.reason || '未知原因'})`);
         return null;
@@ -154,6 +185,7 @@ export class DrivePanSharePlayback {
     const cookie = this.ports.cookie('uc');
     if (!cookie) {
       miss?.push('UC：已识别分享但未绑定 UC 网盘 Cookie');
+      this.ports.onAuthExpired?.('uc', '未绑定 UC 网盘 Cookie');
       return null;
     }
     try {
@@ -164,6 +196,7 @@ export class DrivePanSharePlayback {
         innerName: extractEpisodeName(episodeId) || extractEpisodeName(url),
       });
       if (!t.ok || !t.url) {
+        if (isDriveAuthExpiredReason(t.reason)) this.ports.onAuthExpired?.('uc', t.reason || '鉴权失败');
         this.ports.logger.w(`ucTransfer(do=pan) 未成功(${t.reason || '未知原因'})`);
         miss?.push(`UC：解链失败(${t.reason || '未知原因'})`);
         return null;
@@ -219,6 +252,7 @@ export class DrivePanSharePlayback {
     const cookie = this.ports.cookie('quark');
     if (!cookie) {
       miss?.push('夸克：已识别分享但未绑定夸克网盘 Cookie');
+      this.ports.onAuthExpired?.('quark', '未绑定夸克网盘 Cookie');
       return null;
     }
     try {
@@ -228,6 +262,7 @@ export class DrivePanSharePlayback {
         innerName,
       });
       if (!t.ok || !t.url) {
+        if (isDriveAuthExpiredReason(t.reason)) this.ports.onAuthExpired?.('quark', t.reason || '鉴权失败');
         this.ports.logger.w(`quarkTransfer(do=pan) 未成功(${t.reason || '未知原因'})`);
         miss?.push(`夸克：解链失败(${t.reason || '未知原因'})`);
         return null;

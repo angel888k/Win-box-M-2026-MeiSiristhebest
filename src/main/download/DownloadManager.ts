@@ -187,7 +187,7 @@ export class DownloadManager {
     const fileStream = createWriteStream(task.savePath, { flags: 'w' });
     const reqHeaders: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinBox/1.28',
-      ...(task.headers || {}),
+      ...task.headers,
     };
 
     const res = await request(task.url, {
@@ -241,7 +241,7 @@ export class DownloadManager {
 
     const reqHeaders: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinBox/1.28',
-      ...(task.headers || {}),
+      ...task.headers,
     };
 
     // 1. 获取 M3U8 文本

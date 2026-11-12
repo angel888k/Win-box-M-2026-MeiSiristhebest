@@ -541,3 +541,52 @@ it('keeps the built-in Adm3u8 Base64 protocol out of the JVM', async () => {
   expect((await host.playbackRequest.execute(key, 'free', 'episode')).url).toBe(url);
   expect(proxyPort).not.toHaveBeenCalled();
 });
+
+describe('DrivePanSharePlayback 鉴权失效探活与回调', () => {
+  it('网盘 Cookie 缺失或接口返回过期鉴权失效时触发 onAuthExpired 闭环', async () => {
+    const expiredEvents: Array<{ provider: string; reason: string }> = [];
+    const ports = {
+      cookie: vi.fn().mockReturnValue('expired_token'),
+      cleanup: { enqueue: vi.fn() },
+      wrapUrl: (u: string) => u,
+      logger: { i: vi.fn(), w: vi.fn() },
+      readBaiduJvmContext: vi.fn(),
+      resolveQuarkShare: vi.fn().mockResolvedValue({ ok: false, reason: '401 未登录或Cookie已过期' }),
+      resolveUcShare: vi.fn().mockResolvedValue({ ok: false, reason: 'errno -6 用户鉴权已失效' }),
+      resolveBaiduShare: vi.fn().mockResolvedValue({ ok: false, reason: '31045 user not exists / Cookie失效' }),
+      resolveBaiduSharedFile: vi.fn(),
+      resolveBaiduByFsid: vi.fn(),
+      onAuthExpired: (provider: any, reason: string) => {
+        expiredEvents.push({ provider, reason });
+      },
+    };
+
+    const { DrivePanSharePlayback } = await import('../src/main/drive/DrivePanSharePlayback');
+    const playback = new DrivePanSharePlayback(ports);
+
+    // 1. 百度分享解链失败 (Cookie已过期)
+    const baiduUrl = 'http://127.0.0.1:9978/proxy?do=pan&site=baidu&shareId=&fileId=https://pan.baidu.com/s/1abcdef&fileToken=';
+    const miss: string[] = [];
+    await playback.resolveBaidu(baiduUrl, 'baidu', miss, null, '');
+    expect(expiredEvents).toContainEqual({
+      provider: 'baidu',
+      reason: '31045 user not exists / Cookie失效',
+    });
+
+    // 2. 夸克分享解链失败 (401 未登录)
+    const quarkUrl = 'http://127.0.0.1:9978/proxy?do=pan&site=quark&shareId=e8ac5a87aa2e&fileId=2e3ad195751242398514d30d';
+    await playback.resolveQuark(quarkUrl, 'quark', miss, '');
+    expect(expiredEvents).toContainEqual({
+      provider: 'quark',
+      reason: '401 未登录或Cookie已过期',
+    });
+
+    // 3. Cookie 为空时主动上报未绑定通知
+    ports.cookie.mockReturnValue('');
+    await playback.resolveUc('http://127.0.0.1:9978/proxy?do=pan&site=uc&shareId=pwd1234&fileId=fid5678', 'uc', miss, '');
+    expect(expiredEvents).toContainEqual({
+      provider: 'uc',
+      reason: '未绑定 UC 网盘 Cookie',
+    });
+  });
+});

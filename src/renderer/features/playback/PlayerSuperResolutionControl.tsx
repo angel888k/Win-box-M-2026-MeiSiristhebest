@@ -24,9 +24,6 @@ export function PlayerSuperResolutionControl({ visible, active, mpvStatusResolve
         : info?.available
           ? mode === 'off' ? '超分已关闭（MPV GPU 着色器）' : `已选超分档位：${SR_MODE_LABEL[mode] ?? mode}；渲染状态请看面板`
           : '超分着色器插件未就绪；点击查看诊断信息。';
-  const statusText = feedback?.message ?? (mode === 'off'
-    ? '当前关闭。选择档位后会向 MPV 发送着色器链。'
-    : `已选择「${labelForMode(mode)}」。新播放会在起播时加载，当前播放会即时更新。`);
   return (
     <div className="vp-vol" onPointerEnter={available ? onOpen : undefined} onPointerLeave={onPointerLeave} onBlur={onBlur}>
       <button ref={triggerRef} type="button" className={'vp-ctl vp-kernel' + (available && mode !== 'off' ? ' vp-on' : '')} title={title} aria-label="超分辨率" aria-pressed={available && mode !== 'off'} aria-expanded={open} aria-controls={panelId} aria-keyshortcuts="ArrowDown" onKeyDown={onKeyDown} onClick={onOpen}><span className="vp-kernel-tag">超分</span></button>
