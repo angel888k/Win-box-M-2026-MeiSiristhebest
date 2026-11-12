@@ -10,6 +10,7 @@ import {
   jvmProxyArgs,
   normalizeProxyUrl,
   parseProxyUrl,
+  proxyDispatcher,
   setProxySettings,
   shouldBypassProxy,
 } from '../src/main/net/proxy';
@@ -107,5 +108,20 @@ describe('设置持久化（round-trip）', () => {
     // 地址非法 → 视为未启用（避免全部请求一起挂），但保留输入便于用户修
     setProxySettings({ enabled: true, url: 'socks5://x' });
     expect(getProxySettings().enabled).toBe(false);
+  });
+});
+
+describe('proxyDispatcher 实例生命周期', () => {
+  it('切换代理 URL 时销毁旧 ProxyAgent 实例', () => {
+    const a1 = proxyDispatcher('http://127.0.0.1:7890');
+    expect(a1).toBeDefined();
+    let destroyed = false;
+    a1.destroy = () => {
+      destroyed = true;
+      return Promise.resolve();
+    };
+    const a2 = proxyDispatcher('http://127.0.0.1:7891');
+    expect(destroyed).toBe(true);
+    expect(a2).not.toBe(a1);
   });
 });

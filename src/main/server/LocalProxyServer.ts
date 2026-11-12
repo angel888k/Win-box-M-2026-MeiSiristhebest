@@ -8,6 +8,7 @@
 //     Local 蜘蛛从 assets/数据目录读出。桌面版必须实现同名路由，否则这些蜘蛛
 //     拿到 404 → 初始化失败 → 分类/首页空白。
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { pipeline } from 'node:stream';
 import { request as undiciRequest, Agent } from 'undici';
 import { decodeUrlSafe } from '../../engine/util/base64';
 import type { Logger } from '../../shared/types';
@@ -246,6 +247,12 @@ export class LocalProxyServer {
       /* 钉住失败不影响转发 */
     }
     const target = `http://127.0.0.1:${port}/proxy${u.search}`;
+    const controller = new AbortController();
+    const abortOnClose = (): void => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.once('close', abortOnClose);
+    req.once('aborted', abortOnClose);
     try {
       // ★ 2026-10-09：转发 Range（拉流 seek 必需）——此前一个头都不带，jar 自解链（do=pan）会整段 200。
       const fwdHeaders: Record<string, string> = {};
@@ -259,6 +266,7 @@ export class LocalProxyServer {
         headersTimeout: 30000,
         bodyTimeout: 0, // 媒体流可能很长：不做 body 超时
         headers: fwdHeaders,
+        signal: controller.signal,
       });
       const outHeaders: Record<string, string> = {};
       for (const k of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
@@ -281,13 +289,13 @@ export class LocalProxyServer {
               const buf = Buffer.from(first.value as Buffer);
               preview = buf.subarray(0, 160).toString('utf8').replace(/\s+/g, ' ');
               // 已消费的首块仍是有效媒体数据 → 塞回去继续转发
-              const rest = (async function* gen(): AsyncGenerator<Buffer> {
-                yield buf;
-                for await (const c of up.body) yield c as Buffer;
-              })();
               res.writeHead(up.statusCode, outHeaders);
-              for await (const c of rest) res.write(c);
-              res.end();
+              res.write(buf);
+              const upstream = up.body as unknown as NodeJS.ReadableStream;
+              pipeline(upstream, res, (error) => {
+                if (!error || error.name === 'AbortError' || (error as NodeJS.ErrnoException).code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+                this.logger.w(`proxy: 蜘蛛 JVM 流传输中断（127.0.0.1:${port}）：${error.message}`);
+              });
               this.logger.w(
                 `proxy: 自解链响应异常 status=${up.statusCode} ct=${ct} body=${preview} → ${u.search.slice(0, 120)}`,
               );
@@ -304,12 +312,19 @@ export class LocalProxyServer {
         res.end();
         return;
       }
-      for await (const chunk of up.body) res.write(chunk as Buffer);
-      res.end();
+      const upstream = up.body as unknown as NodeJS.ReadableStream;
+      pipeline(upstream, res, (error) => {
+        if (!error || error.name === 'AbortError' || (error as NodeJS.ErrnoException).code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+        this.logger.w(`proxy: 蜘蛛 JVM 流传输中断（127.0.0.1:${port}）：${error.message}`);
+      });
     } catch (e) {
+      if (res.destroyed || res.writableEnded || res.headersSent) return;
       this.logger.w(`proxy: 蜘蛛 JVM 本地代理不可达（127.0.0.1:${port}）：${(e as Error).message}`);
       res.writeHead(502, { 'Content-Type': 'text/plain' });
       res.end('spider jvm proxy unreachable');
+    } finally {
+      res.removeListener('close', abortOnClose);
+      req.removeListener('aborted', abortOnClose);
     }
   }
 

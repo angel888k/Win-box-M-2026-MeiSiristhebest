@@ -567,4 +567,16 @@ describe('SpiderProcPool — 复用 / 并行 / 排队 / 失败语义', () => {
     expect(r.ok).toBe(true);
     expect(spawned).toHaveLength(1);
   });
+
+  it('startReclaimTimer 必须调用 unref，不持有事件循环活跃引用', () => {
+    const { pool } = makeEnv();
+    const timer = pool.startReclaimTimer();
+    try {
+      if (typeof timer.hasRef === 'function') {
+        expect(timer.hasRef()).toBe(false);
+      }
+    } finally {
+      clearInterval(timer);
+    }
+  });
 });

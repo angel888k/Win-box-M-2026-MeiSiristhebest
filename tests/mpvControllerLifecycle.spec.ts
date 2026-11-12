@@ -241,4 +241,54 @@ describe('mpv lifecycle', () => {
     controller.stop();
     vi.useRealTimers();
   });
+
+  it('退场进程假死不退出时，2000ms 超时熔断强制 kill 并放行后续播放，防止死锁', async () => {
+    vi.useFakeTimers();
+    const { controller } = make();
+    const hangingProc = new Proc();
+    hangingProc.kill = vi.fn(() => { hangingProc.killed = true; }); // 模拟被 kill 也不触发 exit 的顽固假死进程
+    const newProc = new Proc();
+    vi.mocked(spawn).mockReturnValueOnce(hangingProc as any).mockReturnValueOnce(newProc as any);
+    const win = windowStub();
+
+    await controller.start(win as any, { url: 'old.mp4' });
+    // 换视频启动第二个进程，内部会触发 hangingProc 进入 retiring
+    const nextStartPromise = controller.start(win as any, { url: 'new.mp4' });
+
+    // 此时等待 hangingProc exit，未过 2000ms 前不会启动新进程
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(spawn).toHaveBeenCalledTimes(1);
+
+    // 推进超过 2000ms，触发超时保底与强制 kill
+    await vi.advanceTimersByTimeAsync(1500);
+    await nextStartPromise;
+
+    expect(hangingProc.kill).toHaveBeenCalled();
+    expect(spawn).toHaveBeenCalledTimes(2);
+
+    newProc.finish();
+    controller.stop();
+    vi.useRealTimers();
+  });
+
+  it('播放状态变迁为 playbackStarted 时触发 onPlaybackStarted 回调', async () => {
+    const { controller, sockets } = make();
+    let startedFired = 0;
+    controller.onPlaybackStarted = () => { startedFired++; };
+
+    const proc = new Proc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    await controller.start(windowStub() as any, { url: 'video.mp4' });
+
+    // 触发 playback-restart 事件使得 playbackStarted 为 true
+    sockets[0].emit('data', Buffer.from('{"event":"playback-restart"}\n'));
+    expect(startedFired).toBe(1);
+
+    // 重复收到事件不会重复触发
+    sockets[0].emit('data', Buffer.from('{"event":"playback-restart"}\n'));
+    expect(startedFired).toBe(1);
+
+    proc.finish();
+    controller.stop();
+  });
 });

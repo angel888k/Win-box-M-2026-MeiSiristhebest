@@ -38,6 +38,7 @@ interface MpvRuntimePort {
   readShaderRenderStatus?(paths: readonly string[]): Promise<MpvShaderRenderStatus>;
   stop(): void;
   dispose(): void;
+  onPlaybackStarted?: () => void;
 }
 
 interface MediaRuntimePort {
@@ -53,6 +54,7 @@ interface PlayerEnginePort {
   command(command: MpvCommand): boolean;
   stop(): void;
   dispose(): void;
+  onPlaybackStarted?: () => void;
 }
 
 export interface PlayerRuntimeIpcDependencies {
@@ -84,6 +86,13 @@ export function registerPlayerRuntimeIpc({
   onMediaState,
 }: PlayerRuntimeIpcDependencies): void {
   app.on('before-quit', () => mediaRuntimes.cancel());
+
+  const notifyPlaybackStarted = () => {
+    startPlayMemWatch();
+    try { onPlaybackStarted(); } catch { /* ignore */ }
+  };
+  mpv.onPlaybackStarted = notifyPlaybackStarted;
+  engines.onPlaybackStarted = notifyPlaybackStarted;
 
   registerHandler(IPC.MEDIA_RUNTIME_STATUS, () => mediaRuntimes.status(), logger);
   registerHandler(IPC.MEDIA_RUNTIME_INSTALL, async (_event: unknown, runtime: unknown) => {
@@ -205,8 +214,7 @@ export function registerPlayerRuntimeIpc({
     noteMediaState(event.sender.id, isPlayer ? 'player' : window ? 'main' : 'gone', state);
     const eventType = (state && typeof state === 'object' ? (state as { event?: unknown }).event : '') as string;
     if (isPlayer && (eventType === 'play' || eventType === 'playing')) {
-      startPlayMemWatch();
-      onPlaybackStarted();
+      notifyPlaybackStarted();
     }
     onMediaState?.(state, isPlayer);
   });

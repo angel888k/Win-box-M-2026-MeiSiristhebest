@@ -55,7 +55,7 @@ export class DetachedDex2jarCoordinator implements DetachedDex2jarPort {
   private static exitHandlerRegistered = false;
 
   static killAllActive(): void {
-    for (const [pid, proc] of DetachedDex2jarCoordinator.activeProcesses) {
+    for (const [, proc] of DetachedDex2jarCoordinator.activeProcesses) {
       try {
         proc.kill();
       } catch {

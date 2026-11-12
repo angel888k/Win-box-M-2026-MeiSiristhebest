@@ -636,6 +636,11 @@ export function createPlayerPageSessionWorkflow(
   };
 
   const confirmPlaybackStarted = () => {
+    try {
+      (window as unknown as { api?: { media?: { report?: (ev: unknown) => void } } })?.api?.media?.report?.({ event: 'playing' });
+    } catch {
+      /* ignore */
+    }
     const current = currentInit;
     if (!current) return;
     stopFallbackDiscovery();

@@ -569,7 +569,11 @@ export class MpvController {
         if (event !== 'start-file' && event !== 'file-loaded' && event !== 'end-file') continue;
         this.reloading = false;
       }
+      const hadPlaybackStarted = this.state.playbackStarted;
       const changed = reduceMpvMessage(this.state, msg);
+      if (this.state.playbackStarted && !hadPlaybackStarted) {
+        try { this.onPlaybackStarted?.(); } catch { /* ignore */ }
+      }
       if (!changed) continue;
       // A state such as `loaded` remains true for the whole playback. Use the
       // transition event to keep ordinary time/track updates on the 200ms path.

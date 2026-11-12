@@ -152,6 +152,9 @@ let agentCacheUrl = '';
 let agentCache: ProxyAgent | null = null;
 export function proxyDispatcher(url: string): ProxyAgent {
   if (!agentCache || agentCacheUrl !== url) {
+    if (agentCache) {
+      try { void agentCache.destroy(); } catch { /* ignore */ }
+    }
     agentCacheUrl = url;
     agentCache = new ProxyAgent(url);
   }

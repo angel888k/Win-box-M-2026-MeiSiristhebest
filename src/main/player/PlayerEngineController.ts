@@ -57,6 +57,7 @@ export class PlayerEngineController {
    */
   private startChain: Promise<void> = Promise.resolve();
   private unbindViewport: (() => void) | null = null;
+  onPlaybackStarted?: () => void;
 
   constructor(private log: Logger) {}
 
@@ -92,7 +93,14 @@ export class PlayerEngineController {
     // 上一批退场进程必须先释放已嵌入的 HWND，另一个 VO 才能挂上去。
     await Promise.all([...this.retiring].map(proc => new Promise<void>(resolve => {
       if (proc.exitCode !== null || proc.signalCode !== null) { resolve(); return; }
-      proc.once('exit', () => resolve());
+      const timer = setTimeout(() => {
+        try { proc.kill(); } catch { /* ignore */ }
+        resolve();
+      }, 2000);
+      proc.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
     })));
     if (reservation !== this.session || win.isDestroyed()) return { session: reservation };
 
@@ -309,7 +317,11 @@ export class PlayerEngineController {
   private onSockData(d: Buffer, session: number): void {
     if (session !== this.session) return;
     for (const msg of this.messageDecoder.push(d)) {
+      const hadPlaybackStarted = this.state.playbackStarted;
       if (reduceMpvMessage(this.state, msg)) {
+        if (this.state.playbackStarted && !hadPlaybackStarted) {
+          try { this.onPlaybackStarted?.(); } catch { /* ignore */ }
+        }
         this.schedulePush(this.state.loaded || this.state.eof || this.state.exited);
       }
     }
@@ -319,7 +331,11 @@ export class PlayerEngineController {
   private onJsonData(d: Buffer, session: number): void {
     if (session !== this.session) return;
     for (const obj of this.messageDecoder.push(d)) {
+      const hadPlaybackStarted = this.state.playbackStarted;
       if (reduceEngineEvent(this.state, obj)) {
+        if (this.state.playbackStarted && !hadPlaybackStarted) {
+          try { this.onPlaybackStarted?.(); } catch { /* ignore */ }
+        }
         this.schedulePush(this.state.loaded || this.state.eof || this.state.exited);
       }
     }

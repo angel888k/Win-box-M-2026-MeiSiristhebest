@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   RangeAggregateStream,
   AGGREGATE_CHUNK,
-  AGGREGATE_MAX_BUFFERED_BYTES,
   type RangeResponseSink,
   type PartialRangeResponse,
 } from '../src/main/server/RangeAggregateStream';
@@ -85,9 +84,7 @@ describe('RangeAggregateStream 反压与中止机制', () => {
   });
 
   it('当下游消费停滞达到 MAX_BUFFERED_BYTES 阈值时暂停上游分派（流反压）', async () => {
-    let activeFetches = 0;
     const fetchRange = vi.fn(async (_target: string, headers: Record<string, string>) => {
-      activeFetches++;
       const range = headers.Range || '';
       const match = /bytes=(\d+)-(\d+)/.exec(range);
       const len = match ? parseInt(match[2], 10) - parseInt(match[1], 10) + 1 : AGGREGATE_CHUNK;

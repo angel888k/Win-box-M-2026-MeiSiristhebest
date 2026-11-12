@@ -685,7 +685,9 @@ export class SpiderProcPool {
   }
 
   startReclaimTimer(): ReturnType<typeof setInterval> {
-    return setInterval(() => this.reclaim(), RECLAIM_INTERVAL_MS);
+    const timer = setInterval(() => this.reclaim(), RECLAIM_INTERVAL_MS);
+    timer.unref?.();
+    return timer;
   }
 
   /**
