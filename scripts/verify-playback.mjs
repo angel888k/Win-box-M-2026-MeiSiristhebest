@@ -319,7 +319,7 @@ export async function verifyPlayback({ packagedAppDirectory = null, potplayerPat
     });
     console.log(`MPV toolbar layout: ${JSON.stringify(mpvToolbarLayout)}`);
     await player.screenshot({ path: mpvScreenshotPath });
-    assert.deepEqual(mpvToolbarLayout.labels.map(label => label.text), ['兼容', '统计', '键位', '超分']);
+    assert.deepEqual(mpvToolbarLayout.labels.map(label => label.text), ['兼容', '统计', '键位', '能力', '超分']);
     assert.ok(mpvToolbarLayout.labels.every(label => label.whiteSpace === 'nowrap' && label.labelWidth > 12 && label.buttonWidth >= label.labelWidth), 'MPV toolbar labels must stay on one line without flex collapse');
     assert.ok(mpvToolbarLayout.labels.every(label => label.labelScrollWidth <= label.labelClientWidth + 1), 'MPV toolbar label text must not clip');
     assert.ok(mpvToolbarLayout.scrollWidth <= mpvToolbarLayout.width + 2, 'MPV toolbar controls must fit without horizontal overflow');
