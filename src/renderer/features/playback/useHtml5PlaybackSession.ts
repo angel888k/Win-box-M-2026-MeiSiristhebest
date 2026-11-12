@@ -507,7 +507,8 @@ export function useHtml5PlaybackSession(options: Html5PlaybackSessionOptions, me
             if (decision.kind === 'switch-kernel' && recoverHtmlPlayback()) return;
             const retries = decision.retryCount ?? 0;
             const reason = hlsErrorText(data.type, data.details, responseStatus, data.response?.data);
-            reportTerminalFailure(`HLS 播放失败：${reason}` + (retries ? `（已自动重试 ${retries} 次）` : ''), reason, failure);
+            const fullReason = `HLS 播放失败：${reason}`;
+            reportTerminalFailure(fullReason + (retries ? `（已自动重试 ${retries} 次）` : ''), fullReason, failure);
           });
         }).catch(() => {
           if (cancelled) return;

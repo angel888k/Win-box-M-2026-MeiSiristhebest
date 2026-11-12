@@ -399,7 +399,7 @@ export async function verifyPlayback({ packagedAppDirectory = null, potplayerPat
       });
       const deniedPlayer = await deniedPlayerEvent;
       await deniedPlayer.waitForURL(url => url.hash === '#/player');
-      await deniedPlayer.getByText(/HLS 播放失败.*HTTP 403/).waitFor({ timeout: 15_000 });
+      await deniedPlayer.getByText(/HLS 播放失败.*HTTP 403/).first().waitFor({ timeout: 15_000 });
       const hls403Message = await deniedPlayer.locator('body').innerText();
       assert.ok(!hls403Message.includes('PipelineStatus::DEMUXER_ERROR_COULD_NOT_PARSE'));
       const hlsRequest = fixture.requests.find(request => request.path === '/denied.m3u8');
