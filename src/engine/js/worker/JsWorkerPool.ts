@@ -160,7 +160,7 @@ export class JsWorkerPool {
   private workerCode(): string {
     if (!this.code) {
       const src = readFileSync(this.workerFile, 'utf-8');
-      this.code = `(function (require) {\n${src}\n})(require('node:module').createRequire(${JSON.stringify(this.workerFile)}));`;
+      this.code = `(function (require) {\n${src}\n})((function () {\n  const { createRequire } = require('node:module');\n  const r = createRequire(${JSON.stringify(this.workerFile)});\n  return function (id) {\n    try {\n      return r(id);\n    } catch {\n      return require(id);\n    }\n  };\n})());`;
     }
     return this.code;
   }
